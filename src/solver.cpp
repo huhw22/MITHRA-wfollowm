@@ -1,6 +1,6 @@
 /********************************************************************************************************
- *  solver.cpp : Implementation of the functions for the solver class in the mithra code
- ********************************************************************************************************/
+* solver.cpp：在mithra代码中实现求解器类的函数
+********************************************************************************************************/
 
 #include <algorithm>
 #include <list>
@@ -24,7 +24,7 @@ namespace MITHRA
     extField_ 	( extField ),
     FEL_ 	( FEL )
   {
-    /* Clear the vectors in the FdTd class.								*/
+    /*清除FdTd类中的向量。*/
     anp1_ = new std::vector<FieldVector<Double> > ();
     an_   = new std::vector<FieldVector<Double> > ();
     anm1_ = new std::vector<FieldVector<Double> > ();
@@ -35,35 +35,35 @@ namespace MITHRA
 
     chargeVectorn_.clear();
 
-    /* Reset the number of nodes to zero.								*/
+    /*将节点数重置为零。*/
     N0_ = N1_ = N2_ = 0;
 
-    /* Reset the time and the time number of the FdTd class.						*/
+    /*重置FdTd类的时间和时间号。*/
     timep1_	   =  0.0;
     time_  	   =  0.0;
     timem1_	   =  0.0;
     nTime_ 	   =  0;
     nTimeBunch_    =  0;
 
-    /* Initialize the value of MPI variables.								*/
+    /*初始化MPI变量值。*/
     MPI_Comm_rank(MPI_COMM_WORLD,&rank_);
     MPI_Comm_size(MPI_COMM_WORLD,&size_);
     rankB_ = ( rank_ == 0 ) ? size_ - 1 : rank_ - 1;
     rankF_ = ( rank_ == size_ - 1 ) ? 0 : rank_ + 1;
 
-    /* Initialize the MPI data type for charges.							*/
+    /*初始化收费的MPI数据类型。*/
     MPI_Type_contiguous(11, MPI_DOUBLE, &MPI_CHARGE);
     MPI_Type_commit(&MPI_CHARGE);
 
-    /* Initialize the speed of light value according to the given length scale and time scale.		*/
+    /*根据给定的长度尺度和时间尺度初始化光速值。*/
     c0_ = C0 / mesh_.lengthScale_ * mesh_.timeScale_;
     m0_ = MU_ZERO / mesh_.lengthScale_;
     e0_ = 1.0 / ( c0_ * c0_ * m0_ );
   }
 
   /******************************************************************************************************
-   * Using the parsed data, set the required parameters for simulation.
-   ******************************************************************************************************/
+  *使用解析后的数据，设置仿真所需的参数。
+  ******************************************************************************************************/
 
   void Solver::setSimulationParameters ()
   {
@@ -71,7 +71,7 @@ namespace MITHRA
 
     /****************************************************************************************************/
 
-    /* Initialize the corresponding length and time scales in other parts of the solver.		*/
+    /*在求解器的其他部分初始化相应的长度和时间尺度。*/
     seed_.c0_ 			 = c0_;
     seed_.signal_.t0_ 		/= c0_;
     seed_.signal_.f0_ 		*= c0_;
@@ -113,9 +113,9 @@ namespace MITHRA
 
     /****************************************************************************************************/
 
-    /* According to the set parameters for length and time scales correct the amplitudes of the seed
-     * and undulator. Note that the seed amplitude is the amplitude of the vector potential, whereas the
-     * undulator amplitude is the amplitude of the fields.						*/
+	/*根据设定的长度和时间尺度参数校正种子的振幅
+	*和波动。注意，种子振幅是矢量势的振幅，而
+	*波动振幅是场的振幅。*/
     seed_.amplitude_ 	        = seed_.a0_ * EM * c0_ / EC;
     for (std::vector<Undulator>::iterator iter = undulator_.begin(); iter != undulator_.end(); iter++)
       iter->amplitude_ 		= iter->a0_ * EM * c0_ * 2 * PI * iter->signal_.f0_ / EC;
@@ -124,7 +124,7 @@ namespace MITHRA
 
     /****************************************************************************************************/
 
-    /* Calculate the average gamma of the input bunches.						*/
+    /*计算输入束的平均值。*/
     Double gamma = 0.0;
     for (unsigned int i = 0; i < bunch_.bunchInit_.size(); i++)
       {
@@ -135,36 +135,36 @@ namespace MITHRA
 	gamma += bunch_.bunchInit_[i].initialGamma_ / bunch_.bunchInit_.size();
       }
 
-    /* Now, depending on the undulator type determine the maximum and minimum gamma of the bunch
-     * travelling through the undulator.								*/
+    /*现在，根据波动器的类型确定这群的最大值和最小值
+	*穿过波动器。*/
     Double gmin = 1.0e100, gmax = -1.0e100, g = 0.0;
     for (std::vector<Undulator>::iterator iter = undulator_.begin(); iter != undulator_.end(); iter++)
-      {
-	if ( iter->type_ == STATIC )
-	  {
-	    g  	 = gamma / sqrt( 1.0 + iter->k_ * iter->k_ / 2.0 );
-	    gmin = ( gmin < g ) ? gmin : g;
-	    gmax = ( gmax > g ) ? gmax : g;
-	  }
-	else if ( iter->signal_.signalType_ == FLATTOP )
-	  {
-	    g  = gamma / sqrt( 1.0 + iter->a0_ * iter->a0_ / 2.0 );
-	    gmin = ( gmin < g ) ? gmin : g;
-	    gmax = ( gmax > g ) ? gmax : g;
-	  }
-	else
-	  {
-	    /* For optical undulator, when a pulse other than flattop is the pulse format, the gamma of
-	     * the electrons change throughout the interaction.						*/
-	    g  = gamma / sqrt( 1.0 + iter->a0_ * iter->a0_ / 2.0 );
-	    gmin = ( gmin < g ) ? gmin : g;
-	    g  = gamma;
-	    gmax = ( gmax > g ) ? gmax : g;
-	  }
+	{
+		if ( iter->type_ == STATIC )
+		{
+		g  	 = gamma / sqrt( 1.0 + iter->k_ * iter->k_ / 2.0 );
+		gmin = ( gmin < g ) ? gmin : g;
+		gmax = ( gmax > g ) ? gmax : g;
+		}
+		else if ( iter->signal_.signalType_ == FLATTOP )
+		{
+		g  = gamma / sqrt( 1.0 + iter->a0_ * iter->a0_ / 2.0 );
+		gmin = ( gmin < g ) ? gmin : g;
+		gmax = ( gmax > g ) ? gmax : g;
+		}
+		else
+		{
+		/*对于光波动器，当脉冲不是平顶的脉冲格式时，的伽马值
+		电子在相互作用过程中发生变化。*/
+		g  = gamma / sqrt( 1.0 + iter->a0_ * iter->a0_ / 2.0 );
+		gmin = ( gmin < g ) ? gmin : g;
+		g  = gamma;
+		gmax = ( gmax > g ) ? gmax : g;
+		}
 
-      }
+	}
 
-    /* Set the gamma of the moving frame equal to the average of the maximum and minimum gamma.		*/
+    /*将移动帧的伽马值设置为最大值和最小值的平均值。*/
     if ( mesh_.gamma_ == -1.0 )
       gamma_ = ( undulator_.size() == 0 ) ? gamma : ( gmin + gmax ) / 2.0;
     else
@@ -172,56 +172,56 @@ namespace MITHRA
 
     /****************************************************************************************************/
 
-    /* Boost and initialize the undulator related parameters.						*/
+    /*升压和初始化波动器相关参数。*/
     beta_ = sqrt( 1.0 - 1.0 / ( gamma_ * gamma_ ) );
     for (std::vector<Undulator>::iterator iter = undulator_.begin(); iter != undulator_.end(); iter++)
       if ( iter->type_ == OPTICAL ) iter->lu_ /= ( 1 + beta_ );
 
-    /* Sort the undulators according to their beginning point.						*/
+    /*根据起始点对波动器进行排序。*/
     std::sort(undulator_.begin(), undulator_.end(), undulatorCompare);
 
-    /* Now shift all the undulator modules so that the first module starts at zero.			*/
+    /*现在移动所有的波动器模块，使第一个模块从0开始。*/
     for (std::vector<Undulator>::reverse_iterator iter = undulator_.rbegin(); iter != undulator_.rend(); iter++)
       iter->rb_ -= undulator_[0].rb_;
 
     /****************************************************************************************************/
 
-    /* Set the modulation wavelength for each bunch using the given gamma of the bunch. 		*/
+    /*使用束的给定伽马来设置每个束的调制波长。*/
     for (unsigned int i = 0; i < bunch_.bunchInit_.size(); i++)
-      {
-	/* First determine the beta vector of the bunch.						*/
-	bunch_.bunchInit_[i].initialBeta_	= sqrt( 1.0 - 1.0 / pow( bunch_.bunchInit_[i].initialGamma_ , 2 ) );
-	bunch_.bunchInit_[i].betaVector_.mv( bunch_.bunchInit_[i].initialBeta_, bunch_.bunchInit_[i].initialDirection_);
+	{
+		/*首先确定这个群的向量。*/
+		bunch_.bunchInit_[i].initialBeta_	= sqrt( 1.0 - 1.0 / pow( bunch_.bunchInit_[i].initialGamma_ , 2 ) );
+		bunch_.bunchInit_[i].betaVector_.mv( bunch_.bunchInit_[i].initialBeta_, bunch_.bunchInit_[i].initialDirection_);
 
-	/* Calculate the modulation wavelength of the bunch for the initial bunching factor or the shot
-	 * noise implementation.									*/
-	if ( undulator_.size() > 0 )
-	  bunch_.bunchInit_[i].lambda_		= undulator_[0].lu_ / ( 2.0 * gamma_ * gamma_ ) * bunch_.bunchInit_[i].betaVector_[2] / beta_;
-	else
-	  bunch_.bunchInit_[i].lambda_		= 0.0;
+		/*计算束的调制波长，作为初始聚束因子或射束
+		*噪声实现。*/
+		if ( undulator_.size() > 0 )
+			bunch_.bunchInit_[i].lambda_		= undulator_[0].lu_ / ( 2.0 * gamma_ * gamma_ ) * bunch_.bunchInit_[i].betaVector_[2] / beta_;
+		else
+			bunch_.bunchInit_[i].lambda_		= 0.0;
 
-	printmessage(std::string(__FILE__), __LINE__, std::string("Modulation wavelength of the bunch outside the undulator is set to " + stringify( bunch_.bunchInit_[i].lambda_ ) ) );
-      }
+		printmessage(std::string(__FILE__), __LINE__, std::string("Modulation wavelength of the bunch outside the undulator is set to " + stringify( bunch_.bunchInit_[i].lambda_ ) ) );
+	}
 
     printmessage(std::string(__FILE__), __LINE__, std::string("The given mesh parameters are boosted into the electron rest frame :::") );
 
     /****************************************************************************************************/
 
-    /* The Lorentz boost parameters should also be transfered to the seed class in order to correctly
-     * compute the fields within the computational domain.						*/
+    /*洛伦兹增强参数也应该被转移到种子类，以便正确地
+	*计算计算域内的字段。*/
     seed_.beta_    	= beta_;
     seed_.gamma_   	= gamma_;
   }
 
   /******************************************************************************************************
-   * Boost the mesh into the electron rest frame.
-   ******************************************************************************************************/
+  *将网片推入电子休息架。
+  ******************************************************************************************************/
 
   void Solver::lorentzBoostMesh ()
   {
     /****************************************************************************************************/
 
-    /* Boost the mesh data into the electron rest frame.						*/
+    /*将网格数据提升到电子静止框架中。*/
     mesh_.meshLength_[2] 	*= gamma_;
     mesh_.meshResolution_[2] 	*= gamma_;
     mesh_.meshCenter_[2] 	*= gamma_;
@@ -230,10 +230,10 @@ namespace MITHRA
 
     /****************************************************************************************************/
 
-    /* Set the mesh parameters according to the given simulation.					*/
+    /*根据给定的仿真设置网格参数。*/
     if ( mesh_.solver_ == NSFD )
       {
-	/* Adjust the transverse mesh resolution to match the stability criterion.			*/
+	/*调整横向网格分辨率以匹配稳定性准则。*/
 	Double t = 1.0 / sqrt( pow( mesh_.meshResolution_[2] / mesh_.meshResolution_[0], 2.0 ) + pow( mesh_.meshResolution_[2] / mesh_.meshResolution_[1], 2.0 ) );
 	if ( t < 1.02 )
 	  {
@@ -244,30 +244,30 @@ namespace MITHRA
 	    printmessage(std::string(__FILE__), __LINE__, std::string("Transverse discretization along y is set to " + stringify(mesh_.meshResolution_[1]) ) );
 	  }
 
-	/* Based on the dispersion condition, the field time step can be obtained.			*/
+	/*根据色散条件，可以得到场时间步长。*/
 	mesh_.timeStep_		 = mesh_.meshResolution_[2] / c0_;
 	printmessage(std::string(__FILE__), __LINE__, std::string("Time step for the field update is set to " + stringify(mesh_.timeStep_ * gamma_) ) );
       }
     else if ( mesh_.solver_ == FD )
       {
-	/* Based on the dispersion condition, the field time step can be obtained.			*/
+	/*根据色散条件，可以得到场时间步长。*/
 	mesh_.timeStep_		 = 0.98 / ( c0_ * sqrt( 1.0 / pow(mesh_.meshResolution_[0], 2.0) + 1.0 / pow(mesh_.meshResolution_[1], 2.0) + 1.0 / pow(mesh_.meshResolution_[2], 2.0) ) );
 	printmessage(std::string(__FILE__), __LINE__, std::string("Time step for the field update is set to " + stringify(mesh_.timeStep_ * gamma_) ) );
       }
   }
 
   /******************************************************************************************************
-   * Boost particles into the electron rest frame.
-   ******************************************************************************************************/
+	*推动粒子进入电子静止框架。
+	******************************************************************************************************/
 
   void Solver::lorentzBoostBunch ()
   {
     /****************************************************************************************************/
 
-    /* Set the bunch update time step if it is given, otherwise set it according to the MITHRA rules.	*/
+    /*如果给定了簇更新时间步长，则设置它，否则根据MITHRA规则设置它。*/
     bunch_.timeStep_			/= gamma_;
 
-    /* Adjust the given bunch time step according to the given field time step.				*/
+    /*根据给定的场时间步长调整给定的束时间步长。*/
     if (bunch_.timeStep_ == 0)
       bunch_.timeStep_ 			 = mesh_.timeStep_ ;
     else
@@ -277,7 +277,7 @@ namespace MITHRA
 
     /****************************************************************************************************/
 
-    /* Boost the bunch sampling parameters into the electron rest frame.				*/
+    /*将束状采样参数提升到电子静止系。*/
     bunch_.rhythm_			/= gamma_;
     bunch_.bunchVTKRhythm_		/= gamma_;
     for (unsigned int i = 0; i < bunch_.bunchProfileTime_.size(); i++)
@@ -286,9 +286,9 @@ namespace MITHRA
 
     /****************************************************************************************************/
 
-    /* Boost the coordinates of the macro-particles into the bunch rest frame. During the boosting, the
-     * maximum value of the z-coordinate is important, since it needs to be used in the shift that will
-     * be introduced to the bunch.									*/
+    /*将宏观粒子的坐标提升到束静止坐标系中。在助推过程中
+	* z坐标的最大值很重要，因为它需要在移动中使用
+	被介绍给一群人。*/
 
     Double zmaxL = -1.0e100, zmaxG;
     for (auto iterQ = chargeVectorn_.begin(); iterQ != chargeVectorn_.end(); iterQ++ )
@@ -304,14 +304,14 @@ namespace MITHRA
 
     /****************************************************************************************************/
 
-    /* Here, we define the shift in time such that the bunch end is at the begin of fringing field
-     * section. For optical undulator such a separation should be considered in the input parameters
-     * where offset is given.										*/
+    /*在这里，我们定义了在时间上的位移，使得束端在边缘场的开始处
+	*部分。对于光波动器，在输入参数中应考虑这种分离
+	*其中给出了偏移量。*/
 
-    /* This shift in time makes sure that the maximum z in the bunch at time zero is at undulator[0].dist_
-     * away from the undulator begin ( the default distance is 2 undulator periods for static undulators
-     * and 10 undulator periods for optical ones, due to different fring field formats used in the two
-     * cases.)												*/
+    /* 这一时间偏移操作旨在确保：在 t=0 时刻，束团内 z 坐标的最大值恰好位于距离波荡器起始端 undulator[0].dist_ 的位置处。
+     * （其中，默认距离设定为：对于静态波荡器取 2 个波荡器周期，对于光学波荡器取 10 个波荡器周期；
+     * 这一差异是由于这两种情况下所采用的边缘场模型格式不同所致。）												*/
+
     if ( undulator_.size() > 0 )
       {
 	Double nl = ( undulator_[0].type_ == STATIC ) ? 2.0 : 5.0 * undulator_[0].signal_.nR_;
@@ -323,15 +323,12 @@ namespace MITHRA
 	printmessage(std::string(__FILE__), __LINE__, std::string("Initial distance from bunch head to undulator is ") + stringify(undulator_[0].dist_) );
       }
 
-    /* The same shift in time should also be done for the seed field.					*/
+    /*对种子田也应进行同样的时间转移。*/
     seed_.dt_		= dt_;
 
-    /* With the above definition in the time begin the entrance of the undulator, i.e. z = 0 in the lab
-     * frame, corresponds to the z = zmax + undulator_[0].dist_ / gamma_ in the bunch rest frame at
-     * the initialization instant, i.e. timeBunch = 0.0.
-     * In MITHRA, we assume that the particle move on a straight line before reaching the start point.
-     * This forces the bunch properties to be as given at the start point of the undulator. The start
-     * point is here the undulator entrance minus the undulator distance.				*/
+    /* 基于上述定义，在初始时刻——即粒子进入波荡器入口（实验室坐标系下 z = 0 处）之时——该位置对应于束团静止坐标系下的 z = zmax + undulator_[0].dist_ / gamma_（此时束团时间 timeBunch = 0.0）。
+     * 在 MITHRA 模拟中，我们假定粒子在抵达起始点之前是沿直线运动的。
+     * 这一假设要求束团的各项属性必须与波荡器起始点处的设定值相吻合。此处所谓的“起始点”，具体是指波荡器入口位置减去波荡器距离后的那个点。				*/
     bunch_.zu_ 		= zmaxG;
     bunch_.beta_ 	= beta_;
 
@@ -348,8 +345,7 @@ namespace MITHRA
 
     /****************************************************************************************************/
 
-    /* The bunch needs to be shifted such that it is centered in the computational domain when it enters
-     * the undulator. For this the bunch mean z-coordinate and beta_z are required.			*/
+    /* 束团需要进行平移，以确保其在进入波荡器时位于计算域的中心。为此，需要获取束团的平均 z 坐标和 beta_z 值。*/
     if ( mesh_.optimizePosition_ && ( undulator_.size() > 0 ))
       {
 	Double zL  = 0.0, zG;
@@ -380,24 +376,23 @@ namespace MITHRA
 
     /****************************************************************************************************/
 
-    /* Distribute particles in their respective processor, depending on their longituinal coordinate.	*/
+    /* 根据粒子的纵向坐标，将其分配至相应的处理器*/
     distributeParticles(chargeVectorn_);
 
-    /* Print the total number of macro-particles for the user.						*/
+    /* 向用户打印宏粒子的总数。	*/
     unsigned int NqL = chargeVectorn_.size(), NqG = 0;
     MPI_Reduce(&NqL,&NqG,1,MPI_INT,MPI_SUM,0,MPI_COMM_WORLD);
     printmessage(std::string(__FILE__), __LINE__, std::string("The total number of macro-particles is equal to ") + stringify(NqG) + std::string(" .") );
 
-    /* Initialize the total number of charges.								*/
+    /* 初始化总电荷数。 */
     Nc_ = chargeVectorn_.size();
 
     /****************************************************************************************************/
 
-    /* If the value of the total travel distance for the simulation is nonzero, correct the total time
-     * factor in the simulation.									*/
+    /* 如果仿真的总行驶距离值非零，则修正仿真中的总时间因子。 */
     if ( mesh_.totalDist_ > 0.0 )
       {
-	/* Define the necessary variables, and get zmin and average beta_z.				*/
+	/* 定义必要的变量，并获取 zmin 和平均 beta_z。*/
 	double Lu = 0.0;
 	for (auto und = undulator_.begin(); und != undulator_.end(); und++)
 	  Lu += und->lu_ * und->length_ / gamma_;
@@ -423,12 +418,12 @@ namespace MITHRA
   }
 
   /******************************************************************************************************
-   * Distribute particles in their respective processor, depending on their longituinal coordinate.
+   根据纵向坐标，将粒子分配至各自的处理器。
    ******************************************************************************************************/
 
   void Solver::distributeParticles (std::list<Charge>& chargeVector)
   {
-    /* Note that this function only redistributes q, rnp, gbnp, but NOT rnm and gbnm.			*/
+    /* 请注意，此函数仅重新分配 q、rnp 和 gbnp，但不包括 rnm 和 gbnm。*/
     std::vector<Double> sendCV;
     std::list<Charge>::iterator it = chargeVector.begin();
     while(it != chargeVector.end())
@@ -448,23 +443,23 @@ namespace MITHRA
 	  }
       }
 
-    /* Do a for loop over processors and put the charges in the correct processor.			*/
+    /* 遍历处理器，并将电荷放置到相应的处理器中。 */
     for ( unsigned int ip = 0; ip < size_; ip++ )
       {
-	/* Get the size of the data to be sent by i'th processor.					*/
+	/* 获取第 i 个处理器待发送数据的大小。 */
 	int sizeSend = sendCV.size();
 
-	/* Broadcast the size to all other processors.							*/
+	/* 将大小广播给所有其他处理器。 */
 	MPI_Bcast(&sizeSend, 1, MPI_INT, ip, MPI_COMM_WORLD);
 
-	/* Initialize the receive buffer.								*/
+	/* 初始化接收缓冲区。 */
 	std::vector<Double> recvCV (sizeSend);
 	if ( ip == rank_ ) recvCV = sendCV;
 
-	/* Now broadcast the data from i'th processor to all other processors.				*/
+	/* 现在，将数据从第 i 个处理器广播给所有其他处理器。 */
 	MPI_Bcast(&recvCV[0], sizeSend, MPI_DOUBLE, ip, MPI_COMM_WORLD);
 
-	/* And now place all the charges in the charge vector of the corresponding processor.  		*/
+	/* 现在，将所有电荷放入相应处理器的电荷向量中。 */
 	unsigned int i = 0;
 	Charge charge;
 	while (i < recvCV.size() )
@@ -487,7 +482,7 @@ namespace MITHRA
   }
 
   /******************************************************************************************************
-   * Recycle particles removes the particles that no more belong to the processor.
+   “回收粒子”功能移除那些不再属于该处理器的粒子。
    ******************************************************************************************************/
 
   void Solver::recycleParticles ()
@@ -503,22 +498,22 @@ namespace MITHRA
   }
 
   /******************************************************************************************************
-   * Get the average gamma and average direction of a bunch read in from a file.
+   获取从文件中读取的一组数据的平均伽马值和平均方向。
    ******************************************************************************************************/
   void Solver::computeFileGamma 		(BunchInitialize & bunchInit)
   {
-    /* Declare the required parameters for saving the average values.                	*/
+    /* 声明用于保存平均值所需的参数。 */
     Double ignore;
     FieldVector<Double> gb (0.0);
     bunchInit.initialGamma_ = 0.0;
     bunchInit.initialDirection_ = 0.0;
 
-    /* Read the file and sum up the momenta gbnp to get their average. */
+    /* 读取文件，对动量 gbnp 进行求和，以计算其平均值。 */
     std::ifstream myfile ( bunchInit.fileName_.c_str() );
 
     while (myfile.good())
       {
-	/* Ignore the first three values in each line belonging to the particle postiion. */
+	/* 忽略每行前三个属于粒子位置的数值。 */
 	myfile >> ignore;
 	myfile >> ignore;
 	myfile >> ignore;
@@ -541,72 +536,67 @@ namespace MITHRA
   }
 
   /******************************************************************************************************
-   * Initialize the matrix for the field values and the coordinates.
+   初始化用于存储场值和坐标的矩阵。
    ******************************************************************************************************/
 
   void Solver::initialize ()
   {
-    /* Using the parsed data, set the required parameters for simulation.				*/
+  	/* 利用已解析的数据，设置仿真的所需参数。 */
     setSimulationParameters();
 
-    /* As the first step, initialize the given bunch according to the parameters given in the datainput
-     * file.												*/
+    /* 作为第一步，根据 datainput 文件中给定的参数，对给定的束团进行初始化。*/
     initializeBunch();
     timeBunch_ = time_;
 
-    /* Transfer the whole quantities to the electron rest frame.					*/
+    /* 将所有物理量转换至电子静止系。 */
     lorentzBoostMesh();
 
-    /* Initialize the spatial and temporal mesh of the problem.						*/
+    /* 初始化问题的空间和时间网格。 */
     initializeMesh();
 
-    /* Transfer the bunch to the lab frame and adapt the bunch for the FEL simulation, i.e. add the shot
-     * noise, distribute the mirrored macro-particles, and add the bunch tail.				*/
+    /* 将束团转换至实验室参考系，并针对 FEL 模拟对束团进行适配——即：添加散粒噪声、分布镜像宏粒子，并添加束团尾部。*/
     lorentzBoostBunch();
 
-    /* Initialize the update data for the field.							*/
+    /* 初始化字段的更新数据。 */
     initializeField();
 
-    /* If sampling is enabled initialize the required data for sampling the field and saving it.	*/
+    /* 如果启用了采样功能，则初始化对该字段进行采样及保存所需的数据。 */
     if (seed_.sampling_)			initializeSeedSampling();
 
-    /* Initialize the required data for visualizing and saving the field.				*/
+    /* 初始化用于场可视化与保存所需的数据。 */
     initializeSeedVTK();
 
-    /* If profiling is enabled initialize the required data for profiling the field and saving it.	*/
+    /* 如果已启用性能分析，则初始化对该字段进行分析及保存所需的数据。 */
     if (seed_.profile_)				initializeSeedProfile();
 
-    /* Initialize the data needed for updating the bunches.						*/
+    /* 初始化更新束所需的数据。 */
     initializeBunchUpdate();
 
-    /* If sampling or visualizing the radiation power is enabled initialize the required data for
-     * calculating the radiation power and saving it.							*/
+    /* 如果启用了辐射功率的采样或可视化功能，则初始化计算及保存辐射功率所需的各项数据。*/
     initializePowerSample(); initializePowerVisualize();
 
-    /* If sampling the radiation energy is enabled initialize the required data for calculating the
-     * radiation energy and saving it.									*/
+    /* 如果启用了辐射能量采样，则初始化用于计算及保存辐射能量所需的各项数据。*/
     initializeEnergySample();
 
-    /* Initialize required data for saving particles hitting screens.					*/
+    /* 初始化用于保存撞击屏幕粒子的所需数据。 */
     initializeScreenProfile();
 
-    /* Shift the time of the bunch and undulator according to the given time shift.			*/
+    /* 根据给定的时间偏移量，对束团和波荡器的时间进行偏移。 */
     shiftBackInTime();
   }
 
   /******************************************************************************************************
-   * Initialize the temporal and spatial mesh of the problem.
+   初始化问题的时空网格。
    ******************************************************************************************************/
 
   void Solver::initializeMesh ()
   {
     printmessage(std::string(__FILE__), __LINE__, std::string("::: Initializing the temporal and spatial mesh of the problem.") );
 
-    /* Declare the required variables in the calculations to avoid redundant data declaration.		*/
+    /* 声明计算所需的变量，以避免冗余的数据声明。 */
     unsigned int 	m = 0;
 
-    /* First the mesh-length needs to be adjusted to contain a multiple number of the mesh-resolution in
-     * each direction.											*/
+    /* 首先，需要调整网格长度，使其在各个方向上均为网格分辨率的整数倍。 */
     N0_ = (int) ( mesh_.meshLength_[0] / mesh_.meshResolution_[0] ) + 2;
     N1_ = (int) ( mesh_.meshLength_[1] / mesh_.meshResolution_[1] ) + 2;
     N2_ = (int) ( mesh_.meshLength_[2] / mesh_.meshResolution_[2] ) + 2;
@@ -615,7 +605,7 @@ namespace MITHRA
     mesh_.meshLength_[1] = ( N1_ - 1 ) * mesh_.meshResolution_[1];
     mesh_.meshLength_[2] = ( N2_ - 1 ) * mesh_.meshResolution_[2];
 
-    /* Evaluate the number of nodes in each processor.							*/
+    /* 计算每个处理器中的节点数量。 */
     if ( size_ > 1 )
       {
 	if ( rank_ == 0 )
@@ -640,7 +630,7 @@ namespace MITHRA
 	k0_ = 0;
       }
 
-    /* Now according to the number of nodes, initialize each of the field and coordinate matrices.	*/
+    /* 接下来，根据节点数量，初始化各场量矩阵和坐标矩阵。 */
     FieldVector<Double> ZERO_VECTOR 		(0.0);
     FieldVector<float>  ZERO_VECTOR_FLOAT 	(0.0);
     anp1_ = new std::vector<FieldVector<Double> > (N1N0_*np_, ZERO_VECTOR);
@@ -657,7 +647,7 @@ namespace MITHRA
 	fnm1_ = new std::vector<Double> (N1N0_*np_, 0.0 );
       }
 
-    /* Set the borders of the computational mesh.                                                     	*/
+    /* 设置计算网格的边界。 */
     xmin_ = mesh_.meshCenter_[0] - mesh_.meshLength_[0] / 2.0;
     xmax_ = mesh_.meshCenter_[0] + mesh_.meshLength_[0] / 2.0;
     ymin_ = mesh_.meshCenter_[1] - mesh_.meshLength_[1] / 2.0;
@@ -665,7 +655,7 @@ namespace MITHRA
     zmin_ = mesh_.meshCenter_[2] - mesh_.meshLength_[2] / 2.0;
     zmax_ = mesh_.meshCenter_[2] + mesh_.meshLength_[2] / 2.0;
 
-    /* Now set up the coordinate of nodes according to the number of nodes and mesh-length.		*/
+    /* 现在，根据节点数量和网格长度设置节点的坐标。 */
     FieldVector<Double> r (0.0);
     for (int i = 0; i < N0_; i++)
       for (int j = 0; j < N1_; j++)
@@ -680,7 +670,7 @@ namespace MITHRA
 	      zp_[1] = r[2];
 	  }
 
-    /* Initialize the time values for the field update.							*/
+    /* 初始化用于字段更新的时间值。 */
     timep1_	   =  mesh_.timeStep_;
     time_  	   =  0.0;
     timem1_	   = -mesh_.timeStep_;
@@ -689,17 +679,17 @@ namespace MITHRA
   }
 
   /******************************************************************************************************
-   * Initialize the data for updating the field in the fdtd algorithm.
+   初始化用于FDTD算法中场更新的数据。
    ******************************************************************************************************/
 
   void Solver::initializeField ()
   {
     printmessage(std::string(__FILE__), __LINE__, std::string(" ::: Initializing the field update data") );
 
-    /* Declare the required variables in the calculations to avoid redundant data declaration.		*/
+    /* 声明计算所需的变量，以避免冗余的数据声明。 */
     unsigned int      m = 0;
 
-    /* Initialize the data for updating the currents.                                                 	*/
+    /* 初始化用于更新电流的数据。 */
     uc_.dx = mesh_.meshResolution_[0];
     uc_.dy = mesh_.meshResolution_[1];
     uc_.dz = mesh_.meshResolution_[2];
@@ -709,7 +699,7 @@ namespace MITHRA
     uc_.jt.resize(N1N0_,ZERO_VECTOR);
     if ( mesh_.spaceCharge_ ) uc_.rt.resize(N1N0_,0.0);
 
-    /* Now calculate all the coefficients needed for updating the fields with time.			*/
+    /* 现在计算随时间更新场量所需的所有系数。*/
 
     uf_.dt	 = mesh_.timeStep_;
 
@@ -725,7 +715,7 @@ namespace MITHRA
     uf_.N1m1   = N1_ - 1;
     uf_.npm1   = np_ - 1;
 
-    /* Coefficients of the Nonstandard finite difference method.					*/
+    /* 非标准有限差分法的系数 */
     Double beta   = ( 1.0 + 0.02 / ( pow(uf_.dz/uf_.dx,2.0) + pow(uf_.dz/uf_.dy,2.0) ) ) / 4.0;
     Double alpha  = 1.0 - 2.0 * beta;
     uf_.af.alpha_ = alpha;
@@ -740,7 +730,7 @@ namespace MITHRA
 
     uf_.af.ufa_ = &uf_.a[0];
 
-    /* x = 0 and x = h boundary coefficients.								*/
+    /* x = 0 和 x = h 处的边界系数。 */
 
     Double alpha1 = 0.0;
     Double alpha2 = 0.0;
@@ -755,8 +745,7 @@ namespace MITHRA
     uf_.bB[3]	= - q * ( mesh_.truncationOrder_ - 1.0 ) * ( c0_ / ( 2.0 * uf_.dy * uf_.dy ) ) / d ;
     uf_.bB[4]	= - q * ( mesh_.truncationOrder_ - 1.0 ) * ( c0_ / ( 2.0 * uf_.dz * uf_.dz ) ) / d ;
 
-    /* y = 0 and y = h boundary coefficients.								*/
-
+    /* y = 0 和 y = h 处的边界系数。 */
     d  	 = 1.0 / ( 2.0 * uf_.dt * uf_.dy ) + p / ( 2.0 * c0_ * uf_.dt * uf_.dt );
 
     uf_.cB[0]	= (   1.0 / ( 2.0 * uf_.dt * uf_.dy ) - p / ( 2.0 * c0_ * uf_.dt * uf_.dt ) ) / d;
@@ -765,7 +754,7 @@ namespace MITHRA
     uf_.cB[3]	= - q * ( mesh_.truncationOrder_ - 1.0 ) * ( c0_ / ( 2.0 * uf_.dx * uf_.dx ) ) / d ;
     uf_.cB[4]	= - q * ( mesh_.truncationOrder_ - 1.0 ) * ( c0_ / ( 2.0 * uf_.dz * uf_.dz ) ) / d ;
 
-    /* z = 0 and z = h boundary coefficients.								*/
+    /* z = 0 和 z = h 处的边界系数。 */
 
     alpha1 = 0.0;
     alpha2 = 0.0;
@@ -780,7 +769,7 @@ namespace MITHRA
     uf_.dB[3]  	= - q * ( mesh_.truncationOrder_ - 1.0 ) * ( c0_ / ( 2.0 * uf_.dx * uf_.dx ) ) / d ;
     uf_.dB[4]  	= - q * ( mesh_.truncationOrder_ - 1.0 ) * ( c0_ / ( 2.0 * uf_.dy * uf_.dy ) ) / d ;
 
-    /* Edge coefficients for edges along z.								*/
+    /* 沿 z 轴边的边系数 */
     d  	= ( 1.0 / uf_.dy + 1.0 / uf_.dx ) / ( 4.0 * uf_.dt ) + 3.0 / ( 8.0 * c0_ * uf_.dt * uf_.dt );
     uf_.eE[0] = ( - ( 1.0 / uf_.dy - 1.0 / uf_.dx ) / ( 4.0 * uf_.dt ) - 3.0 / ( 8.0 * c0_ * uf_.dt * uf_.dt ) ) / d;
     uf_.eE[1] = (   ( 1.0 / uf_.dy - 1.0 / uf_.dx ) / ( 4.0 * uf_.dt ) - 3.0 / ( 8.0 * c0_ * uf_.dt * uf_.dt ) ) / d;
@@ -788,7 +777,7 @@ namespace MITHRA
     uf_.eE[3] = ( 3.0 / ( 4.0 * c0_ * uf_.dt * uf_.dt ) - c0_ / ( 4.0 * uf_.dz * uf_.dz ) ) / d;
     uf_.eE[4] = c0_ / ( 8.0 * uf_.dz * uf_.dz ) / d;
 
-    /* Edge coefficients for edges along x.								*/
+    /* 沿 x 轴边的边系数 */
     d  	= ( 1.0 / uf_.dz + 1.0 / uf_.dy ) / ( 4.0 * uf_.dt ) + 3.0 / ( 8.0 * c0_ * uf_.dt * uf_.dt );
     uf_.fE[0] = ( - ( 1.0 / uf_.dz - 1.0 / uf_.dy ) / ( 4.0 * uf_.dt ) - 3.0 / ( 8.0 * c0_ * uf_.dt * uf_.dt ) ) / d;
     uf_.fE[1] = (   ( 1.0 / uf_.dz - 1.0 / uf_.dy ) / ( 4.0 * uf_.dt ) - 3.0 / ( 8.0 * c0_ * uf_.dt * uf_.dt ) ) / d;
@@ -796,7 +785,7 @@ namespace MITHRA
     uf_.fE[3] = ( 3.0 / ( 4.0 * c0_ * uf_.dt * uf_.dt ) - c0_ / ( 4.0 * uf_.dx * uf_.dx ) ) / d;
     uf_.fE[4] = c0_ / ( 8.0 * uf_.dx * uf_.dx ) / d;
 
-    /* Edge coefficients for edges along y.								*/
+    /* 沿 y 轴边的边系数 */
     d  	= ( 1.0 / uf_.dx + 1.0 / uf_.dz ) / ( 4.0 * uf_.dt ) + 3.0 / ( 8.0 * c0_ * uf_.dt * uf_.dt );
     uf_.gE[0] = ( - ( 1.0 / uf_.dx - 1.0 / uf_.dz ) / ( 4.0 * uf_.dt ) - 3.0 / ( 8.0 * c0_ * uf_.dt * uf_.dt ) ) / d;
     uf_.gE[1] = (   ( 1.0 / uf_.dx - 1.0 / uf_.dz ) / ( 4.0 * uf_.dt ) - 3.0 / ( 8.0 * c0_ * uf_.dt * uf_.dt ) ) / d;
@@ -804,7 +793,7 @@ namespace MITHRA
     uf_.gE[3] = ( 3.0 / ( 4.0 * c0_ * uf_.dt * uf_.dt ) - c0_ / ( 4.0 * uf_.dy * uf_.dy ) ) / d;
     uf_.gE[4] = c0_ / ( 8.0 * uf_.dy * uf_.dy ) / d;
 
-    /* Corner coefficients.										*/
+    /* 角系数 */
     uf_.hC[0]  =   ( - 1.0 / uf_.dx - 1.0 / uf_.dy - 1.0 / uf_.dz ) / ( 8.0 * uf_.dt ) - 1.0 / ( 4.0 * c0_ * uf_.dt * uf_.dt );
     uf_.hC[1]  =   (   1.0 / uf_.dx - 1.0 / uf_.dy - 1.0 / uf_.dz ) / ( 8.0 * uf_.dt ) - 1.0 / ( 4.0 * c0_ * uf_.dt * uf_.dt );
     uf_.hC[2]  =   ( - 1.0 / uf_.dx + 1.0 / uf_.dy - 1.0 / uf_.dz ) / ( 8.0 * uf_.dt ) - 1.0 / ( 4.0 * c0_ * uf_.dt * uf_.dt );
@@ -823,8 +812,7 @@ namespace MITHRA
     uf_.hC[15] = - (   1.0 / uf_.dx + 1.0 / uf_.dy + 1.0 / uf_.dz ) / ( 8.0 * uf_.dt ) - 1.0 / ( 4.0 * c0_ * uf_.dt * uf_.dt );
     uf_.hC[16] = 1.0 / ( 2.0 * c0_ * uf_.dt * uf_.dt );
 
-    /* The seed field should be initialized in the computational mesh as well. This should be done for
-     * the mesh points within the TF domain.								*/
+    /* 种子场也应在计算网格中进行初始化。此操作应针对 TF 域内的网格点执行。*/
     if (seed_.amplitude_ > 1.0e-50)
       {
 	FieldVector<Double> r (0.0);
@@ -842,31 +830,30 @@ namespace MITHRA
   }
 
   /******************************************************************************************************
-   * Initialize the data required for sampling seed or the total field in the computational domain.
+   初始化计算域内采样种子或整个场所需的数据。
    ******************************************************************************************************/
 
   void Solver::initializeSeedSampling ()
   {
     printmessage(std::string(__FILE__), __LINE__, std::string(" ::: Initializing the field sampling data") );
 
-    /* Return an error if the seed sampling rhythm is still zero.					*/
+    /* 如果种子采样节奏仍为零，则返回错误。 */
     if ( seed_.samplingRhythm_ == 0 )
       {
 	printmessage(std::string(__FILE__), __LINE__, std::string("The sampling rhythm of the field is zero although sampling is activated !!!") );
 	exit(1);
       }
 
-    /* Lorentz boost the seed sampling rhythm to the electron rest frame.				*/
+    /* 将种子采样节奏进行洛伦兹提升，转换至电子静止系。 */
     seed_.samplingRhythm_		/= gamma_;
 
-    /* Perform the lorentz boost for the sampling data.							*/
+    /* 对采样数据执行洛伦兹变换。 */
     for (unsigned i = 0; i < seed_.samplingPosition_.size(); i++)
       seed_.samplingPosition_[i][2] 	*= gamma_;
     seed_.samplingLineBegin_[2]	*= gamma_;
     seed_.samplingLineEnd_  [2]	*= gamma_;
 
-    /* If sampling type is plot over line initialize the positions according to the line begin and line
-     * end.                                                                              		*/
+    /* 如果采样类型为“沿线绘制”，则根据线的起点和终点初始化位置。 */
     if ( seed_.samplingType_ == OVERLINE )
       {
 	FieldVector<Double> l = seed_.samplingLineEnd_;
@@ -886,15 +873,14 @@ namespace MITHRA
 
       }
 
-    /* Remove the point from the sampling locations if the point does not correspond to the corresponding
-     * processor.											*/
+    /* 如果采样点与对应的处理器不匹配，则将其从采样位置中移除。*/
     std::vector<FieldVector<Double> >	samplingPosition; samplingPosition.clear();
     for (unsigned int n = 0; n < seed_.samplingPosition_.size(); ++n)
       {
-	/* Get the position of the sampling point.							*/
+	/* 获取采样点的位置。 */
 	sf_.position 	= seed_.samplingPosition_[n];
 
-	/* Check if the sampling point resides in the computational mesh.				*/
+	/* 检查采样点是否位于计算网格内。 */
 	if ( sf_.position[0] < xmax_ - ub_.dx && sf_.position[0] > xmin_ + ub_.dx &&
 	    sf_.position[1] < ymax_ - ub_.dy && sf_.position[1] > ymin_ + ub_.dy &&
 	    sf_.position[2] < zmax_ - ub_.dz && sf_.position[2] > zmin_ + ub_.dz )
@@ -910,7 +896,7 @@ namespace MITHRA
     seed_.samplingPosition_ = samplingPosition;
     sf_.N  = seed_.samplingPosition_.size();
 
-    /* Create the file stream and directories for saving the seed sampling data.			*/
+    /* 创建用于保存种子采样数据的文件流及目录。 */
     if ( sf_.N > 0 )
       {
 	std::string baseFilename = "";
@@ -921,7 +907,7 @@ namespace MITHRA
 	sf_.file = new std::ofstream(baseFilename.c_str(),std::ios::trunc);
       }
 
-    /* Set the constants to change the units in the output file.					*/
+    /* 设置常量以更改输出文件中的单位。 */
     sf_.Ce = mesh_.lengthScale_ / pow( mesh_.timeScale_ , 2 );
     sf_.Cb = 1.0 / ( mesh_.lengthScale_ * mesh_.timeScale_  );
     sf_.Ca = 1.0 / mesh_.timeScale_;
@@ -932,41 +918,41 @@ namespace MITHRA
   }
 
   /******************************************************************************************************
-   * Initialize the required data for visualizing and saving the field.
+   初始化用于场可视化与保存所需的数据。
    ******************************************************************************************************/
 
   void Solver::initializeSeedVTK ()
   {
-    /* Resize the visualization field database according to the number of defined visualizations.	*/
+    /* 根据已定义的可视化数量，调整可视化字段数据库的大小。 */
     vf_.resize( seed_.vtk_.size() );
 
-    /* Perform the lorentz boost for the visualization data.						*/
+    /* 对可视化数据执行洛伦兹变换。 */
     for (unsigned int i = 0; i < seed_.vtk_.size(); i++)
       {
-	/* Continue the loop if the sampling option for this vtk file is not enabled.			*/
+	/* 如果此 vtk 文件的采样选项未启用，则继续循环。 */
 	if ( !seed_.vtk_[i].sample_ ) continue;
 
-	/* Return an error if the seed visualization rhythm is still zero.				*/
+	/* 如果种子可视化节奏仍为零，则返回错误。 */
 	if ( seed_.vtk_[i].rhythm_ == 0 )
 	  {
 	    printmessage(std::string(__FILE__), __LINE__, std::string("The visualization rhythm of the field is zero although visualization is activated !!!") );
 	    exit(1);
 	  }
 
-	/* Lorentz boost the seed visualization rhythm to the electron rest frame.			*/
+	/* 将种子可视化节奏进行洛伦兹提升，转换至电子静止系。 */
 	seed_.vtk_[i].rhythm_			/= gamma_;
 
-	/* Lorentz boost the plane-position to the electron rest frame.				*/
+	/* 将平面位置进行洛伦兹提升，转换至电子静止系。 */
 	seed_.vtk_[i].position_[2]		*= gamma_;
 
 	if (!(isabsolute(seed_.vtk_[i].basename_)))
 	  seed_.vtk_[i].basename_ = seed_.vtk_[i].directory_ + seed_.vtk_[i].basename_;
 	splitFilename(seed_.vtk_[i].basename_, vf_[i].path, vf_[i].name);
 
-	/* If the directory of the baseFilename does not exist create this directory.			*/
+	/* 如果 baseFilename 所在的目录不存在，则创建该目录。*/
 	createDirectory(seed_.vtk_[i].basename_, rank_);
 
-	/* Initialize the vector to save the data and write to the vtk file.				*/
+	/* 初始化用于存储数据的向量，并将其写入 VTK 文件。 */
 	std::vector<Double> ZERO_VECTOR ( (seed_.vtk_[i].field_).size(), 0.0);
 	if 	  ( seed_.vtk_[i].type_ == ALLDOMAIN )
 	  vf_[i].v.resize( N1N0_*np_, ZERO_VECTOR);
@@ -974,7 +960,7 @@ namespace MITHRA
 	  {
 	    if      ( seed_.vtk_[i].plane_ == XNORMAL )
 	      {
-		/* Check if the given position for the plane resides in the computational domain.	*/
+		/* 检查给定平面的位置是否位于计算域内。*/
 		if ( seed_.vtk_[i].position_[0] > xmax_ - ub_.dx || seed_.vtk_[i].position_[0] < xmin_ + ub_.dx )
 		  {
 		    printmessage(std::string(__FILE__), __LINE__, std::string("The plane does not reside in the grid. No data is saved.") );
@@ -986,7 +972,7 @@ namespace MITHRA
 	      }
 	    else if ( seed_.vtk_[i].plane_ == YNORMAL )
 	      {
-		/* Check if the given position for the plane resides in the computational domain.	*/
+		/* 检查给定平面的位置是否位于计算域内。*/
 		if ( seed_.vtk_[i].position_[1] > ymax_ - ub_.dy || seed_.vtk_[i].position_[1] < ymin_ + ub_.dy )
 		  {
 		    printmessage(std::string(__FILE__), __LINE__, std::string("The plane does not reside in the grid. No data is saved.") );
@@ -998,7 +984,7 @@ namespace MITHRA
 	      }
 	    else if ( seed_.vtk_[i].plane_ == ZNORMAL )
 	      {
-		/* Check if the given position for the plane resides in the computational domain.	*/
+		/* 检查给定平面的位置是否位于计算域内。*/
 		if ( seed_.vtk_[i].position_[2] > zmax_ - ub_.dz || seed_.vtk_[i].position_[2] < zmin_ + ub_.dz )
 		  {
 		    printmessage(std::string(__FILE__), __LINE__, std::string("The plane does not reside in the grid. No data is saved.") );
@@ -1016,40 +1002,40 @@ namespace MITHRA
   }
 
   /******************************************************************************************************
-   * Initialize the required data for profiling and saving the field.
+   初始化用于性能分析及字段保存的所需数据。
    ******************************************************************************************************/
 
   void Solver::initializeSeedProfile ()
   {
-    /* Return an error if the bunch profiling rhythm is still zero and no time is set.			*/
+    /* 如果批量分析的节奏仍为零且未设置时间，则返回错误。 */
     if ( seed_.profileRhythm_ == 0 && seed_.profileTime_.size() == 0 )
       {
 	printmessage(std::string(__FILE__), __LINE__, std::string("The profiling rhythm of the field is zero and no time is set although profiling of the field is activated !!!") );
 	exit(1);
       }
 
-    /* Lorentz boost the seed profiling rhythm to the electron rest frame.				*/
+    /* 将种子剖面节奏进行洛伦兹提升，转换至电子静止系。 */
     seed_.profileRhythm_	/= gamma_;
 
-    /* Perform the lorentz boost for the profiling data.						*/
+    /* 对剖析数据执行洛伦兹变换。 */
     for (unsigned i = 0; i < seed_.profileTime_.size(); i++)
       seed_.profileTime_[i] 	/= gamma_;
 
     if (!(isabsolute(seed_.profileBasename_))) seed_.profileBasename_ = seed_.profileDirectory_ + seed_.profileBasename_;
 
-    /* If the directory of the baseFilename does not exist create this directory.			*/
+    /* 如果 baseFilename 所在的目录不存在，则创建该目录。*/
     createDirectory(seed_.profileBasename_, rank_);
 
     pf_.dt = 2.0 * mesh_.timeStep_;
   }
 
   /******************************************************************************************************
-   * Initialize the required data for updating the bunch.
+   初始化更新批次所需的必要数据。
    ******************************************************************************************************/
 
   void Solver::initializeBunchUpdate ()
   {
-    /* Calculate the absolute values for the time step and the mesh resolution.				*/
+    /* 计算时间步长和网格分辨率的绝对值。 */
     ub_.dt	= mesh_.timeStep_;
     ub_.dtb	= c0_ * bunch_.timeStep_;
     ub_.dx	= mesh_.meshResolution_[0];
@@ -1058,7 +1044,7 @@ namespace MITHRA
     ub_.r1    	= - EC / ( EM * c0_ ) * bunch_.timeStep_ / 2.0;
     ub_.r2    	= - EC / EM * bunch_.timeStep_ / 2.0;
 
-    /* If bunch sampling is enabled, initialize the required data for sampling and saving the bunch.	*/
+    /* 如果启用了成组采样，则初始化用于采样及保存成组数据所需的各项数据。 */
     if (bunch_.sampling_)
       {
 	printmessage(std::string(__FILE__), __LINE__, std::string("::: Initializing the bunch sampling data.") );
@@ -1067,12 +1053,12 @@ namespace MITHRA
 	if (!(isabsolute(bunch_.basename_))) baseFilename = bunch_.directory_;
 	baseFilename += bunch_.basename_ + TXT_FILE_SUFFIX;
 
-	/* If the directory of the baseFilename does not exist create this directory.			*/
+	/* 如果 baseFilename 所在的目录不存在，则创建该目录。*/
 	createDirectory(baseFilename, rank_);
 
 	sb_.file = new std::ofstream(baseFilename.c_str(),std::ios::trunc);
 
-	/* Return an error if the bunch sampling rhythm is still zero.					*/
+	/* 如果批量采样节奏仍为零，则返回错误。 */
 	if ( bunch_.rhythm_ == 0 )
 	  {
 	    printmessage(std::string(__FILE__), __LINE__, std::string("The sampling rhythm of the bunch is zero although sampling is activated !!!") );
@@ -1082,17 +1068,17 @@ namespace MITHRA
 	printmessage(std::string(__FILE__), __LINE__, std::string(" The sampling data are initialized. :::") );
       }
 
-    /* If bunch visualization is enabled, initialize the required data for visualizing the bunch.	*/
+    /* 如果启用了束可视化功能，则初始化用于可视化该束所需的必要数据。*/
     if (bunch_.bunchVTK_)
       {
 	printmessage(std::string(__FILE__), __LINE__, std::string("::: Initializing the bunch visualization data.") );
 
 	if (!(isabsolute(bunch_.bunchVTKBasename_))) bunch_.bunchVTKBasename_ = bunch_.bunchVTKDirectory_ + bunch_.bunchVTKBasename_;
 
-	/* If the directory of the baseFilename does not exist create this directory.			*/
+	/* 如果 baseFilename 所在的目录不存在，则创建该目录。*/
 	createDirectory(bunch_.bunchVTKBasename_, rank_);
 
-	/* Return an error if the bunch visualization rhythm is still zero.				*/
+	/* 如果簇可视化节奏仍为零，则返回错误。 */
 	if ( bunch_.bunchVTKRhythm_ == 0 )
 	  {
 	    printmessage(std::string(__FILE__), __LINE__, std::string("The visualization rhythm of the bunch is zero although visualization is activated !!!") );
@@ -1102,17 +1088,17 @@ namespace MITHRA
 	printmessage(std::string(__FILE__), __LINE__, std::string(" The bunch visualization data are initialized. :::") );
       }
 
-    /* If writing the bunch profile is enabled, initialize the required data for profiling the bunch.	*/
+    /* 如果启用了束剖面写入功能，则初始化用于束剖面分析所需的各项数据。 */
     if (bunch_.bunchProfile_)
       {
 	printmessage(std::string(__FILE__), __LINE__, std::string("::: Initializing the bunch profiling data.") );
 
 	if (!(isabsolute(bunch_.bunchProfileBasename_))) bunch_.bunchProfileBasename_ = bunch_.bunchProfileDirectory_ + bunch_.bunchProfileBasename_;
 
-	/* If the directory of the baseFilename does not exist create this directory.			*/
+	/* 如果 baseFilename 所在的目录不存在，则创建该目录。*/
 	createDirectory(bunch_.bunchProfileBasename_, rank_);
 
-	/* Return an error if the bunch profiling rhythm is still zero and no time is set.		*/
+	/* 如果批量分析的节奏仍为零且未设置时间，则返回错误。 */
 	if ( bunch_.bunchProfileRhythm_ == 0 && bunch_.bunchProfileTime_.size() == 0 )
 	  {
 	    printmessage(std::string(__FILE__), __LINE__, std::string("The profiling rhythm of the bunch is zero and no time is set although profiling of the bunch is activated !!!") );
@@ -1124,19 +1110,19 @@ namespace MITHRA
   }
 
   /******************************************************************************************************
-   * Initialize the charge vector containing the bunch given by the user.
+   初始化包含用户指定粒子束的电荷矢量。
    ******************************************************************************************************/
 
   void Solver::initializeBunch ()
   {
     printmessage(std::string(__FILE__), __LINE__, std::string("[[[ Initializing the bunch and prepare the charge vector ") );
 
-    /* Define a temporary charge vector.					*/
+    /* 定义一个临时电荷向量。 */
     std::list<Charge> qv;
 
     for (unsigned int i = 0; i < bunch_.bunchInit_.size(); i++)
       {
-	/* Clear the temprary charge vector.								*/
+	/* 清除临时电荷向量。 */
 	qv.clear();
 
 	if ( bunch_.bunchInit_[i].position_.size() == 0 )
@@ -1146,7 +1132,7 @@ namespace MITHRA
 	  }      
 
 
-	/* Initialize the bunch in the code.								*/
+	/* 在代码中初始化该组对象。 */
 	if 	  ( bunch_.bunchInit_[i].bunchType_ == "manual" )
 	  {
 	    for ( unsigned int ia = 0; ia < bunch_.bunchInit_[i].position_.size(); ia++)
@@ -1170,7 +1156,7 @@ namespace MITHRA
 	else if ( bunch_.bunchInit_[i].bunchType_ == "other" )
 	  printmessage(std::string(__FILE__), __LINE__, std::string("The charge vector has been filled in by an external program. ") );
 
-	/* Add the bunch distribution to the global charge vector.					*/
+	/* 将束团分布添加到全局电荷矢量中。 */
 	chargeVectorn_.splice(chargeVectorn_.end(),qv);
       }
 
@@ -1178,65 +1164,61 @@ namespace MITHRA
   }
 
   /******************************************************************************************************
-   * After the data is initialized, if the time shift is non-zero, shift the bunch and undulator back in
-   * time.
+   数据初始化完成后，若时间偏移量非零，则将束团和波荡器在时间上向后平移。
    ******************************************************************************************************/
   void Solver::shiftBackInTime()
   {
-    /* Check first if the time shift is nonzero.							*/
+    /* 首先检查时间偏移是否非零。 */
     if ( mesh_.timeShift_ != 0.0 )
       {
-	/* To shift the undulator back in time, it is merely enough to manipulate the dt_ factor.	*/
+	/* 若要将波荡器在时间上向后推移，只需调整 dt_ 因子即可。 */
 	timem1_ 	-= mesh_.timeShift_;
 	time_   	-= mesh_.timeShift_;
 	timep1_ 	-= mesh_.timeShift_;
 	timeBunch_ 	-= mesh_.timeShift_;
 
-	/* To shift the bunch back in time the values of rnm and rnp shoud be manipulated.		*/
+	/* 若要将束团在时间上向后平移，应调整 rnm 和 rnp 的数值。 */
 	for (auto iterQ = chargeVectorn_.begin(); iterQ != chargeVectorn_.end(); iterQ++ )
 	  {
 	    Double t  	= c0_ * mesh_.timeShift_ / std::sqrt(1.0 + iterQ->gb.norm2());
 	    iterQ->rnp.mmv( t , iterQ->gb );
 	  }
 
-	/* Distribute particles in their respective processor, depending on their longitudinal
-	 * coordinate.											*/
+	/* 根据粒子的纵向坐标，将其分配至各自的处理器。 */
 	distributeParticles(chargeVectorn_);
       }
   }
 
   /******************************************************************************************************
-   * The function which is called for solving the fields in time domain.
+   用于求解时域场量的函数。
    ******************************************************************************************************/
 
   void Solver::solve ()
   {
-    /* Declare the required variables in the calculations to avoid redundant data decalaration.		*/
+    /* 声明计算所需的变量，以避免冗余的数据声明。 */
     timeval           			simulationStart, simulationEnd;
     Double 				deltaTime, p = 0.0;
     std::stringstream 			printedMessage;
     std::list<Charge>::iterator 	iter;
 
-    /* Before starting with the simulation the matrix for the field values and the coordinates should
-     * be initialized. This is done based on the given mesh length and the mesh resolution in the mesh
-     * structure.											*/
+    /* 在开始进行仿真之前，必须对用于存储场值及坐标的矩阵进行初始化。
+     * 这一过程将依据网格结构中给定的网格长度及网格分辨率来完成。											*/
     initialize();
 
-    /* Retrieve time when we start the electric update part                                  		*/
+    /* 获取开始执行电气更新部分的时间 */
     gettimeofday(&simulationStart, NULL);
 
-    /* Now update the field starting from time zero for the total simulation time.			*/
+    /* 现在，从零时刻开始，对整个仿真时段内的场进行更新。 */
     printmessage(std::string(__FILE__), __LINE__, std::string("-> Run the time domain inital particle simulation ...") );
 
-    /* First run the solver for particle motion up to the initial time.					*/
+    /* 首先运行求解器，计算粒子运动直至初始时刻。 */
     while (time_ < 0.0)
       {
-	/* Update the position and velocity parameters.							*/
+	/* 更新位置和速度参数。 */
 	for (auto iter = chargeVectorn_.begin(); iter != chargeVectorn_.end(); iter++)
 	  iter->rnm  = iter->rnp;
 
-	/* Update the bunch till the time of the bunch properties reaches the time instant of the
-	 * field.											*/
+	/* 更新粒子束，直至其属性时间达到场的时间点。 */
 	for (Double t = 0.0; t < nUpdateBunch_; t += 1.0)
 	  {
 	    bunchUpdate();
@@ -1244,19 +1226,19 @@ namespace MITHRA
 	    ++nTimeBunch_;
 	  }
 
-	/* Record particles that have gone through the diagnostics screens.				*/
+	/* 记录已穿过诊断屏的粒子。 */
 	screenProfile();
 
-	/* If sampling of the bunch is enabled and the rhythm for sampling is achieved. Sample the
-	 * bunch and save them into the file.								*/
+	/* 如果已启用对束的采样，且已达到采样的节奏，则对该束进行采样，
+	 * 并将其保存至文件中。													*/
 	if ( bunch_.sampling_ && fmod(time_ + mesh_.timeShift_ , bunch_.rhythm_) < mesh_.timeStep_ && ( time_ + mesh_.timeShift_ > 0.0 ) ) bunchSample();
 
-	/* If visualization of the bunch is enabled and the rhythm for visualization is achieved,
-	 * visualize the bunch and save the vtk data in the given file name.				*/
+	/* 如果已启用束团可视化功能，且已达到可视化所需的节奏，
+	 * 则对束团进行可视化，并将 VTK 数据保存至指定的文件名中。				*/
 	if ( bunch_.bunchVTK_ && fmod(time_ + mesh_.timeShift_ , bunch_.bunchVTKRhythm_) < mesh_.timeStep_ && ( time_ + mesh_.timeShift_ > 0.0 ) ) bunchVisualize();
 
-	/* If profiling of the bunch is enabled and the time for profiling is achieved, write the bunch
-	 * profile and save the data in the given file name.						*/
+	/* 如果已启用批次性能分析功能，且已达到分析时间点，则写入该批次的性能分析数据，
+	 * 并将其保存至指定的文件中。						*/
 	if (bunch_.bunchProfile_)
 	  {
 	    for (unsigned int i = 0; i < (bunch_.bunchProfileTime_).size(); i++)
@@ -1266,8 +1248,7 @@ namespace MITHRA
 	      bunchProfile();
 	  }
 
-	/* After the current deposition, a recycling of the charges is needed so that the charges that
-	 * have left the processor domain are deleted from the processor.				*/
+	/* 在当前沉积过程结束后，需要对电荷进行回收，以便将已离开处理器域的电荷从处理器中移除。*/
 	recycleParticles();
 
 	timem1_ += mesh_.timeStep_;
@@ -1290,29 +1271,28 @@ namespace MITHRA
 	  }
       }
 
-    /* Retrieve time when we start the electric update part                                  		*/
+    /* 获取开始执行电气更新部分的时间 */
     gettimeofday(&simulationStart, NULL);
 
-    /* Now update the field starting from time zero for the total simulation time.			*/
+    /* 现在，从零时刻开始，对整个仿真时段内的场进行更新。 */
     printmessage(std::string(__FILE__), __LINE__, std::string("-> Run the time domain field simulation ...") );
 
-    /* Now run the whole radiation calculation up to the final time.					*/
+    /* 现在，执行完整的辐射计算，直至最终时刻。 */
     while (time_ < mesh_.totalTime_)
       {
-	/* Update the fields for one time step using the FDTD algorithm.				*/
+	/* 利用 FDTD 算法更新一个时间步长的场量。 */
 	fieldUpdate();
 
-	/* For the sake of having correct charge conservation in the implementation of PIC model, we
-	 * need to first update the charge motion with having the initial position saved in the memory.
-	 * Then, the current and charge update should all happen using the very first and the very last
-	 * charge positions. THIS IS VERY IMPORTANT AND SHOULD NOT BE CHANGED IN THE FUTURE.		*/
+	/* 为了确保 PIC 模型实现中电荷守恒的正确性，
+	 * 我们首先需要利用内存中保存的初始位置来更新电荷的运动状态。
+	 * 随后，电流及电荷的更新操作必须完全基于电荷的“初始位置”与“最终位置”来进行。
+	 * 这一点至关重要，在未来的版本中绝不应予以更改。		*/
 
-	/* Update the position and velocity parameters.							*/
+	/* 更新位置和速度参数。 */
 	for (auto iter = chargeVectorn_.begin(); iter != chargeVectorn_.end(); iter++)
 	  iter->rnm  = iter->rnp;
 
-	/* Update the bunch till the time of the bunch properties reaches the time instant of the
-	 * field.											*/
+	/* 更新粒子束，直至其属性时间达到场的时间点。 */
 	for (Double t = 0.0; t < nUpdateBunch_; t += 1.0)
 	  {
 	    bunchUpdate();
@@ -1320,16 +1300,15 @@ namespace MITHRA
 	    ++nTimeBunch_;
 	  }
 
-	/* After the current deposition, a recycling of the charges is needed so that the charges that
-	 * have left the processor domain are deleted from the processor.				*/
+	/* 在当前沉积过程结束后，需要对电荷进行回收，以便将已离开处理器域的电荷从处理器中移除。*/
 	recycleParticles();
 
-	/* If sampling of the field is enabled and the rhythm for sampling is achieved. Sample the
-	 * field at the given position and save them into the file.					*/
+	/* 如果已启用该字段的采样功能，且已达到预设的采样节奏，则在指定位置对该字段进行采样，
+	 * 并将采样数据保存至文件中。													*/
 	if ( seed_.sampling_ && fmod(time_, seed_.samplingRhythm_) < mesh_.timeStep_ && time_ > 0.0 ) fieldSample();
 
-	/* If visualization of the field is enabled and the rhythm for visualization is achieved,
-	 * visualize the fields and save the vtk data in the given file name.				*/
+	/* 如果已启用场的可视化功能，且已达到可视化所需的节奏，
+	 * 则对场进行可视化，并将 VTK 数据保存至指定的文件名。				*/
 	for (unsigned int i = 0; i < seed_.vtk_.size(); i++)
 	  {
 	    if ( seed_.vtk_[i].sample_ && fmod(time_, seed_.vtk_[i].rhythm_) < mesh_.timeStep_ && time_ > 0.0 )
@@ -1339,8 +1318,8 @@ namespace MITHRA
 	      }
 	  }
 
-	/* If profiling of the field is enabled and the time for profiling is achieved, write the
-	 * field profile and save the data in the given file name.					*/
+	/* 如果已启用该字段的性能分析功能，且已达到分析时间，则写入字段分析数据，
+	 * 并将其保存至指定的文件中。													*/
 	if (seed_.profile_)
 	  {
 	    for (unsigned int i = 0; i < seed_.profileTime_.size(); i++)
@@ -1351,16 +1330,16 @@ namespace MITHRA
 	      fieldProfile();
 	  }
 
-	/* If sampling of the bunch is enabled and the rhythm for sampling is achieved. Sample the
-	 * bunch and save them into the file.								*/
+	/* 如果已启用对束的采样，且已达到采样的节奏，则对该束进行采样，
+	 * 并将其保存至文件中。													*/
 	if ( bunch_.sampling_ && fmod(time_ + mesh_.timeShift_ , bunch_.rhythm_) < mesh_.timeStep_ && ( time_ + mesh_.timeShift_ > 0.0 ) ) bunchSample();
 
-	/* If visualization of the bunch is enabled and the rhythm for visualization is achieved,
-	 * visualize the bunch and save the vtk data in the given file name.				*/
+	/* 如果已启用束团可视化功能，且已达到可视化所需的节奏，
+	 * 则对束团进行可视化，并将 VTK 数据保存至指定的文件名中。				*/
 	if ( bunch_.bunchVTK_ && fmod(time_ + mesh_.timeShift_ , bunch_.bunchVTKRhythm_) < mesh_.timeStep_ && ( time_ + mesh_.timeShift_ > 0.0 ) ) bunchVisualize();
 
-	/* If profiling of the bunch is enabled and the time for profiling is achieved, write the bunch
-	 * profile and save the data in the given file name.						*/
+	/* 如果已启用批次性能分析功能，且已达到分析时间点，则写入该批次的性能分析数据，
+	 * 并将其保存至指定的文件中。						*/
 	if (bunch_.bunchProfile_)
 	  {
 	    for (unsigned int i = 0; i < (bunch_.bunchProfileTime_).size(); i++)
@@ -1370,27 +1349,27 @@ namespace MITHRA
 	      bunchProfile();
 	  }
 
-	/* Record particles that have gone through the diagnostics screens.				*/
+	/* 记录已穿过诊断屏的粒子。 */
 	screenProfile();
 
-	/* If radiation power of the FEL output is enabled and the rhythm for sampling is achieved.
-	 * Sample the radiation power at the given position and save them into the file.		*/
+	/* 若 FEL 输出的辐射功率监测已启用，且采样周期条件已满足：
+	 * 在指定位置对辐射功率进行采样，并将其保存至文件中。		*/
 	powerSample(); powerVisualize();
 
-	/* If radiation energy of the FEL output is enabled and the rhythm for sampling is achieved.
-	 * Sample the radiation energy at the given position and save them into the file.		*/
+	/* 若 FEL 输出的辐射能量监测已启用，且已达到采样节拍，
+	 * 则在指定位置对辐射能量进行采样，并将其保存至文件中。		*/
 	energySample();
 
-	/* Shift the computed fields and the time points for the fields.				*/
+	/* 移动计算字段及其对应的时间点。 */
 	fieldShift();
 
-	/* Reset the charge and current values to zero.							*/
+	/* 将电荷和电流值重置为零。 */
 	currentReset();
 
-	/* Update the values of the current.								*/
+	/* 更新当前对象的值。 */
 	currentUpdate();
 
-	/* Communicate the current among processors.							*/
+	/* 在处理器之间传递电流。 */
 	currentCommunicate();
 
 	timem1_ += mesh_.timeStep_;
@@ -1413,49 +1392,49 @@ namespace MITHRA
 	  }
       }
 
-    /* Finalize the calculations and the data saving.							*/
+    /* 完成计算及数据保存。 */
     finalize();
   }
 
   /******************************************************************************************************
-   * Update the fields for one time-step
+   更新单个时间步的场
    ******************************************************************************************************/
 
   void Solver::bunchUpdate ()
   {
-    /* First define a parameter for the processor number.						*/
+    /* 首先定义一个用于指定处理器编号的参数。 */
     UpdateBunchParallel	        ubp;
     MPI_Status                  status;
     int                         msgtag1 = 1, msgtag2 = 2;
 
-    /* Set the count for particles outside the transverse domain of the bunch to zero.			*/
+    /* 将位于束团横向域之外的粒子计数设为零。 */
     ubp.nt = 0;
 
-    /* Loop over the charge points in the bunch, extract the real field values of the seed at their point,
-     * superpose with the undulator field and eventually accelerate the particles within the field.	*/
+    /* 遍历束团中的电荷点，提取各点处的种子场实数值，
+     * 与波荡器场进行叠加，并最终在场内对粒子进行加速。	*/
 
     for ( auto iter = chargeVectorn_.begin(); iter != chargeVectorn_.end(); iter++ )
       {
-	/* If the particle does not belong to this processor continue the loop over particles         	*/
+	/* 如果粒子不属于当前处理器，则继续粒子的循环 */
 	ubp.zr = pmod( iter->rnp[2] - zmin_ , mesh_.meshLength_[2] ) + zmin_;
 	if ( ! ( ( ubp.zr >= zp_[0] ) && ( ubp.zr < zp_[1] ) ) ) continue;
 
-	/* Get the boolean flag determining if the particle resides in the computational domain.      	*/
+	/* 获取布尔标志，用于判断粒子是否位于计算域内。 */
 	ubp.b1x = ( iter->rnp[0] < xmax_ - ub_.dx && iter->rnp[0] > xmin_ + ub_.dx );
 	ubp.b1y = ( iter->rnp[1] < ymax_ - ub_.dy && iter->rnp[1] > ymin_ + ub_.dy );
 	ubp.b1z = ( iter->rnp[2] < zp_[1]         && iter->rnp[2] >= zp_[0] );
 
-	/* Initialize the undulator fields.								*/
+	/* 初始化波荡器场。 */
 	ubp.bt = 0.0;
 	ubp.et = 0.0;
 
-	/* Calculate the undulator field at the particle position.				        */
+	/* 计算粒子位置处的波荡器场。 */
 	undulatorField(ubp, iter->rnp);
 
-	/* Calculate the external field at the particle position and add to the undulator field.	*/
+	/* 计算粒子位置处的外部场，并将其叠加到波荡器场上。 */
 	externalField(ubp, iter->rnp);
 
-	/* Compute the fields if the particle has passed the entrance zone of the undulator.		*/
+	/* 若粒子已穿过波荡器入口区，则计算场量。 */
 	if ( iter->e == 1.0 )
 	  {
 
@@ -1465,7 +1444,7 @@ namespace MITHRA
 		ubp.dyr = modf( ( iter->rnp[1] - ymin_ ) / ub_.dy , &ubp.d1 ); ubp.j = (int) ubp.d1;
 		ubp.dzr = modf( ( iter->rnp[2] - zmin_ ) / ub_.dz , &ubp.d1 ); ubp.k = (int) ubp.d1;
 
-		/* Get the index of the cell.								*/
+		/* 获取单元格的索引。 */
 		ubp.m   = ( ubp.k - k0_) * N1N0_ + ubp.i * N1_ + ubp.j;
 
 		if (!pic_[ubp.m            ])     fieldEvaluate(ubp.m            );
@@ -1477,7 +1456,7 @@ namespace MITHRA
 		if (!pic_[ubp.m+N1N0_+1    ])     fieldEvaluate(ubp.m+N1N0_+1    );
 		if (!pic_[ubp.m+N1N0_+N1_+1])     fieldEvaluate(ubp.m+N1N0_+N1_+1);
 
-		/* Calculate and interpolate the electric field to find the value at the bunch point.	*/
+		/* 计算并插值电场，以求得束团点处的数值。 */
 		ubp.et.pmv( ( 1.0 - ubp.dxr ) * ( 1.0 - ubp.dyr ) * ( 1.0 - ubp.dzr) , en_[ubp.m		]);
 		ubp.et.pmv(         ubp.dxr   * ( 1.0 - ubp.dyr ) * ( 1.0 - ubp.dzr) , en_[ubp.m+N1_	  	]);
 		ubp.et.pmv( ( 1.0 - ubp.dxr ) *         ubp.dyr   * ( 1.0 - ubp.dzr) , en_[ubp.m+1	  	]);
@@ -1487,7 +1466,7 @@ namespace MITHRA
 		ubp.et.pmv( ( 1.0 - ubp.dxr ) *         ubp.dyr   *         ubp.dzr  , en_[ubp.m+N1N0_+1	]);
 		ubp.et.pmv(         ubp.dxr   *         ubp.dyr   *         ubp.dzr  , en_[ubp.m+N1N0_+N1_+1	]);
 
-		/* Calculate and interpolate the magnetic field to find the value at the bunch point.	*/
+		/* 计算并插值磁场，以求得束团点处的数值。*/
 		ubp.bt.pmv( ( 1.0 - ubp.dxr ) * ( 1.0 - ubp.dyr ) * ( 1.0 - ubp.dzr) , bn_[ubp.m		]);
 		ubp.bt.pmv(         ubp.dxr   * ( 1.0 - ubp.dyr ) * ( 1.0 - ubp.dzr) , bn_[ubp.m+N1_		]);
 		ubp.bt.pmv( ( 1.0 - ubp.dxr ) *         ubp.dyr   * ( 1.0 - ubp.dzr) , bn_[ubp.m+1		]);
@@ -1499,56 +1478,55 @@ namespace MITHRA
 	      }
 	    else if ( !(ubp.b1x) && !(ubp.b1y) && ubp.b1z )
 	      {
-		/* Add one to the number of particles that do not reside in the transverse size of the
-		 * computational domain.								*/
+		/* 将位于计算域横向尺寸范围之外的粒子数量加一。 */
 		ubp.nt++;
 	      }
 	  }
 	else if ( undulator_.size() > 0 )
 	  {
-	    /* Update the emission vector flag based on the particle position in lab frame.		*/
+	    /* 根据粒子在实验室坐标系中的位置，更新发射矢量标志。 */
 	    ubp.lz 	= gamma_ * ( iter->rnp[2] + beta_ * c0_ * ( timeBunch_ + dt_ ) );
 	    iter->e 	= ( ubp.lz > - undulator_[0].dist_ ) ? 1.0 : 0.0;
 	  }
 	else
 	  iter->e	= 1.0;
 
-	/* Update the velocity of the particle according to the calculated electric and magnetic field.	*/
+	/* 根据计算出的电场和磁场，更新粒子的速度。 */
 
-	/* First, calculate the value of (gamma*beta)-.							*/
+	/* 首先，计算 (gamma*beta)- 的值。 */
 	ubp.gbm = iter->gb;
 	ubp.gbm.pmv( ub_.r1 , ubp.et );
 
-	/* Second, calculate the value of (gamma*beta)'.				                */
+	/* 其次，计算 (gamma*beta)' 的值。 */
 	ubp.gbp   = cross( ubp.gbm , ubp.bt );
 	ubp.d1    = sqrt( 1.0 + ubp.gbm.norm2() );
 	ubp.gbp.mv( ub_.r2 / ubp.d1, ubp.gbp);
 	ubp.gbp  += ubp.gbm;
 
-	/* Third, calculate the (gamma*beta)+.								*/
+	/* 第三步，计算 (gamma*beta)+。 */
 	ubp.gbpl  = cross( ubp.gbp , ubp.bt );
 	ubp.gbpl.mv( 2.0 / ( ubp.d1 / ub_.r2 + ub_.r2 / ubp.d1 * ubp.bt.norm2() ), ubp.gbpl);
 	ubp.gbpl += ubp.gbm;
 
-	/* Fourth, update the (gamma*beta) vector.						        */
+	/* 第四步，更新 (gamma*beta) 向量。 */
 	iter->gb = ubp.gbpl;
 	iter->gb.pmv( ub_.r1 , ubp.et );
 
-	/* Determine the movement of the particle.							*/
+	/* 确定粒子的运动。 */
 	ubp.dr.mv( ub_.dtb / sqrt (1.0 + iter->gb.norm2()) , iter->gb );
 
-	/* Determine the final position of the particle.				                */
+	/* 确定粒子的最终位置。 */
 	iter->rnp += ubp.dr;
 
-	/* Calculate the relative coordinate for processor association.					*/
+	/* 计算用于处理器关联的相对坐标。 */
 	ubp.zr += ubp.dr[2];
 
-	/* If the particle enters the adjacent computational domain, save it to communication buffer. 	*/
+	/* 若粒子进入相邻计算域，将其存入通信缓冲区。 */
 	if 	( ubp.zr <  zp_[0] )	ubp.qSB.push_back( *iter );
 	else if ( ubp.zr >= zp_[1] )	ubp.qSF.push_back( *iter );
       }
 
-    /* Now communicate the charges which propagate throughout the borders to other processors.		*/
+    /* 现在，将那些跨越边界传播的电荷发送给其他处理器。 */
     MPI_Send(&ubp.qSB[0],ubp.qSB.size(),MPI_CHARGE,rankB_,msgtag1,MPI_COMM_WORLD);
 
     MPI_Probe(rankF_,msgtag1,MPI_COMM_WORLD,&status);
@@ -1563,12 +1541,11 @@ namespace MITHRA
     ubp.qRB.resize(ub_.nL);
     MPI_Recv(&ubp.qRB[0],ub_.nL,MPI_CHARGE,rankB_,msgtag2,MPI_COMM_WORLD,&status);
 
-    /* Now insert the newly incoming particles in this processor to the list of particles.            */
+    /* 现在，将进入当前处理器的粒子插入到粒子列表中。 */
     std::copy( ubp.qRF.begin(), ubp.qRF.end(), std::back_inserter(chargeVectorn_) );
     std::copy( ubp.qRB.begin(), ubp.qRB.end(), std::back_inserter(chargeVectorn_) );
 
-    /* Add the number of charge points that do not reside in the transverse size of the domain from
-     * different processors.										*/
+    /* 添加来自不同处理器、且位于域横向范围之外的电荷点数量。 */
     MPI_Reduce(&ubp.nt, &ub_.nt,1,MPI_INT,MPI_SUM,0,MPI_COMM_WORLD);
     if ( rank_ == 0 && ub_.nt > 0 )
       printmessage(std::string(__FILE__), __LINE__, std::string("Warning: " + stringify(ub_.nt) +
@@ -1576,21 +1553,19 @@ namespace MITHRA
   }
 
   /******************************************************************************************************
-   * Sample the bunch data and save it to the given file.
+   对批次数据进行采样，并将其保存到指定文件中。
    ******************************************************************************************************/
 
   void Solver::bunchSample ()
   {
-    /* First, we need to evaluate the charge cloud properties and for that the corresponding data should
-     * be initialized.                                                                     		*/
+    /* 首先，我们需要评估电荷云的属性；为此，应初始化相应的数据。 */
     sb_.q   = 0.0;
     sb_.r   = 0.0;
     sb_.r2  = 0.0;
     sb_.gb  = 0.0;
     sb_.gb2 = 0.0;
 
-    /* Now, we perform an addition of all the charges. Since the point charges are equal, we do not need
-     * to do weighted additions.                                            				*/
+    /* 现在，我们对所有电荷进行求和。由于这些点电荷大小相等，因此无需进行加权求和。 */
     for (auto iter = chargeVectorn_.begin(); iter != chargeVectorn_.end(); iter++)
       {
 	if ( particleInProcessor(iter->rnp[2]) )
@@ -1607,7 +1582,7 @@ namespace MITHRA
 	  }
       }
 
-    /* Add the contribution from each processor to the first element.					*/
+    /* 将每个处理器的贡献累加到第一个元素上。 */
     MPI_Reduce(&sb_.q    , &sb_.qT    , 1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
     MPI_Reduce(&sb_.r[0] , &sb_.rT[0] , 3,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
     MPI_Reduce(&sb_.r2[0], &sb_.r2T[0], 3,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
@@ -1616,7 +1591,7 @@ namespace MITHRA
 
     if ( rank_ == 0 )
       {
-	/* Divide the obtained values by the number of particles to calculate the mean value.		*/
+	/* 将所得数值除以粒子数，以计算平均值。 */
 	sb_.rT   /= sb_.qT;
 	sb_.r2T  /= sb_.qT;
 	sb_.gbT  /= sb_.qT;
@@ -1625,10 +1600,10 @@ namespace MITHRA
 	(*sb_.file).setf(std::ios::scientific);
 	(*sb_.file).precision(4);
 
-	/** Write time into the first column.                                                 		*/
+	/** 将时间写入第一列。 */
 	*sb_.file << timeBunch_ << "\t";
 
-	/** Now write the calculated values for the charge distribution in this row.          		*/
+	/** 现在，写入本行电荷分布的计算值。 */
 	*sb_.file << sb_.rT[0]   << "\t" << sb_.rT[1]   << "\t" << sb_.rT[2]   << "\t";
 	*sb_.file << sb_.gbT[0]  << "\t" << sb_.gbT[1]  << "\t" << sb_.gbT[2]  << "\t";
 	*sb_.file << sqrt( sb_.r2T[0]  - sb_.rT[0]  * sb_.rT[0]  ) << "\t" ;
@@ -1641,35 +1616,35 @@ namespace MITHRA
   }
 
   /******************************************************************************************************
-   * Visualize the bunch as vtk files and save them to the file with given name.
+   将粒子束可视化为 VTK 文件，并以指定名称保存到文件中。
    ******************************************************************************************************/
 
   void Solver::bunchVisualize ()
   {
-    /* First define a parameters.                         						*/
+    /* 首先定义参数。 */
     Double                            gamma, beta;
 
-    /* The old files if existing should be deleted.                                               	*/
+    /* 如果旧文件存在，应将其删除。 */
     vb_.fileName = bunch_.bunchVTKBasename_ + "-p" + stringify(rank_) + "-" + stringify(nTimeBunch_) + VTU_FILE_SUFFIX;
     vb_.file = new std::ofstream(vb_.fileName.c_str(),std::ios::trunc);
 
     vb_.file->setf(std::ios::scientific);
     vb_.file->precision(4);
 
-    /* Store the number of particles in the simulation.							*/
+    /* 存储模拟中的粒子数量。 */
     vb_.N = 0;
     for (auto iter = chargeVectorn_.begin(); iter != chargeVectorn_.end(); iter++)
       if ( particleInProcessor(iter->rnp[2]) )
 	vb_.N++;
 
-    /* Write the initial data for the vtk file.                                                     	*/
+    /* 写入 VTK 文件的初始数据。 */
     *vb_.file << "<VTKFile type=\"UnstructuredGrid\" version=\"0.1\" byte_order=\"LittleEndian\">"
 	<< std::endl;
     *vb_.file << "<UnstructuredGrid>"                                                     	<< std::endl;
     *vb_.file << "<Piece NumberOfPoints=\"" << vb_.N + 1 << "\" NumberOfCells=\"" << 1 << "\">"
 	<< std::endl;
 
-    /* Insert the coordinates of the grid for the charge points.                                      	*/
+    /* 插入充电桩网格的坐标。 */
     *vb_.file << "<Points>"                                                             	<< std::endl;
     *vb_.file << "<DataArray type = \"Float64\" NumberOfComponents=\"3\" format=\"ascii\">" 	<< std::endl;
 
@@ -1683,7 +1658,7 @@ namespace MITHRA
     *vb_.file << "</DataArray>"                                                          	<< std::endl;
     *vb_.file << "</Points>"                                                              	<< std::endl;
 
-    /* Insert each cell vertices number into the vtk file.                                            	*/
+    /* 将每个单元的顶点数写入 VTK 文件。 */
     *vb_.file << "<Cells>"                                                               	<< std::endl;
     *vb_.file << "<DataArray type=\"Int32\" Name=\"connectivity\" format=\"ascii\">"       	<< std::endl;
     for (unsigned i = 0; i < vb_.N + 1 ; ++i) *vb_.file << i << " ";
@@ -1718,23 +1693,23 @@ namespace MITHRA
     *vb_.file << "</UnstructuredGrid>"                                                      	<< std::endl;
     *vb_.file << "</VTKFile>"                                                              	<< std::endl;
 
-    /* Close the file.                                                                          	*/
+    /* 关闭文件。 */
     (*vb_.file).close();
 
-    /* Connect the vtk files in the root processor.							*/
+    /* 在根处理器上连接 VTK 文件。*/
     if ( rank_ == 0 )
       {
-	/* Write the parallel vtk file for combining the files.						*/
+	/* 编写用于合并文件的并行 VTK 文件。 */
 	vb_.fileName = bunch_.bunchVTKBasename_ + "-" + stringify(nTimeBunch_) + PTU_FILE_SUFFIX;
 	vb_.file = new std::ofstream(vb_.fileName.c_str(),std::ios::trunc);
 
-	/* Obtain the path and name of the files.							*/
+	/* 获取文件的路径和名称。 */
 	splitFilename(bunch_.bunchVTKBasename_, vb_.path, vb_.name);
 
 	*vb_.file << "<VTKFile type=\"PUnstructuredGrid\" version=\"0.1\" byte_order=\"LittleEndian\">"<< std::endl;
 	*vb_.file << "<PUnstructuredGrid> GhostLevel = \"0\""                                        	<< std::endl;
 
-	/* Insert the coordinates of the grid for the charge cloud.                                   	*/
+	/* 插入电荷云的网格坐标。 */
 	*vb_.file << "<PPoints>"                                                                    	<< std::endl;
 	*vb_.file << "<PDataArray type = \"Float64\" NumberOfComponents=\"3\" format=\"ascii\" />"
 	    << std::endl;
@@ -1757,12 +1732,12 @@ namespace MITHRA
   }
 
   /******************************************************************************************************
-   * Write the total profile of the field into the given file name.
+   将该字段的完整概况写入指定的文件中。
    ******************************************************************************************************/
 
   void Solver::bunchProfile ()
   {
-    /* The old files if existing should be deleted.                                           		*/
+    /* 如果旧文件存在，应将其删除。 */
     pb_.fileName = bunch_.bunchProfileBasename_ + "-p" + stringify(rank_) + "-" + stringify(nTime_) + TXT_FILE_SUFFIX;
     pb_.file = new std::ofstream(pb_.fileName.c_str(),std::ios::trunc);
 
@@ -1776,7 +1751,7 @@ namespace MITHRA
       {
 	if ( particleInProcessor(iter->rnp[2]) )
 	  {
-	    /* Loop over the particles and print the data of each particle into the file.		*/
+	    /* 遍历粒子，并将每个粒子的数据写入文件中。 */
 	    *pb_.file << iter->q  	<< "\t";
 	    *pb_.file << iter->rnp[0]  	<< "\t";
 	    *pb_.file << iter->rnp[1]  	<< "\t";
@@ -1787,59 +1762,59 @@ namespace MITHRA
 	  }
       }
 
-    /* Close the file.											*/
+    /* 关闭文件。											*/
     (*pb_.file).close();
   }
 
   /******************************************************************************************************
-   * Calculate the magnetic field of undulator and add it to the magnetic field of the seed.
+   计算波荡器的磁场，并将其叠加到种子场的磁场上。
    ******************************************************************************************************/
 
   void Solver::undulatorField (UpdateBunchParallel & ubp, FieldVector <Double> & r)
   {
-    /* For each external field given by the user, add the external fields to the undulator field.     	*/
+    /* 对于用户指定的每一个外部场，将其添加到波荡器场中。 */
     for (std::vector<Undulator>::iterator iter = undulator_.begin(); iter != undulator_.end(); iter++)
       {
 
-	/* Calculate the undulator magnetic field.							*/
+	/* 计算波荡器磁场。 */
 	ub_.b0	= (iter->lu_ != 0.0 ) ? EM * c0_ * 2 * PI / iter->lu_ * iter->k_ / EC : 0.0;
 
-	/* Calculate the undulator wave number.								*/
+	/* 计算波荡器波数。 */
 	ub_.ku 	= (iter->lu_ != 0.0 ) ? 2 * PI / iter->lu_ : 0.0;
 
-	/* Calculate the sine and cosine functions of the undulator angle.				*/
+	/* 计算波荡器角度的正弦和余弦函数。 */
 	ub_.ct	= cos( iter->theta_ );
 	ub_.st	= sin( iter->theta_ );
 
 	if ( iter->type_ == STATIC )
 	  {
-	    /* First find the position with respect to the undulator begin point. The equation below
-	     * assumes that the bunch at time zero resides in a distance gamma*rb_ from the first
-	     * undulator.										*/
+	    /* 首先，确定相对于波荡器起点的相对位置。下方的方程
+	     * 假定在 t=0 时刻，粒子束团位于距离第一个
+	     * 波荡器 gamma*rb_ 的位置处。										*/
 	    ubp.lz = gamma_ * ( r[2] + beta_ * c0_ * ( timeBunch_ + dt_ ) ) - iter->rb_;
 	    ubp.ly = r[0] * ub_.ct + r[1] * ub_.st;
 
-	    /* Now, calculate the undulator field according to the obtained position.               	*/
+	    /* 现在，根据获取的位置计算波荡器场。 */
 	    this->staticUndulator(ubp, iter);
 	  }
 	else if ( iter->type_ == OPTICAL )
 	  {
-	    /* Transfer the coordinate from the bunch rest frame to the lab frame.			*/
+	    /* 将坐标从束团静止系转换至实验室系。 */
 	    ubp.rl[0] = r[0]; ubp.rl[1] = r[1];
 	    ubp.rl[2] = gamma_ * ( r[2] + beta_ * c0_ * ( timeBunch_ + dt_ ) );
 	    ubp.t0    = gamma_ * ( timeBunch_ + dt_  + beta_ / c0_ * r[2] );
 
-	    /* Calculate the distance to the reference position along the propagation direction.   	*/
+	    /* 沿传播方向计算至参考位置的距离。 */
 	    ubp.rv = ubp.rl; ubp.rv -= iter->position_;
 	    ubp.z  = ubp.rv * iter->direction_ ;
 
-	    /* Compute propagation delay and subtract it from the time.                         	*/
+	    /* 计算传播延迟，并将其从时间中减去。 */
 	    ubp.tl = ubp.t0 - ubp.z / c0_;
 
-	    /* Reset the carrier envelope phase of the pulse.						*/
+	    /* 重置脉冲的载波包络相位。 */
 	    ubp.p0 = 0.0;
 
-	    /* Now manipulate the electric field vector depending on the specific seed given.           */
+	    /* 现在，根据给定的特定种子，对电场矢量进行操作。 */
 	    switch ( iter->seedType_ )
 	    {
 	      case PLANEWAVE:
@@ -1867,7 +1842,7 @@ namespace MITHRA
 		this->standingSuperGaussianBeam(ubp, *iter);	break;
 	    }
 
-	    /* Now transfer the computed magnetic vector potential into the bunch rest frame.		*/
+	    /* 现在，将计算所得的磁矢量势变换至束团静止系。 */
 	    ubp.bt[0] += gamma_ * ( ubp.bT[0] + beta_ / c0_ * ubp.eT[1] );
 	    ubp.bt[1] += gamma_ * ( ubp.bT[1] - beta_ / c0_ * ubp.eT[0] );
 	    ubp.bt[2] += ubp.bT[2];
@@ -1880,33 +1855,33 @@ namespace MITHRA
   }
 
   /******************************************************************************************************
-   * Calculate the field of external field and add it to the field of the seed.
+   计算外场场强，并将其叠加到种子的场强上。
    ******************************************************************************************************/
 
   void Solver::externalField (UpdateBunchParallel & ubp, FieldVector <Double> & r)
   {
 
-    /* Transfer the coordinate from the bunch rest frame to the lab frame.                            	*/
+    /* 将坐标从束团静止系转换至实验室系。 */
     ubp.rl[0] = r[0];
     ubp.rl[1] = r[1];
     ubp.rl[2] = gamma_ * ( r[2] + beta_ * c0_ * ( timeBunch_ + dt_ ) );
     ubp.t0    = gamma_ * ( timeBunch_ + dt_  + beta_ / c0_ * r[2] );
 
-    /* For each external field given by the user, add the external fields to the undulator field.     	*/
+    /* 对于用户指定的每一个外部场，将其添加到波荡器场中。 */
     for (std::vector<ExtField>::iterator iter = extField_.begin(); iter != extField_.end(); iter++)
       {
-	/* Calculate the distance to the reference position along the propagation direction.          	*/
+	/* 沿传播方向计算至参考位置的距离。 */
 	ubp.rv  = ubp.rl; ubp.rv -= iter->position_;
 	ubp.z   = ubp.rv * iter->direction_ ;
 
-	/* Compute propagation delay and subtract it from the time.                                   	*/
+	/* 计算传播延迟，并将其从时间中减去。 */
 	ubp.tl  = ubp.t0 - ubp.z / c0_;
 	ubp.tlm = ubp.t0 + ubp.z / c0_;
 
-	/* Reset the carrier envelope phase of the pulse.                                             	*/
+	/* 重置脉冲的载波包络相位。 */
 	ubp.p0  = 0.0;
 
-	/* Now manipulate the electric field vector depending on the specific seed given.             	*/
+	/* 现在，根据给定的特定种子，对电场矢量进行操作。 */
 	switch ( iter->seedType_ )
 	{
 	  case PLANEWAVE:
@@ -1934,7 +1909,7 @@ namespace MITHRA
 	    this->standingSuperGaussianBeam(ubp, *iter);	break;
 	}
 
-	/* Now transfer the computed magnetic vector potential into the bunch rest frame.             	*/
+	/* 现在，将计算所得的磁矢量势变换至束团静止系。 */
 	ubp.bt[0] += gamma_ * ( ubp.bT[0] + beta_ / c0_ * ubp.eT[1] );
 	ubp.bt[1] += gamma_ * ( ubp.bT[1] - beta_ / c0_ * ubp.eT[0] );
 	ubp.bt[2] += ubp.bT[2];
@@ -1947,7 +1922,7 @@ namespace MITHRA
   }
 
   /******************************************************************************************************
-   * Initialize the data required for sampling and saving the radiation energy at the given position.
+   初始化用于在给定位置采样并保存辐射能量所需的数据。
    ******************************************************************************************************/
 
   void Solver::initializeEnergySample ()
@@ -1956,21 +1931,19 @@ namespace MITHRA
 
     re_.clear(); re_.resize(FEL_.size());
 
-    /* Loop over the different FEL output parameters and calculate the radiation energy if the energy
-     * calculation is activated.                                                                      	*/
+    /* 遍历不同的 FEL 输出参数，若已启用能量计算功能，则计算辐射能量。 */
     for ( unsigned int jf = 0; jf < FEL_.size(); jf++)
       {
-	/* Initialize if and only if the sampling of the power is enabled.                            	*/
+	/* 仅当电源采样功能启用时进行初始化。 */
 	if (!FEL_[jf].radiationEnergy_.sampling_) continue;
 
-	/* Perform the lorentz boost for the sampling data.                                           	*/
+	/* 对采样数据执行洛伦兹变换。 */
 	for (unsigned int i = 0; i < FEL_[jf].radiationEnergy_.z_.size(); i++)
 	  FEL_[jf].radiationEnergy_.z_[i] = FEL_[jf].radiationEnergy_.z_[i] * gamma_;
 	FEL_[jf].radiationEnergy_.lineBegin_ = FEL_[jf].radiationEnergy_.lineBegin_ * gamma_;
 	FEL_[jf].radiationEnergy_.lineEnd_   = FEL_[jf].radiationEnergy_.lineEnd_   * gamma_;
 
-	/* If sampling type is plot over line initialize the positions according to the line begin and line
-	 * end.                                                                                       	*/
+	/* 如果采样类型为“沿线绘制”，则根据线的起点和终点初始化位置。 */
 	if ( FEL_[jf].radiationEnergy_.samplingType_ == OVERLINE )
 	  {
 	    Double l = 0.0;
@@ -1984,19 +1957,18 @@ namespace MITHRA
 
 	re_[jf].N  = FEL_[jf].radiationEnergy_.z_.size();
 
-	/* Add the normalized wavelength sweep to the vector of wavelengths.                          	*/
+	/* 将归一化波长扫描添加到波长向量中。*/
 	for (Double rw = FEL_[jf].radiationEnergy_.lambdaMin_; rw < FEL_[jf].radiationEnergy_.lambdaMax_; rw += FEL_[jf].radiationEnergy_.lambdaRes_)
 	  FEL_[jf].radiationEnergy_.lambda_.push_back(rw);
 	re_[jf].Nl = FEL_[jf].radiationEnergy_.lambda_.size();
 
-	/* Based on the number of points to calculate and the size of the threads, allocate memory for
-	 * saving the powers.                                                                         	*/
+	/* 根据待计算的点数及线程大小，分配用于存储幂值的内存。 */
 	re_[jf].pL.resize(re_[jf].Nl * re_[jf].N, 0.0);
 	re_[jf].pG.resize(re_[jf].Nl * re_[jf].N, 0.0);
 
 	re_[jf].Nf = 0;
 
-	/* Initialize the file streams to save the data.                                       		*/
+	/* 初始化用于保存数据的文件流。 */
 	re_[jf].file.resize(re_[jf].Nl);
 	re_[jf].w.resize(re_[jf].Nl);
 	for (unsigned int i = 0; i < re_[jf].Nl; i++)
@@ -2005,7 +1977,7 @@ namespace MITHRA
 	    if (!(isabsolute(FEL_[jf].radiationEnergy_.basename_))) baseFilename = FEL_[jf].radiationEnergy_.directory_;
 	    baseFilename += FEL_[jf].radiationEnergy_.basename_ + "-" + stringify(i) + TXT_FILE_SUFFIX;
 
-	    /* If the directory of the baseFilename does not exist create this directory.		*/
+	    /* 如果 baseFilename 所在的目录不存在，则创建该目录。 */
 	    createDirectory(baseFilename, rank_);
 
 	    re_[jf].file[i] = new std::ofstream(baseFilename.c_str(),std::ios::trunc);
@@ -2013,16 +1985,15 @@ namespace MITHRA
 	    ( *(re_[jf].file[i]) ).precision(15);
 	    ( *(re_[jf].file[i]) ).width(40);
 
-	    /* Determine the number of time points needed to calculate the amplitude of each
-	     * radiation harmonic.                                                                    	*/
+	    /* 确定计算各辐射谐波幅值所需的时刻点数量。 */
 	    Double dt = undulator_[0].lu_ / FEL_[jf].radiationEnergy_.lambda_[i] / ( gamma_ * c0_ );
 	    re_[jf].Nf = ( unsigned( dt / mesh_.timeStep_ ) > re_[jf].Nf ) ? unsigned( dt/mesh_.timeStep_ ) : re_[jf].Nf;
 
-	    /* Calculate the angular frequency for each wavelength.                                   	*/
+	    /* 计算每个波长的角频率。 */
 	    re_[jf].w[i] = 2 * PI / dt;
 	  }
 
-	/* Based on the obtained Nf, resize the vectors for saving the time domain data.          	*/
+	/* 根据获取到的 Nf，调整用于存储时域数据的向量大小。*/
 	re_[jf].fdt.resize(re_[jf].Nf, std::vector<std::vector<Double> > (re_[jf].N * N1_ * N0_, std::vector<Double> (4,0.0) ) );
 
 	re_[jf].dt = mesh_.timeStep_;
@@ -2038,63 +2009,61 @@ namespace MITHRA
   }
 
   /******************************************************************************************************
-   * Sample the radiation energy at the given position and save it to the file.
+   在给定位置对辐射能量进行采样，并将其保存至文件。
    ******************************************************************************************************/
 
   void Solver::energySample ()
   {
-    /* Declare the temporary parameters needed for calculating the radiated power.                    	*/
+    /* 声明计算辐射功率所需的临时参数。 */
     unsigned int              mi, ni;
     FieldVector<Double>       et, bt;
     Complex                   ew1, bw1, ew2, bw2, ex;
 
-    /* Loop over the different FEL output parameters and calculate the radiation energy if the energy
-     * calculation is activated.                                                                      	*/
+    /* 遍历不同的 FEL 输出参数，若已启用能量计算功能，则计算辐射能量。 */
     for ( unsigned int jf = 0; jf < FEL_.size(); jf++)
       {
-	/* Initialize if and only if the sampling of the power is enabled.                            	*/
+	/* 仅当电源采样功能启用时进行初始化。 */
 	if (!FEL_[jf].radiationEnergy_.sampling_) continue;
 
-	/* First reset all the previously calculated powers.                                         	*/
+	/* 首先重置所有先前计算的幂。 */
 	for (unsigned k = 0; k < re_[jf].N; ++k)
 	  for (unsigned l = 0; l < re_[jf].Nl; ++l)
 	    re_[jf].pL[k * re_[jf].Nl + l] = 0.0;
 
-	/* Loop over the sampling positions, transverse dicretizations, and frequency to calculate the
-	 * radiated power at the specific point and frequency.                                        	*/
+	/* 遍历采样位置、横向离散点及频率，以计算特定点和频率处的辐射功率。 */
 	for (unsigned k = 0; k < re_[jf].N; ++k)
 	  {
-	    /* Obtain the z index of the cell containing the point.                                   	*/
+	    /* 获取包含该点的单元格的 z-index。 */
 	    re_[jf].dzr = modf( ( FEL_[jf].radiationEnergy_.z_[k] - ( mesh_.meshCenter_[2] - mesh_.meshLength_[2] / 2.0 ) ) / mesh_.meshResolution_[2] , &re_[jf].c);
 	    re_[jf].k   = (int) re_[jf].c;
 
-	    /* Do not continue if this index is not supported by the processor.                       	*/
+	    /* 如果处理器不支持此索引，则不继续执行。 */
 	    if ( re_[jf].k < k0_ || re_[jf].k > k0_ + np_ - 1) continue;
 
-	    /* Loop over the transverse indices.                                                      	*/
+	    /* 遍历横向指标。 */
 	    for (int i = 2; i < N0_ - 2; i += 1)
 	      for (int j = 2; j < N1_ - 2; j += 1)
 		{
-		  /* Get the index in the computation grid as well as the field storage grid. 		*/
+		  /* 获取计算网格以及场存储网格中的索引。 */
 		  mi = ( re_[jf].k - k0_) * N1_* N0_ + i*N1_ + j;
 		  ni = k * N1_* N0_ + i*N1_ + j;
 
-		  /* Calculate and interpolate the electric field to find the value at the bunch point.	*/
+		  /* 计算并插值电场，以求得束团点处的数值。 */
 		  et[0] = ( 1.0 - re_[jf].dzr ) * en_[mi][0] + re_[jf].dzr * en_[mi+N1N0_][0];
 		  et[1] = ( 1.0 - re_[jf].dzr ) * en_[mi][1] + re_[jf].dzr * en_[mi+N1N0_][1];
 
-		  /* Calculate and interpolate the magnetic field to find its value at the bunch point.	*/
+		  /* 计算并插值磁场，以求得其在束团点处的值。*/
 		  bt[0] = ( 1.0 - re_[jf].dzr ) * bn_[mi][0] + re_[jf].dzr * bn_[mi+N1N0_][0];
 		  bt[1] = ( 1.0 - re_[jf].dzr ) * bn_[mi][1] + re_[jf].dzr * bn_[mi+N1N0_][1];
 
-		  /* Transform the fields to the lab frame.                                   */
+		  /* 将场量变换至实验室坐标系。 */
 		  re_[jf].fdt[nTime_ % re_[jf].Nf][ni][0] = gamma_ * ( et[0] + c0_ * beta_ * bt[1] );
 		  re_[jf].fdt[nTime_ % re_[jf].Nf][ni][1] = gamma_ * ( et[1] - c0_ * beta_ * bt[0] );
 
 		  re_[jf].fdt[nTime_ % re_[jf].Nf][ni][2] = gamma_ * ( bt[0] - beta_ / c0_ * et[1] );
 		  re_[jf].fdt[nTime_ % re_[jf].Nf][ni][3] = gamma_ * ( bt[1] + beta_ / c0_ * et[0] );
 
-		  /* Add the contribution of this field to the radiation power.                       	*/
+		  /* 将该场的贡献计入辐射功率。 */
 		  for (unsigned l = 0; l < re_[jf].Nl; l++)
 		    {
 		      ew1 = Complex (0.0, 0.0);
@@ -2120,11 +2089,10 @@ namespace MITHRA
 		}
 	  }
 
-	/* Add the data from each processor together at the root processor.                           	*/
+	/* 在根处理器上将各处理器的数据汇总。 */
 	MPI_Allreduce(&re_[jf].pL[0],&re_[jf].pG[0],re_[jf].N*re_[jf].Nl,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
 
-	/* If the rank of the processor is equal to zero, i.e. root processor save the fields into the
-	 * given file.                                                                                	*/
+	/* 如果处理器的秩（rank）为零——即为主处理器——则将字段保存到指定文件中。 */
 	for (unsigned l = 0; l < re_[jf].Nl; l++)
 	  {
 	    if ( rank_ == int( l % size_ ) )
@@ -2139,7 +2107,7 @@ namespace MITHRA
   }
 
   /******************************************************************************************************
-   * Initialize the data required for storing particles hitting a screen at the given position.
+   初始化用于存储在给定位置撞击屏幕的粒子所需的数据。
    ******************************************************************************************************/
 
   void Solver::initializeScreenProfile ()
@@ -2148,12 +2116,12 @@ namespace MITHRA
     printmessage(std::string(__FILE__), __LINE__, std::string("::: Initializing the screen to measure bunch profile.") );
     for ( unsigned int jf = 0; jf < FEL_.size(); jf++)
       {
-	/* Initialize if and only if screens have been enabled.		                            	*/
-	if (!FEL_[jf].screenProfile_.sampling_) continue;
+	/* 仅当屏幕已启用时进行初始化。 */
+	if (!FEL_[jf].screenProfile_.sampling_) conintue;
 
 	if (!(isabsolute(FEL_[jf].screenProfile_.basename_))) FEL_[jf].screenProfile_.basename_ = FEL_[jf].screenProfile_.directory_ + FEL_[jf].screenProfile_.basename_;
 
-	/* According to the given rhythm add to the position vector.					*/
+	/* 根据给定的节奏，向位置向量添加元素。 */
 	if ( FEL_[jf].screenProfile_.rhythm_ > 0.0 )
 	  {
 	    Double z = 0.0;
@@ -2164,19 +2132,19 @@ namespace MITHRA
 	      }
 	  }
 
-	/*  resize vectors storing filenames                   */
+	/*  调整存储文件名的向量大小  */
 	scrp_[jf].fileNames.resize((FEL_[jf].screenProfile_.pos_).size());
 	scrp_[jf].files.resize((FEL_[jf].screenProfile_.pos_).size());
 
-	/* If the directory of the baseFilename does not exist create this directory.			*/
+	/* 如果 baseFilename 所在的目录不存在，则创建该目录。*/
 	createDirectory(FEL_[jf].screenProfile_.basename_, rank_);
 
-	/* Order screens                          							*/
+	/* 订单界面 */
 	std::sort(FEL_[jf].screenProfile_.pos_.begin(), FEL_[jf].screenProfile_.pos_.end());
 
 	MPI_Barrier(MPI_COMM_WORLD);
 
-	/* Open files for each screen and write its position in first line.                    	       	*/
+	/* 为每个屏幕打开文件，并在第一行写入其位置。 */
 	for ( unsigned int i = 0; i < (FEL_[jf].screenProfile_.pos_).size(); i++ )
 	  {
 	    printmessage(std::string(__FILE__), __LINE__, std::string("Screen ") + stringify(i) + std::string(" is at distance ") + stringify(FEL_[jf].screenProfile_.pos_[i]) + std::string(" from the undulator beginning.") );
@@ -2187,7 +2155,7 @@ namespace MITHRA
 	    (*scrp_[jf].files[i]).width(40);
 	  }
 
-	/* Return an error if the screen sampling is activated but no screen is given.	       		*/
+	/* 如果屏幕采样已启用但未指定屏幕，则返回错误。 */
 	if ( FEL_[jf].screenProfile_.pos_.size() == 0 )
 	  {
 	    printmessage(std::string(__FILE__), __LINE__, std::string("No position is set for the screen although the screen sampling is activated !!!") );
@@ -2199,23 +2167,23 @@ namespace MITHRA
   }
 
   /******************************************************************************************************
-   * Store the bunch profile from particles hitting a screen at the given position and save it to the file.
+   存储撞击指定位置屏幕的粒子束剖面，并将其保存至文件。
    ******************************************************************************************************/
 
   void Solver::screenProfile ()
   {
     for ( unsigned jf = 0; jf < FEL_.size(); jf++)
       {
-	/* Continued past this function if screen profile sampling is not enabled.			*/
+	/* 如果未启用屏幕配置文件采样，则跳过此函数。 */
 	if (!FEL_[jf].screenProfile_.sampling_) continue;
 
-	/* Iterate through all the screens.								*/
+	/* 遍历所有屏幕。 */
 	for (unsigned i = 0; i < (FEL_[jf].screenProfile_.pos_).size(); i++ )
 	  {
 	    Double lzScreen = FEL_[jf].screenProfile_.pos_[i];
 	    for (auto iter = chargeVectorn_.begin(); iter != chargeVectorn_.end(); iter++)
 	      {
-		/* Only look at particles which belong to the domain of this processor.			*/
+		/* 仅考虑属于当前处理器域的粒子。 */
 		if ( particleInProcessor(iter->rnp[2]) )
 		  {
 		    Double lzm = gamma_ * ( iter->rnm[2] + beta_ * c0_ * ( timeBunch_- mesh_.timeStep_ + dt_ ) );
@@ -2224,7 +2192,7 @@ namespace MITHRA
 		    Double lzp = gamma_ * ( iter->rnp[2] + beta_ * c0_ * ( timeBunch_ + dt_) );
 		    if ( lzp <  lzScreen )	continue;
 
-		    /* Interpolate quantities and write them in file.					*/
+		    /* 对量进行插值，并将其写入文件。 */
 		    // *scrp_[jf].files[i] << iter->q  	        << "\t";
 		    *scrp_[jf].files[i] << interp( lzm, lzp, iter->rnm[0], iter->rnp[0], lzScreen ) << "\t";
 		    *scrp_[jf].files[i] << interp( lzm, lzp, iter->rnm[1], iter->rnp[1], lzScreen ) << "\t";
@@ -2257,27 +2225,27 @@ namespace MITHRA
   }
 
   /******************************************************************************************************
-   * Finalize the field calculations.
+   完成字段计算。
    ******************************************************************************************************/
 
   void Solver::finalize ()
   {
-    /* If sampling was active, close the file since the simulation is finished now.			*/
+    /* 如果采样处于活动状态，则关闭文件，因为仿真现已结束。 */
     if (seed_.sampling_ && sf_.N > 0) 	(*sf_.file).close();
 
-    /* If bunch sampling was active, close the file since the simulation is finished now.		*/
+    /* 如果启用了成组采样，则关闭文件，因为仿真现已结束。 */
     if (bunch_.sampling_) 	(*sb_.file).close();
   }
 
   /******************************************************************************************************
-   * Define the boolean function for comparing undulator begins.
-   ******************************************************************************************************/
+   
+   *****************************************************************定义用于比较波荡器起始位置的布尔函数。*************************************/
 
   bool Solver::undulatorCompare (Undulator i, Undulator j)
   { return ( i.rb_ < j.rb_ ); }
 
   /****************************************************************************************************
-   * Define the function for linear interpolation.
+   定义线性插值函数。
    ****************************************************************************************************/
 
   Double Solver::interp( Double x0, Double x1, Double y0, Double y1, Double x )
@@ -2286,7 +2254,7 @@ namespace MITHRA
   }
 
   /****************************************************************************************************
-   * Define the function for checking if the particle belongs to the processor.
+   定义用于检查粒子是否属于处理器的函数。
    ****************************************************************************************************/
 
   bool Solver::particleInProcessor( const Double& z )
@@ -2296,7 +2264,7 @@ namespace MITHRA
   }
 
   /****************************************************************************************************
-   * Define the function for returning the real coordianates from the cell index.
+   定义一个函数，用于根据单元格索引返回实际坐标。
    ****************************************************************************************************/
 
   FieldVector<Double> Solver::rc( const long int& m )

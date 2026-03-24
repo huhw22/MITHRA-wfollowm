@@ -1,20 +1,20 @@
 /********************************************************************************************************
- *  stdinclude.cpp, set of different standard functions used in the code.
- ********************************************************************************************************/
+* stinclude.cpp，代码中使用的不同标准函数集。
+********************************************************************************************************/
 
 #include "stdinclude.h"
 
 namespace MITHRA
 {
 
-  /* Check if a directory to save the data exists.							*/
+  /*检查保存数据的目录是否存在。*/
   bool pathExist (std::string const & s)
   {
     struct stat buffer;
     return (stat (s.c_str(), &buffer) == 0);
   }
 
-  /* Split the file name to two strings including its path and file name.                               */
+  /*将文件名拆分为两个字符串，包括其路径和文件名。*/
   void splitFilename (const std::string& str, std::string& path, std::string& file)
   {
     unsigned found = str.find_last_of("/");
@@ -22,7 +22,7 @@ namespace MITHRA
     file = str.substr(found+1);
   }
 
-  /* Check if the directory referred to by the file-name exists. If not create the directory.		*/
+  /*检查文件名引用的目录是否存在。如果没有，创建目录。*/
   void createDirectory(std::string filename, unsigned int rank)
   {
     std::string path, file;
@@ -41,7 +41,7 @@ namespace MITHRA
     e = 0.0;
   }
 
-  /* Function creating a set of halton sequence for the random particle generation.			*/
+  /*函数创建一组霍尔顿序列，用于随机粒子的生成。*/
   Double halton (unsigned int i, unsigned int j)
   {
     if (i > 20)
@@ -72,7 +72,7 @@ namespace MITHRA
     return 1.0 - x;
   }
 
-  /* Hello message when initialising mithra.														*/
+  /*初始化密特拉时的Hello消息。*/
   void helloMessage()
   {
     printmessage(std::string(__FILE__), __LINE__, std::string(":::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::") );
@@ -84,7 +84,7 @@ namespace MITHRA
     printmessage(std::string(__FILE__), __LINE__, std::string(":::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::") );
   }
 
-  /* Positive remainder between two double values.							*/
+  /*两个双精度值之间的正余数。*/
   Double pmod ( const Double& a, const Double& b)
   {
     Double x = fmod(a, b);

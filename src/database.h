@@ -1,6 +1,6 @@
 /********************************************************************************************************
- *  database.h : Implementation of the header files related to the database
- ********************************************************************************************************/
+* database.h：与数据库相关的头文件的实现
+********************************************************************************************************/
 
 #ifndef DATABASE_H_
 #define DATABASE_H_
@@ -15,79 +15,79 @@
 namespace MITHRA
 {
 
-  /* The structure of data for initializing a bunch.							*/
+  /*用于初始化一组的数据结构。*/
   struct BunchInitialize
   {
-    /* Type of the bunch which is one of the manual, ellipsoid, cylinder, cube, and 3D-crystal. If it is
-     * manual the charge at points of the position vector will be produced.    				*/
+    /*束的类型是手动，椭球，圆柱体，立方体和3d晶体之一。如果是的话
+    *手动电荷在点的位置矢量将产生。*/
     std::string     			bunchType_;
 
-    /* Type of the distributions (transverse or longitudinal) in the bunch.				*/
+    /*束中的分布类型（横向或纵向）。*/
     std::string     			distribution_;
 
-    /* Type of the generator for creating the bunch distribution.					*/
+    /*用于创建束分布的生成器类型。*/
     std::string				generator_;
 
-    /* Total number of macroparticles in the bunch.                                                     */
+    /*群中宏观粒子的总数。*/
     unsigned int       			numberOfParticles_;
 
-    /* Total charge of the bunch in pC.                                                                 */
+    /*在pC中的总电荷。*/
     Double  				cloudCharge_;
 
-    /* Initial energy of the bunch in MeV.                                                              */
+    /*束的初始能量，单位是MeV。*/
     Double            			initialGamma_;
 
-    /* Initial normalized speed of the bunch.                                                           */
+    /*串的初始归一化速度。*/
     Double            			initialBeta_;
 
-    /* Initial movement direction of the bunch, which is a unit vector.                                 */
+    /*束的初始运动方向，这是一个单位矢量。*/
     FieldVector<Double>			initialDirection_;
 
-    /* Position of the center of the bunch in the unit of length scale.                           	*/
+    /*束的中心在单位长度尺度上的位置。*/
     std::vector<FieldVector<Double> >	position_;
 
-    /* Number of macroparticles in each direction for 3Dcrystal type.                                   */
+    /*三维晶型在每个方向上的宏观粒子数。*/
     FieldVector<unsigned int>		numbers_;
 
-    /* Lattice constant in x, y, and z directions for 3D crystal type.                                  */
+    /*三维晶体类型在x， y和z方向上的晶格常数。*/
     FieldVector<Double>			latticeConstants_;
 
-    /* Spread in position for each of the directions in the unit of length scale. For the 3D crystal
-     * type, it will be the spread in position for each micro-bunch of the crystal.			*/
+    /*在每个方向的位置上以长度为单位展开。对于3D晶体
+    类型，它将是每个微束晶体在位置上的分布。*/
     FieldVector<Double>			sigmaPosition_;
 
-    /* Spread in energy in each direction.                                                              */
+    /*向各个方向扩散能量。*/
     FieldVector<Double>			sigmaGammaBeta_;
 
-    /* Store the truncation transverse distance for the electron generation.				*/
+    /*存储电子产生的截断横向距离。*/
     Double				tranTrun_;
 
-    /* Store the truncation longitudinal distance for the electron generation.				*/
+    /*存储电子产生的截断纵向距离。*/
     Double				longTrun_;
 
-    /* Name of the file for reading the electrons distribution from.					*/
+    /*读取电子分布的文件名称。*/
     std::string				fileName_;
 
-    /* The radiation wavelength corresponding to the bunch length outside the undulator			*/
+    /*与波动器外束长相对应的辐射波长*/
     Double				lambda_;
 
-    /* Bunching factor for the initialization of the bunch.						*/
+    /*初始化束的聚束因子。*/
     Double				bF_;
 
-    /* Phase of the bunching factor for the initialization of the bunch.				*/
+    /*初始化束的聚束因子的相位。*/
     Double				bFP_;
 
-    /* Boolean flag determining the activation of shot-noise.						*/
+    /*确定射击噪声激活的布尔标志。*/
     bool				shotNoise_;
 
-    /* Initial beta vector of the bunch, which is obtained as the product of beta and direction.	*/
+    /*束的初始向量，它是和方向的乘积。*/
     FieldVector<Double>			betaVector_;
 
-    /* Initialize the parameters for the bunch initialization to some first values.                     */
+    /*将堆初始化的参数初始化为一些初始值。*/
     BunchInitialize ();
   };
 
-  /* Structure of data required for updating the field.							*/
+  /*更新字段所需的数据结构。*/
   class AdvanceField
   {
   public:
@@ -174,7 +174,7 @@ namespace MITHRA
     Double 				beta_;
   };
 
-  /* Structure of data required for updating the field.							*/
+  /*更新字段所需的数据结构。*/
   struct UpdateField
   {
     Double				jw, jwt, jb;
@@ -212,7 +212,7 @@ namespace MITHRA
     unsigned int			N0m1, N1m1, npm1;
   };
 
-  /* Structure of data required for sampling the field.							*/
+  /*采样字段所需的数据结构。*/
   struct SampleField
   {
     std::ofstream*			file;
@@ -227,7 +227,7 @@ namespace MITHRA
     Double				Ce, Cb, Ca, Cj, Cf;
   };
 
-  /* Structure of data required for visualizing the field.						*/
+  /*可视化字段所需的数据结构。*/
   struct VisualizeField
   {
     std::ofstream* 			file;
@@ -237,7 +237,7 @@ namespace MITHRA
     Double				jw;
   };
 
-  /* Structure of data required for saving the field profile.						*/
+  /*保存字段配置文件所需的数据结构。*/
   struct ProfileField
   {
     unsigned int 			i, j, k, l, m;
@@ -249,7 +249,7 @@ namespace MITHRA
     int                                 kmin, kmax;
   };
 
-  /* The parameters needed for parallel operation of update bunch.					*/
+  /*更新群并行操作所需的参数。*/
   struct UpdateBunchParallel
   {
     int					i, j, k, n;
@@ -282,7 +282,7 @@ namespace MITHRA
     UpdateBunchParallel();
   };
 
-  /* Structure of data required for saving updating the bunch.						*/
+  /*保存更新群所需的数据结构。*/
   struct UpdateBunch
   {
     Double				dx, dy, dz, dt, dtb;
@@ -294,7 +294,7 @@ namespace MITHRA
     int					nt;
   };
 
-  /* Structure of data required for sampling the bunch.							*/
+  /*采样群所需的数据结构。*/
   struct SampleBunch
   {
     std::ofstream*			file;
@@ -303,7 +303,7 @@ namespace MITHRA
     FieldVector<Double>			rT, gbT, r2T, gb2T;
   };
 
-  /* Structure of data required for visualizing the bunch.						*/
+  /*可视化群所需的数据结构。*/
   struct VisualizeBunch
   {
     std::ofstream* 			file;
@@ -311,14 +311,14 @@ namespace MITHRA
     unsigned int			i, N;
   };
 
-  /* structure of the data required for profiling the bunch.						*/
+  /*剖析群所需的数据结构。*/
   struct ProfileBunch
   {
     std::ofstream* 			file;
     std::string				fileName;
   };
 
-  /* structure of the data required for updating the current.						*/
+  /*结构的数据需要更新当前。*/
   struct UpdateCurrent
   {
     int					ip, jp, kp, im, jm, km;
@@ -335,7 +335,7 @@ namespace MITHRA
     std::vector<Double>			rt;
   };
 
-  /* Structure of data required for sampling the field.							*/
+  /*采样字段所需的数据结构。*/
   struct SampleRadiationPower
   {
     std::vector<std::ofstream*>				file;
@@ -353,7 +353,7 @@ namespace MITHRA
     std::vector<std::vector<Complex> >			ep, em;
   };
 
-  /* Structure of data required for sampling the field.							*/
+  /*采样字段所需的数据结构。*/
   struct SampleRadiationEnergy
   {
     std::vector<std::ofstream*>				file;
@@ -370,7 +370,7 @@ namespace MITHRA
   };
 
   
-  /* Structure of data required for bunch profile from screens.						*/
+  /*从屏幕上获取束形文件所需的数据结构。*/
   struct SampleScreenProfile
   {
     std::vector<std::ofstream*> 	files;

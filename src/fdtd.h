@@ -1,6 +1,6 @@
 /********************************************************************************************************
- *  fdtd.hh : Implementation of the real fdtd time marching solution class for the darius code
- ********************************************************************************************************/
+* fdtd.h 实现了真正的fdtd时间解代码
+********************************************************************************************************/
 
 #ifndef FDTD_HH_
 #define FDTD_HH_
@@ -11,7 +11,7 @@
 namespace MITHRA
 {
 
-  /* Class of functions used for the solution of the fields in time domain using FDTD.			*/
+  /*该类函数用于求解时域中的时域有限差分域。*/
   class FdTd : public Solver
   {
   public:
@@ -22,46 +22,46 @@ namespace MITHRA
 	  std::vector<ExtField>& 		extField,
 	  std::vector<FreeElectronLaser>& 	FEL);
 
-    /* Reset the currents to zero.									*/
+    /*将电流复位为零。*/
     void currentReset ();
 
-    /* Update the currents at cell points for the filed update.						*/
+    /*为字段更新更新单元格点上的电流。*/
     void currentUpdate ();
 
-    /* Communicate the currents among different processors.						*/
+    /*在不同的处理器之间传输电流。*/
     void currentCommunicate ();
 
-    /* Update the fields for one time-step								*/
+    /*为一个时间步更新字段*/
     void fieldUpdate ();
 
-    /* Evaluate the field of the m'th pixel from the potentials.					*/
+    /*从电位中计算第m个像素的场。*/
     void fieldShift ();
 
-    /* Evaluate the field of the m'th pixel from the potentials.					*/
+    /*从电位中计算第m个像素的场。*/
     void fieldEvaluate (long int m);
 
-    /* Sample the field and save it to the given file.							*/
+    /*采样字段并将其保存到给定的文件中。*/
     void fieldSample ();
 
-    /* Visualize the field as vtk files on the whole domain and save them to the file with given name.	*/
+    /*将字段可视化为整个域上的vtk文件，并将它们保存到给定名称的文件中。*/
     void fieldVisualizeAllDomain 	(unsigned int ivtk);
 
-    /* Visualize the field as vtk files in plane and save them to the file with the given name.		*/
+    /*将字段可视化为平面中的vtk文件，并将它们保存到具有给定名称的文件中。*/
     void fieldVisualizeInPlane 		(unsigned int ivtk);
 
-    /* Visualize the field as vtk files in a plane normal to x axis and save them to the file with the
-     * given name.											*/
+    /*将字段可视化为垂直于x轴的平面上的vtk文件，并将它们保存到文件中
+    *名字。*/
     void fieldVisualizeInPlaneXNormal 	(unsigned int ivtk);
 
-    /* Visualize the field as vtk files in a plane normal to y axis and save them to the file with the
-     * given name.											*/
+    /*将字段可视化为垂直于y轴的平面上的vtk文件，并将它们保存到文件中
+    *名字。*/
     void fieldVisualizeInPlaneYNormal 	(unsigned int ivtk);
 
-    /* Visualize the field as vtk files in a plane normal to z axis and save them to the file with the
-     * given name.											*/
+    /*将字段可视化为垂直于z轴的平面上的vtk文件，并将它们保存到文件中
+    *名字。*/
     void fieldVisualizeInPlaneZNormal 	(unsigned int ivtk);
 
-    /* Write the total profile of the field into the given file name.					*/
+    /*将字段的总概要文件写入给定的文件名中。*/
     void fieldProfile ();
   };
 }

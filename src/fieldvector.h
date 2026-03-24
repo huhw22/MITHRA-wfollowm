@@ -1,6 +1,6 @@
 /********************************************************************************************************
- *  fieldvector.h : Implementation of the field vector class for the analysis.
- ********************************************************************************************************/
+* fielvector.h：实现了对场向量类的分析。
+********************************************************************************************************/
 
 #ifndef FIELDVECTOR_HH_
 #define FIELDVECTOR_HH_
@@ -14,11 +14,11 @@
 namespace MITHRA
 {
 
-  /* Define the types of values used in the analysis.							*/
+  /*定义分析中使用的值的类型。*/
   typedef double			Double;
   typedef std::complex <double>		Complex;
 
-  /** FieldVector is a class constructed to be used for vectors of electric and magnetic fields.     	*/
+  /** fielvector是一个用来表示电场和磁场矢量的类。*/
   template <class ElementType>
   class FieldVector {
   public:
@@ -137,7 +137,7 @@ namespace MITHRA
 
   };
 
-  /* Define the various operators used for the field vector class.					*/
+  /*定义用于字段vector类的各种操作符。*/
 
   template <class T1, class T2>
   void operator+= (FieldVector<T1>& x, const T2& y)

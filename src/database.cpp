@@ -1,6 +1,6 @@
 /********************************************************************************************************
- *  database.cpp : Implementation of functions related to the database in mithra
- ********************************************************************************************************/
+* database.cpp: mithra中数据库相关功能的实现
+********************************************************************************************************/
 
 #include <math.h>
 #include <stdio.h>
@@ -11,7 +11,7 @@
 
 namespace MITHRA
 {
-  /* Initialize the parameters for the bunch initialization to some first values.                     	*/
+  /*将堆初始化的参数初始化为一些初始值。*/
   BunchInitialize::BunchInitialize ()
   {
     bunchType_			= "";
@@ -40,7 +40,7 @@ namespace MITHRA
     qSB.clear(); qSF.clear(); qRB.clear(); qRF.clear();
   }
 
-  /* Advance the magnetic potential using the Non-standard Finite-Difference algorithm.			*/
+  /*利用非标准有限差分算法推进磁势。*/
   void AdvanceField::advanceMagneticPotentialNSFD (Q v0 , P v1 , P v2 ,
 						   P v3 , P v31, P v32,
 						   P v4 , P v41, P v42,
@@ -71,7 +71,7 @@ namespace MITHRA
 	*(ufa_+4) * *(v9+2);
   };
 
-  /* Advance the scalar potential using the Non-standard Finite-Difference algorithm.			*/
+  /*利用非标准有限差分算法推进标量势。*/
   void AdvanceField::advanceScalarPotentialNSFD (Q v0 , P v1 , P v2 ,
 						 P v3 , P v31, P v32,
 						 P v4 , P v41, P v42,
@@ -87,7 +87,7 @@ namespace MITHRA
 	*(ufa_+5) * *v9;
   };
 
-  /* Advance the magnetic potential using the Standard Finite-Difference algorithm.			*/
+  /*利用标准有限差分算法推进磁势。*/
   void AdvanceField::advanceMagneticPotentialFD (Q v0 , P v1 , P v2 ,
 						 P v3 , P v31, P v32,
 						 P v4 , P v41, P v42,
@@ -117,7 +117,7 @@ namespace MITHRA
 	*(ufa_+4) * *(v9+2);
   };
 
-  /* Advance the scalar potential using the Standard Finite-Difference algorithm.			*/
+  /*利用标准有限差分算法推进标量势。*/
   void AdvanceField::advanceScalarPotentialFD	(Q v0 , P v1 , P v2 ,
 						 P v3 , P v31, P v32,
 						 P v4 , P v41, P v42,
@@ -133,7 +133,7 @@ namespace MITHRA
 	*(ufa_+5) * *v9;
   }
 
-  /* Advance the magnetic potential at the boundaries of the computational domain.			*/
+  /*在计算域的边界处推进磁势。*/
   void AdvanceField::advanceBoundaryF 		(Q v0 , P v1 , P v2 ,
 						 P v3 , P v4 , P v5 ,
 						 P v6 , P v7 , P v8 ,
@@ -160,7 +160,7 @@ namespace MITHRA
 	*(ufB_+4) * ( *(v8+2) + *(v9+2) + *(v12+2) + *(v13+2) );
   }
 
-  /* Advance the scalar potential at the boundaries of the computational domain.			*/
+  /*在计算域的边界处推进标量势。*/
   void AdvanceField::advanceBoundaryS 		(Q v0 , P v1 , P v2 ,
 						 P v3 , P v4 , P v5 ,
 						 P v6 , P v7 , P v8 ,
@@ -175,7 +175,7 @@ namespace MITHRA
 	*(ufB_+4) * ( *v8 + *v9 + *v12 + *v13 );
   }
 
-  /* Advance the magnetic potential at the edges of the computational domain.				*/
+  /*在计算域的边缘推进磁势。*/
   void AdvanceField::advanceEdgeF 		(Q v0 , P v1 , P v2 ,
 						 P v3 , P v4 , P v5 ,
 						 P v6 , P v7 , P v8 ,
@@ -210,7 +210,7 @@ namespace MITHRA
 
   }
 
-  /* Advance the scalar potential at the edges of the computational domain.				*/
+  /*在计算域的边缘推进标量势。*/
   void AdvanceField::advanceEdgeS 		(Q v0 , P v1 , P v2 ,
 						 P v3 , P v4 , P v5 ,
 						 P v6 , P v7 , P v8 ,
@@ -228,7 +228,7 @@ namespace MITHRA
 	*v11;
   }
 
-  /* Advance the magnetic potential at the corners of the computational domain.				*/
+  /*推进计算域边角处的磁势。*/
   void AdvanceField::advanceCornerF 		(Q v0 , P v1 , P v2 ,
 						 P v3 , P v4 , P v5 ,
 						 P v6 , P v7 , P v8 ,
@@ -267,7 +267,7 @@ namespace MITHRA
 
   }
 
-  /* Advance the scalar potential at the corners of the computational domain.				*/
+  /*在计算域的边角处推进标量势。*/
   void AdvanceField::advanceCornerS 		(Q v0 , P v1 , P v2 ,
 						 P v3 , P v4 , P v5 ,
 						 P v6 , P v7 , P v8 ,

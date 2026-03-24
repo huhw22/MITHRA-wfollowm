@@ -1,6 +1,6 @@
 /********************************************************************************************************
- *  stdinclude.hh, set of different standard databases used in the code.
- ********************************************************************************************************/
+* stdinclude.hh，代码中使用的不同标准数据库集。
+********************************************************************************************************/
 
 #ifndef STDINCLUDE_HH_
 #define STDINCLUDE_HH_
@@ -14,32 +14,32 @@
 
 namespace MITHRA
 {
-  /* Define the types of the time domain signals.                                                       */
+  /*定义时域信号的类型。*/
   enum SignalType       	{NEUMANN, GAUSSIAN, SECANT, FLATTOP, INVGAUSSIAN};
 
-  /* Define the types of the excitations.                                                               */
+  /*定义激励的类型。*/
   enum SeedType   		{PLANEWAVE, PLANEWAVETRUNCATED, GAUSSIANBEAM, SUPERGAUSSIANBEAM,
 				 STANDINGPLANEWAVE, STANDINGPLANEWAVETRUNCATED, STANDINGGAUSSIANBEAM, STANDINGSUPERGAUSSIANBEAM};
 
-  /* Define the type of the external field.                                                             */
+  /*定义外部字段的类型。*/
   enum ExtFieldType             {EMWAVE};
 
-  /* Define the types of the excitations.                                                               */
+  /*定义激励的类型。*/
   enum SamplingType     	{ATPOINT, OVERLINE, INPLANE, ALLDOMAIN};
 
-  /* Define the type of the plane normal to the axis.                                                  	*/
+  /*定义垂直于轴的平面类型。*/
   enum PlaneType     		{XNORMAL, YNORMAL, ZNORMAL};
 
-  /* Define the types of the fields to be sampled.                                                      */
+  /*定义要采样的字段的类型。*/
   enum FieldType		{Ex, Ey, Ez, Bx, By, Bz, Ax, Ay, Az, F};
 
-  /* Define the types of the undulator supported by the code.                                           */
+  /*定义代码支持的波动器的类型。*/
   enum UndulatorType		{STATIC, OPTICAL};
 
-  /* Define the type of the solver to be used for the FEL interaction.					*/
+  /*定义用于FEL相互作用的求解器的类型。*/
   enum SolverType		{FD, NSFD};
 
-  /* Scientific constants.                                                                              */
+  /*科学常数。*/
   const Double PI           	= 3.1415926535;
   const Double TPI		= 2.0 * PI;
   const Double EPSILON_ZERO  	= 8.85418782e-12;
@@ -51,29 +51,29 @@ namespace MITHRA
   const Double HB              	= 1.054e-34;
   const Double KB             	= 1.381e-23;
 
-  /* File suffixes.                                                                                     */
+  /*文件后缀。*/
   const std::string VTS_FILE_SUFFIX = ".vts";
   const std::string PTS_FILE_SUFFIX = ".pvts";
   const std::string PTU_FILE_SUFFIX = ".pvtu";
   const std::string TXT_FILE_SUFFIX = ".txt";
   const std::string VTU_FILE_SUFFIX = ".vtu";
 
-  /* Unit imaginary number.										*/
+  /*单位虚数。*/
   const Complex I = Complex (0.0,1.0);
 
-  /* Check if a path is an absolute path (beginning with an '/').                                       */
+  /*检查路径是否为绝对路径（以‘/’开头）。*/
   inline bool isabsolute(std::string filename)
   {
     return (filename.compare(0,1,"/") == 0);
   }
 
-  /* Return the sign of the parameter.									*/
+  /*返回参数的符号。*/
   template <typename T> inline int signof(T x)
   {
     return ( (x > 0) ? 1 : ( (x < 0) ? -1 : 0 ) );
   }
 
-  /* Print a message on the terminal window.                                                            */
+  /*在终端窗口上打印一条消息。*/
   inline void printmessage(std::string filename, unsigned int linenumber, std::string message)
   {
     int rank;
@@ -81,18 +81,18 @@ namespace MITHRA
 
     if (rank == 0)
       {
-	/* Set the stream to create for the message.                                                	*/
+	/*设置要为消息创建的流。*/
 	std::stringstream printedMessage;
 	printedMessage.clear();
 
-	/* Get the time.                                                                               	*/
+	/*记下时间。*/
 	time_t rawtime; time(&rawtime);
 	std::string timeStr = ctime(&rawtime);
 
-	/* Print the time into the string.                                                             	*/
+	/*将时间打印到字符串中。*/
 	printedMessage << timeStr.substr(0,timeStr.size()-1) << " ::: ";
 
-	/* Print the shortened filename and linenumber into the string.                                	*/
+	/*将缩短的文件名和linenumber打印到字符串中。*/
 	const char * elem = filename.c_str();
 	const char * shortfn = elem;
 	while ( *elem != '\0' ){
@@ -102,12 +102,12 @@ namespace MITHRA
 	}
 	printedMessage  << shortfn << ":" << linenumber << " ::: \t \t " << message;
 
-	/* Print on the terminal if there is something written in the stream.                        	*/
+	/*如果流中写入了内容，则在终端上打印。*/
 	if (printedMessage.str().length() > 0 )     std::cout << printedMessage.str() << std::endl;
       }
   }
 
-  /* Convert any number to a string.                                                                    */
+  /*将任意数字转换为字符串。*/
   template<typename numbertype>
   inline std::string stringify(numbertype value)
   {
@@ -126,39 +126,39 @@ namespace MITHRA
     return oStream.str();
   }
 
-  /* Define the structure for each charge point.							*/
+  /*定义每个充电点的结构。*/
   struct Charge
   {
 
-    Double			q;		/* Charge of the point in the unit of electron charge.	*/
-    FieldVector<Double>		rnp, rnm;	/* Position vector of the charge.			*/
-    FieldVector<Double>		gb;		/* Normalized velocity vector of the charge.		*/
+    Double			q;		/*点的电荷以电子电荷为单位。*/
+    FieldVector<Double>		rnp, rnm;	/*电荷的位置矢量。*/
+    FieldVector<Double>		gb;		/*电荷的标准化速度矢量。*/
 
-    /* Double flag determining if the particle is passing the entrance point of the undulator. This flag
-     * can be used for better boosting the bunch to the moving frame. We need to consider it to be double,
-     * because this flag needs to be communicated during bunch update.					*/
+    /*确定粒子是否正在通过波动器的入口点的双标志。这个标志
+    *可以用来更好地促进束的运动框架。我们需要考虑它是两倍的，
+    *因为这个标志需要在群集更新期间进行通信。*/
     Double			e;
 
     Charge();
 
   };
 
-  /* Check if a directory to save the data exists.							*/
+  /*检查保存数据的目录是否存在。*/
   bool pathExist (std::string const & s);
 
-  /* Split the file name to two strings including its path and file name.                               */
+  /*将文件名拆分为两个字符串，包括其路径和文件名。*/
   void splitFilename (std::string const & str, std::string & path, std::string & file);
 
-  /* Check if the directory referred to by the file-name exists. If not create the directory.		*/
+  /*检查文件名引用的目录是否存在。如果没有，创建目录。*/
   void createDirectory (std::string filename, unsigned int rank);
 
-  /* Function creating a set of halton sequence for the random particle generation.			*/
+  /*函数创建一组霍尔顿序列，用于随机粒子的生成。*/
   Double halton (unsigned int i, unsigned int j);
 
-  /* Hello message when initialising mithra.														*/
+  /*初始化密特拉时的Hello消息。*/
   void helloMessage();
 
-  /* Positive remainder between two double values.							*/
+  /*两个双精度值之间的正余数。*/
   Double pmod ( const Double& a, const Double& b);
 
 }

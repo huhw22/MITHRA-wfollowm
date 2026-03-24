@@ -1,6 +1,6 @@
 /********************************************************************************************************
- *  classes.hh : Implementation of the classes used in mithra
- ********************************************************************************************************/
+*classes.hh。mithra中使用的类的实现
+********************************************************************************************************/
 
 #ifndef CLASSES_H_
 #define CLASSES_H_
@@ -16,188 +16,188 @@
 namespace MITHRA
 {
 
-  /* Structure containing all the parsed parameters for mesh.                                           */
+  /*结构，包含所有已解析的网格参数。*/
   struct Mesh
   {
-    /* The parsed data related to the mesh (ls).                                                       	*/
+    /*与网格相关的解析数据（ls）。*/
     Double		        lengthScale_;
 
-    /* Coordinate of the center for the computational domain (x0, y0, z0).				*/
+    /*计算域（x0, y0, z0）的中心坐标。*/
     FieldVector<Double>		meshCenter_;
 
-    /* Length of the mesh box in the three dimensions (lx, ly, lz).					*/
+    /*网格盒在三个维度（lx, ly, lz）中的长度。*/
     FieldVector<Double>		meshLength_;
 
-    /* Mesh resolution in the three dimensions (dx, dy, dz).						*/
+    /*三维（dx, dy, dz）的网格分辨率。*/
     FieldVector<Double>		meshResolution_;
 
-    /* The parsed data related to the time marching scheme.                                             */
+    /*解析后的数据与时间推进方案有关。*/
     Double    		        timeScale_;
     Double		        timeStep_;
     Double		        totalTime_;
     Double		        totalDist_;
 
-    /* Truncation order for the finite difference mesh. It can be either one or two.			*/
+    /*有限差分网格的截断顺序。可以是1也可以是2。*/
     unsigned int	        truncationOrder_;
 
-    /* Boolean flag returning the status of space charge assumption.					*/
+    /*返回空间电荷假设状态的布尔标志。*/
     bool			spaceCharge_;
 
-    /* Boolean that determines whether to shift the bunch in the initial setup.				*/
+    /*布尔值，决定是否在初始设置中移动数据集。*/
     bool			optimizePosition_;
 
-    /* Initial shift in time with respect to the standard initial conditions.				*/
+    /*相对于标准初始条件的初始时间位移。*/
     Double			timeShift_;
 
-    /* Solver type that will be used to update the field values.					*/
+    /*将用于更新字段值的求解器类型。*/
     SolverType			solver_;
 
-    /* Lorentz factor of the moving mesh given by the user.						*/
+    /*用户给出的运动网格的洛伦兹因子。*/
     Double			gamma_;
 
-    /* Show the stored values for the mesh.                                                      	*/
+    /*显示存储的网格值。*/
     void show ();
 
-    /* Initialize the parameters in the mesh initializer.						*/
+    /*在网格初始化器中初始化参数。*/
     void initialize ();
   };
 
-  /* Bunch class includes the data for the bunch properties and the functions for initializing the
-   * bunches and also evaluating the bunch properties.                                              	*/
+  /*类中包含用于Bunch属性的数据和用于初始化类的函数
+  *束，也评估束的性质。*/
   class Bunch
   {
 
   public:
     typedef std::list <Charge> ChargeVector;
 
-    /* The constructor clears and initializes the internal data structure.				*/
+    /*构造函数清除并初始化内部数据结构。*/
     Bunch ();
 
-    /* Initialize a bunch with a manual type. This bunch produces one charge equal to the cloudCharge_. */
+    /*用手动类型初始化一堆。这一束产生一个电荷，等于cloudCharge_。*/
     void initializeManual (BunchInitialize bunchInit, ChargeVector & chargeVector, Double (zp) [2], int rank, int size, int ia);
 
-    /* Initialize a bunch with an ellipsoid type in the lab frame. This bunch produces a number of
-     * charges equal to the numberOfParticles_ with the total charge equal to the cloudCharge_ which are
-     * distributed in an ellipsoid with dimensions given by sigmaPosition_ and center given by the
-     * position vector. The particles have uniform energy distribution centered at initialEnergy_ with
-     * variances determined by sigmaGammaBeta_.                                                         */
+    /*在实验室框架中用椭球类型初始化一束。这群人产生了很多
+    *电荷等于numberOfParticles_与总电荷等于cloudCharge_这是
+    *分布在一个椭球体中，尺寸由sigmposition_给出，中心由
+    *位置向量。粒子具有以初始能量为中心的均匀能量分布
+    *方差由sigmaGammaBeta_确定。*/
     void initializeEllipsoid (BunchInitialize bunchInit, ChargeVector & chargeVector, int rank, int size, int ia);
 
-    /* Initialize a bunch with a 3D-crystal type. This bunch produces a number of charges equal
-     * to the numberOfParticles_ with the total charge equal to the cloudCharge_ which are arranged in a
-     * 3D crystal. The number of particles in each direction is given by numbers_. Therefore,
-     * numberOfParticles_ should be a multiple of the product of all these three numbers. The ratio gives
-     * the number of particles in each crystal point. Position of each particle is determined by the
-     * lattice constants and the crystal is centered at the position_ vector. At each point, the charges
-     * have a small Gaussian distribution around the crsytal.                                           */
+    /*用3d水晶类型初始化一束。这一堆电荷相等
+    *到numberOfParticles_与总电荷等于cloudCharge_排列在a
+    * 3D晶体。每个方向上的粒子数用数字_表示。因此,
+    * numberOfParticles_应该是这三个数的乘积的倍数。这个比率给出
+    *每个晶体点的粒子数。每个粒子的位置由
+    *晶格常数，晶体以位置向量为中心。在每一点，电荷
+    *在晶体周围有一个小的高斯分布。*/
     void initialize3DCrystal (BunchInitialize bunchInit, ChargeVector & chargeVector, Double (zp) [2], int rank, int size, int ia);
 
-    /* Initialize a bunch with a file type. This bunch produces a number of charges read from a given file.
-     * The number of initialized charge is equal to the vertical length of the table in the text file. The
-     * file format should contain the charge value, 3 position coordinates and 3 momentum coordinates of
-     * of the charge distribution.							                */
+    /*用一个文件类型初始化一个束。这个集合产生从给定文件读取的许多电荷。
+    *初始化的次数等于文本文件中表的垂直长度。的
+    *文件格式应包含电荷值、3个位置坐标和3个动量坐标
+    *电荷分布。*/
     void initializeFile (BunchInitialize bunchInit, ChargeVector & chargeVector, Double (zp) [2], int rank, int size, int ia);
 
     /****************************************************************************************************/
 
-    /* The data containing the bunch initialization parameters.						*/
+    /*包含簇初始化参数的数据。*/
     std::vector<BunchInitialize>	bunchInit_;
 
-    /* The directory parsed for the whole project.                                                      */
+    /*为整个项目解析的目录。*/
     std::string				directory_;
 
-    /* Base name for writing the outputs of the electron acceleration analysis.                         */
+    /*书写电子加速度分析输出的基本名称。*/
     std::string				basename_;
 
-    /* Boolean variable that determines if the bunch sampling should be done or not.			*/
+    /*布尔变量，决定是否应该进行堆抽样。*/
     bool				sampling_;
 
-    /* Store the time step for updating the electron motion.						*/
+    /*存储更新电子运动的时间步长。*/
     Double				timeStep_;
 
-    /* Rhythm of writing the bunch macroscopic values in the output file.                              	*/
+    /*在输出文件中写入串宏观值的节奏。*/
     Double         			rhythm_;
 
-    /* Boolean parameter that determines if the vtk visualization should be done.                      	*/
+    /*布尔参数，确定是否应该进行vtk可视化。*/
     bool				bunchVTK_;
 
-    /* The directory in which the bunch vtk files should be saved.                                   	*/
+    /*应该保存一堆vtk文件的目录。*/
     std::string				bunchVTKDirectory_;
 
-    /* Name of the files in which the vtk visualization should be saved.                               	*/
+    /*保存vtk可视化文件的文件名。*/
     std::string				bunchVTKBasename_;
 
-    /* Rhythm of producing the vtk files. It should be double value bigger than the time step.         	*/
+    /*生成vtk文件的节奏。它应该比时间步长大两倍。*/
     Double				bunchVTKRhythm_;
 
-    /* Boolean parameter that determines if the bunch profile should be saved.                         	*/
+    /*布尔参数，用于确定是否应该保存束配置文件。*/
     bool				bunchProfile_;
 
-    /* The directory in which the bunch profile should be saved.                                   	*/
+    /*应该保存束配置文件的目录。*/
     std::string				bunchProfileDirectory_;
 
-    /* Name of the files in which the bunch profile should be saved.                                   	*/
+    /*应该保存束配置文件的文件名。*/
     std::string				bunchProfileBasename_;
 
-    /* Vector of time points at which the bunch profile should be saved.                               	*/
+    /*应该保存束剖面的时间点矢量。*/
     std::vector<Double>      		bunchProfileTime_;
 
-    /* Rhythm of saving the bunch profile. It should be a double value bigger than the time step.	*/
+    /*保存束配置文件的节奏。它应该是一个比时间步长大的双精度值。*/
     Double				bunchProfileRhythm_;
 
-    /* Position of the undulator begin at the instance of bunch initialization.				*/
+    /*波动器的位置从串初始化实例开始。*/
     Double				zu_;
 
-    /* Beta of the moving frame in the stationary lab frame.						*/
+    /*运动框架在静止实验室框架中的Beta。*/
     Double				beta_;
 
-    /* Show the stored values for the bunch.                                                          	*/
+    /*显示集群的存储值。*/
     void show ();
   };
 
-  /* Define the main signal class.                                                                      */
+  /*定义主信号类。*/
   class Signal
   {
   public:
 
-    /* Initialize the values of the parameters.								*/
+    /*初始化参数值。*/
     Signal ();
 
-    /* Initializer with signal type, time offset, variance, frequency and carrier-envelope-phase.       */
+    /*带有信号类型、时间偏移、方差、频率和载波包络相位的初始化器。*/
     void initialize (std::string type, Double l0, Double s, Double l, Double cep, unsigned int nR, std::vector<Double> sigmaInvG);
 
   public:
 
-    /* Store type of the signal.                                                                        */
+    /*信号的存储类型。*/
     SignalType				signalType_;
 
-    /* Time offset of the signal.                                                                       */
+    /*信号的时间偏移量。*/
     Double     				t0_;
 
-    /* Variance of the signal. Variance is defined according to the point where the intensity of the
-     * signal, i.e. signal squared is half of the maximum.                                              */
+    /*信号的方差。方差根据点的强度来定义
+    *信号，即信号的平方是最大值的一半。*/
     Double     				s_;
 
-    /* Frequency of the modulation.                                                                     */
+    /*调制频率。*/
     Double     				f0_;
 
-    /* Rising cycles for the flat-top pulse.								*/
+    /*平顶脉冲的上升周期。*/
     unsigned int			nR_;
 
-    /* Carrier envelope phase of the modulation.                                                        */
+    /*调制的载波包络相位。*/
     Double     				cep_;
 
-    /* Sigma values in the inverse-gaussian time profile.						*/
+    /*反高斯时间剖面中的σ值。*/
     std::vector<Double>			sigmaInvG_;
 
-    /* Provide the signal at time t.                                                                    */
+    /*提供时刻t的信号。*/
     Double self (Double& t, Double& phase);
 
-    /* Show the stored values for this signal.                                                          */
+    /*显示此信号的存储值。*/
     void show ();
   };
 
-  /* Define the main seed class.                                                                  	*/
+  /*定义主种子类。*/
   class Seed
   {
   public:
@@ -212,7 +212,7 @@ namespace MITHRA
 		     std::vector<int>		order,
 		     Signal                   	signal);
 
-    /* Store data required for visualizing the radiated field in all-domain.                            */
+    /*存储全域辐射场可视化所需的数据。*/
     struct vtk
     {
       bool 				sample_;
@@ -224,56 +224,56 @@ namespace MITHRA
       PlaneType 			plane_;
       FieldVector <Double> 		position_;
 
-      /* Initialize the data-base for field visualization.						*/
+      /*初始化数据库以实现字段可视化。*/
       vtk ();
     };
 
   public:
 
-    /* Store type of the seed.                                                                    	*/
+    /*种子的存储类型。*/
     SeedType           			seedType_;
 
-    /* Speed of light value in terms of the given length-scale and time-scale.				*/
+    /*光速在给定的长度尺度和时间尺度下的值。*/
     Double				c0_;
 
-    /* Store reference position of the seed. For waves, it is a reference position and for
-     * hertzian dipole, it is the position of the dipole.                                               */
+    /*种子的存储参考位置。对于波，它是一个参考位置，对于
+    赫兹偶极子，它是偶极子的位置。*/
     FieldVector<Double>      		position_;
 
-    /* Store the direction of the seed. For waves, it is the propagation direction and for a
-     * hertzian dipole, it is the direction of the dipole.                                              */
+    /*储存种子的方向。对于波，它是传播方向，对于a
+    赫兹偶极子，是偶极子的方向。*/
     FieldVector<Double>       		direction_;
 
-    /* Store the polarization of the wave in the seed.                                            	*/
+    /*把波的偏振储存在种子里。*/
     FieldVector<Double>       		polarization_;
 
-    /* Store the amplitude of the seed.                                                           	*/
+    /*储存种子的振幅。*/
     Double                  		amplitude_;
 
-    /* Store the normalized amplitude of the seed.							*/
+    /*存储种子的归一化振幅。*/
     Double                  		a0_;
 
-    /* Store the Rayleigh radius of the Gaussian beam in the parallel and perpendicular directions.	*/
+    /*在平行和垂直方向上存储高斯光束的瑞利半径。*/
     std::vector<Double>      		radius_;
 
-    /* Store the signal class for this seed.                                                      	*/
+    /*存储此种子的信号类。*/
     Signal                   		signal_;
 
-    /* Order of the super-gaussian beam.								*/
+    /*超高斯光束的阶数。*/
     std::vector<int>			order_;
 
-    /* Wavelength of the optical undulator.								*/
+    /*光波动器的波长。*/
     Double				l_;
 
-    /* Rayleigh lengths of the optical undulator excitation.						*/
+    /*光波动器激发的瑞利长度。*/
     std::vector<Double>                 zR_;
 
-    /* Parameters for Lorentz transformation.								*/
+    /*洛伦兹变换的参数。*/
     Double				beta_;
     Double				gamma_;
     Double				dt_;
 
-    /* Store all the required variables in the computations.                                            */
+    /*在计算中存储所有必需的变量。*/
     Double                    		gamma;
     Double				tsignal;
     Double				d, l, zRp, wrp, zRs, wrs, x, y, x0, y0, z, p, t;
@@ -283,10 +283,10 @@ namespace MITHRA
 
   public:
 
-    /* Return the potentials at any desired location and time.                    			*/
+    /*返回任意位置和时间的电位。*/
     void fields (const FieldVector<Double>& aufpunkt, const Double& time, FieldVector<Double>& a);
 
-    /* Store the data required for sampling the radiated field in a point.                              */
+    /*将采样辐射场所需的数据存储在一个点上。*/
     bool                                sampling_;
     SamplingType                        samplingType_;
     std::vector<FieldType>              samplingField_;
@@ -302,7 +302,7 @@ namespace MITHRA
 
     std::vector <vtk> vtk_;
 
-    /* Store data required for writing the profile of the field in all-domain.                          */
+    /*存储在all-domain中编写字段配置文件所需的数据。*/
     bool                                profile_;
     std::vector<FieldType>              profileField_;
     std::string                         profileDirectory_;
@@ -310,96 +310,96 @@ namespace MITHRA
     std::vector<Double>                 profileTime_;
     Double                        	profileRhythm_;
 
-    /* Set the sampling type of the seed.                                                               */
+    /*设置种子的采样类型。*/
     SamplingType 	samplingType 	(std::string samplingType);
 
-    /* Set the sampling type of the seed.                                                               */
+    /*设置种子的采样类型。*/
     SamplingType 	vtkType 	(std::string vtkType);
 
-    /* Set the plane type for vtk in plane visualization.                                           	*/
+    /*在平面可视化中设置vtk的平面类型。*/
     PlaneType 		planeType 	(std::string planeType);
 
-    /* Set the field sampling type of the seed.                                                         */
+    /*设置种子的田间采样类型。*/
     FieldType 		fieldType 	(std::string fieldType);
 
-    /* Show the stored values for this signal.                                                          */
+    /*显示此信号的存储值。*/
     void show ();
   };
 
-  /* Define the structure containing the main parameters for the undulator.				*/
+  /*定义包含波动器主要参数的结构。*/
   class Undulator
   {
   public:
     Undulator ();
 
-    /* The magnetic field of the undulator.                                                       	*/
+    /*波动器的磁场。*/
     Double				k_;
 
-    /* The period of the static undulator.                                                       	*/
+    /*静态波动的周期。*/
     Double				lu_;
 
-    /* The start position of the undulator.								*/
+    /*波动器的起始位置。*/
     Double				rb_;
 
-    /* The length of the undulator.									*/
+    /*波动的长度。*/
     unsigned int			length_;
 
-    /* The initial distance between the bunch head and the undulator begin.				*/
+    /*束头和波动器之间的初始距离开始。*/
     Double				dist_;
     
-    /* The normalized velocity and the equivalent gamma of the undulator movement.			*/
+    /*归一化速度和波动运动的等效伽马。*/
     Double				beta_;
     Double				gamma_;
     Double				dt_;
 
-    /* Angle of the undulator polarization with respect to x axis.					*/
+    /*波动偏振相对于x轴的角度。*/
     Double				theta_;
 
-    /* Type of the undulator, it can be an optical or a static undulator.				*/
+    /*类型的波动器，它可以是一个光学或静态波动器。*/
     UndulatorType			type_;
 
-    /* Store type of the seed.                                                                    	*/
+    /*种子的存储类型。*/
     SeedType           			seedType_;
 
-    /* Speed of light value in terms of the given length-scale and time-scale.				*/
+    /*光速在给定的长度尺度和时间尺度下的值。*/
     Double				c0_;
 
-    /* Store reference position of the seed. For waves, it is a reference position and for
-     * hertzian dipole, it is the position of the dipole.                                               */
+    /*种子的存储参考位置。对于波，它是一个参考位置，对于
+    赫兹偶极子，它是偶极子的位置。*/
     FieldVector<Double>      		position_;
 
-    /* Store the direction of the seed. For waves, it is the propagation direction and for a
-     * hertzian dipole, it is the direction of the dipole.                                              */
+    /*储存种子的方向。对于波，它是传播方向，对于a
+    赫兹偶极子，是偶极子的方向。*/
     FieldVector<Double>       		direction_;
 
-    /* Store the polarization of the wave in the seed.                                            	*/
+    /*把波的偏振储存在种子里。*/
     FieldVector<Double>       		polarization_;
 
-    /* Store the amplitude of the seed.                                                           	*/
+    /*储存种子的振幅。*/
     Double                  		amplitude_;
 
-    /* Store the normalized amplitude of the seed.							*/
+    /*存储种子的归一化振幅。*/
     Double				a0_;
 
-    /* Store the Rayleigh radius of the Gaussian beam in the parallel and perpendicular directions.	*/
+    /*在平行和垂直方向上存储高斯光束的瑞利半径。*/
     std::vector<Double>      		radius_;
 
-    /* Store the signal class for this seed.                                                      	*/
+    /*存储此种子的信号类。*/
     Signal                   		signal_;
 
-    /* Order of the super-gaussian beam.								*/
+    /*超高斯光束的阶数。*/
     std::vector<int>			order_;
 
-    /* Wavelength of the optical undulator.								*/
+    /*光波动器的波长。*/
     Double				l_;
 
-    /* Rayleigh lengths of the optical undulator excitation.						*/
+    /*光波动器激发的瑞利长度。*/
     std::vector<Double>                 zR_;
 
-    /* Set the type of the undulator.                                                                   */
+    /*设置波动器的类型。*/
     UndulatorType undulatorType (std::string undulatorType);
 
-    /* Initialize the data of the undulator according to the input parameters.				*/
+    /*根据输入参数初始化波动器的数据。*/
     void initialize (std::string        	type,
 		     std::vector<Double>    	position,
 		     std::vector<Double>    	direction,
@@ -410,7 +410,7 @@ namespace MITHRA
 		     std::vector<int>		order,
 		     Signal                   	signal);
 
-    /* Show the stored values for the undulator.                                                        */
+    /*显示波动器的存储值。*/
     void show ();
   };
 
@@ -420,48 +420,48 @@ namespace MITHRA
 
     ExtField();
 
-    /* Type of the external field, it can be an EM-wave or a cavity field.                   		*/
+    /*外场的类型，它可以是一个电磁场或一个腔场。*/
     ExtFieldType                        type_;
 
-    /* Store type of the seed.                                                                    	*/
+    /*种子的存储类型。*/
     SeedType                            seedType_;
 
-    /* Speed of light value in terms of the given length-scale and time-scale.                      	*/
+    /*光速在给定的长度尺度和时间尺度下的值。*/
     Double                              c0_;
 
-    /* Store reference position of the seed. For waves, it is a reference position and for hertzian
-     * dipole, it is the position of the dipole.                                            		*/
+    /*种子的存储参考位置。对于波，它是一个参考位置，对于赫兹，它是一个参考位置
+    *偶极子，它是偶极子的位置。*/
     FieldVector<Double>                 position_;
 
-    /* Store the direction of the seed. For waves, it is the propagation direction and for hertzian
-     * dipole, it is the direction of the dipole.                                              		*/
+    /*储存种子的方向。对于波，它是传播方向，对于赫兹，它是传播方向
+    *偶极子，它是偶极子的方向。*/
     FieldVector<Double>                 direction_;
 
-    /* Store the polarization of the wave in the seed.                                          	*/
+    /*把波的偏振储存在种子里。*/
     FieldVector<Double>                 polarization_;
 
-    /* Store the amplitude of the seed.                                                            	*/
+    /*储存种子的振幅。*/
     Double                              amplitude_;
 
-    /* Store the normalized amplitude of the seed.							*/
+    /*存储种子的归一化振幅。*/
     Double				a0_;
 
-    /* Store the Rayleigh radius of the Gaussian beam in the parallel and perpendicular directions.  	*/
+    /*在平行和垂直方向上存储高斯光束的瑞利半径。*/
     std::vector<Double>                 radius_;
 
-    /* Store the signal class for this seed.                                                         	*/
+    /*存储此种子的信号类。*/
     Signal                              signal_;
 
-    /* Order of the super-gaussian beam.								*/
+    /*超高斯光束的阶数。*/
     std::vector<int>			order_;
 
-    /* Wavelength of the external field.								*/
+    /*外场的波长。*/
     Double				l_;
 
-    /* Rayleigh lengths of the external excitation.							*/
+    /*外激励的瑞利长度。*/
     std::vector<Double>                 zR_;
 
-    /* Initialize the data of the undulator according to the input parameters.				*/
+    /*根据输入参数初始化波动器的数据。*/
     void initialize (std::string                type,
 		     std::vector<Double>        position,
 		     std::vector<Double>        direction,
@@ -472,106 +472,106 @@ namespace MITHRA
 		     std::vector<int>        	order,
 		     Signal                     signal);
 
-    /* Show the stored values for the external field.							*/
+    /*显示外部字段的存储值。*/
     void show ();
   };
 
   struct FreeElectronLaser
   {
-    /* Structure contianing the parsed parameters for the radiation power.				*/
+    /*结构，包含解析后的辐射功率参数。*/
     struct RadiationSampling
     {
-      /* The distance of the planes from the bunch to sample the radiation power.			*/
+      /*飞机到这群人的距离来测量辐射功率。*/
       std::vector<Double>			z_;
 
-      /* Store the data required for sampling the radiation power.					*/
+      /*存储辐射功率采样所需的数据。*/
       bool					sampling_;
 
-      /* Store the directory in which the radiation data is saved.					*/
+      /*存储保存辐射数据的目录。*/
       std::string				directory_;
 
-      /* Store the base-name of the file in which the radiation data is saved.				*/
+      /*存储保存辐射数据的文件的基本名称。*/
       std::string				basename_;
 
-      /* The begin and end of the line as well as the resolution on which the radiation data is saved.	*/
+      /*线路的开始和结束以及保存辐射数据的分辨率。*/
       Double                 			lineBegin_;
       Double                 			lineEnd_;
       unsigned int                              res_;
 
-      /* Store the sampling type of the radiation power.						*/
+      /*存储辐射功率的采样类型。*/
       SamplingType                        	samplingType_;
 
-      /* The wavelength of the harmonic whose power should be plotted.					*/
+      /*谐波的波长，它的功率应该被绘制出来。*/
       std::vector<Double>			lambda_;
 
-      /* The wavelength sweep data for the power computation.						*/
+      /*功率计算的波长扫描数据。*/
       Double					lambdaMin_;
       Double					lambdaMax_;
       unsigned int				lambdaRes_;
 
-      /* Set the sampling type of the radiation power.                                                	*/
+      /*设置辐射功率的采样类型。*/
       void samplingType(std::string samplingType);
 
-      /* Initialize the values for initializing the radiation power.                     		*/
+      /*初始化用于初始化辐射功率的值。*/
       RadiationSampling();
     };
 
-    /* Structure containing the parsed parameters for the power or energy visualization.		*/
+    /*结构，其中包含用于电力或能源可视化的已解析参数。*/
     struct RadiationVisualization
     {
-      /* The distance of the plane from the bunch to sample the radiation power or energy.		*/
+      /*平面距离采样束的辐射功率或能量。*/
       Double					z_;
 
-      /* Store the data required for sampling the radiation power or energy.				*/
+      /*存储采样辐射功率或能量所需的数据。*/
       bool					sampling_;
 
-      /* Store the directory in which the radiation data is saved.					*/
+      /*存储保存辐射数据的目录。*/
       std::string				directory_;
 
-      /* Store the base-name of the file in which the radiation data is saved.				*/
+      /*存储保存辐射数据的文件的基本名称。*/
       std::string				basename_;
 
-      /* Store the rhythm for calculating and saving the radiation power or energy.			*/
+      /*存储节奏，以便计算和节省辐射功率或能量。*/
       Double					rhythm_;
 
-      /* The wavelength of the harmonic whose power or energy should be plotted.			*/
+      /*谐波的波长，其功率或能量应绘制出来。*/
       Double					lambda_;
 
-      /* Initialize the values for initializing the radiation power or energy.                     	*/
+      /*初始化用于初始化辐射功率或能量的值。*/
       RadiationVisualization ();
     };
 
-    /* Define the variables containing the required structures for power sampling and visualization.	*/
+    /*定义包含功率采样和可视化所需结构的变量。*/
     RadiationSampling 				radiationPower_;
     RadiationVisualization 			vtkPower_;
 
-    /* Define the variables containing the required structures for energy sampling and visualization.	*/
+    /*定义包含能量采样和可视化所需结构的变量。*/
     RadiationSampling 				radiationEnergy_;
     RadiationVisualization 			vtkEnergy_;
     
-    /* Parsed parameters for the screens that record the bunch profile. This produces the bunch profile
-     * in the lab frame.										*/
+    /*记录束配置文件的屏幕的解析参数。这将产生束配置文件
+    *在实验室框架。*/
     struct ScreenProfile
     {
-      /* Flag that activates storing the data required for sampling the bunch on a screen.		*/
+      /*激活在屏幕上存储采样所需的数据的标志。*/
       bool					sampling_;
 
-      /* Store the directory in which the bunch profile in the lab frame is saved.			*/
+      /*存储实验室框架中束配置文件保存的目录。*/
       std::string				directory_;
 
-      /* Store the base-name of the file in which this bunch profile is saved.				*/
+      /*存储保存此束配置文件的文件的基本名称。*/
       std::string				basename_;
 
-      /* Store the positions in the undulator where the saving of the bunch profile is done.		*/
+      /*将位置存储在保存束配置文件的波动器中。*/
       std::vector<Double>      			pos_;
 
-      /* Store the rhythm in position for saving the bunch profile.					*/
+      /*将节奏存储在保存束配置文件的位置。*/
       Double					rhythm_;
 
       ScreenProfile ();
     };
 
-    /* Define the variables containing the required structure for profiling the bunch in the lab frame.	*/
+    /*定义包含分析实验室框架中的束所需结构的变量。*/
     ScreenProfile 				screenProfile_;
   };
 }

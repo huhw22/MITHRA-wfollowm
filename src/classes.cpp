@@ -1,6 +1,6 @@
 /********************************************************************************************************
- *  classes.hh : Implementation of the functions related to classes used in mithra
- ********************************************************************************************************/
+*class.hh：mithra中使用的类相关功能的实现
+********************************************************************************************************/
 
 #include <fstream>
 
@@ -9,9 +9,9 @@
 namespace MITHRA
 {
 
-  /*** Mesh class ***************************************************************************************/
+  /** *网类  ***************************************************************************************/
 
-  /* Show the stored values for the mesh.								*/
+  /*显示存储的网格值。*/
   void Mesh::show ()
   {
     printmessage(std::string(__FILE__), __LINE__, std::string(" Length scale = ") + stringify(lengthScale_));
@@ -34,7 +34,7 @@ namespace MITHRA
 
   }
 
-  /* Initialize the parameters in the mesh initializer.							*/
+  /*在网格初始化器中初始化参数。*/
   void Mesh::initialize ()
   {
     spaceCharge_ 	=  false;
@@ -45,65 +45,65 @@ namespace MITHRA
     gamma_ 		= -1.0;
   }
 
-  /*** Bunch class **************************************************************************************/
+  /** *群类  **************************************************************************************/
 
-  /* The constructor clears and initializes the internal data structure.				*/
+  /*构造函数清除并初始化内部数据结构。*/
   Bunch::Bunch ()
   {
-    /* Initialize the bunchInit vector.                      						*/
+    /*初始化bunchInit向量。*/
     bunchInit_.clear();
 
-    /* Initialize the parameters for the bunch to some first values.                      		*/
+    /*将堆的参数初始化为一些初始值。*/
     timeStep_			= 0.0;
 
-    /** Initialize the parameters for the bunch to some first values.                           	*/
+    /**初始化堆的参数为一些初始值。*/
     sampling_			= false;
     directory_			= "./";
     basename_             	= "";
     rhythm_			= 0.0;
 
-    /** Initialize the parameters for the vtk visualization to some first values.               	*/
+    /**初始化参数为vtk可视化的一些第一个值。*/
     bunchVTK_             	= false;
     bunchVTKDirectory_    	= "./";
     bunchVTKBasename_    	= "";
     bunchVTKRhythm_      	= 0.0;
 
-    /** Initialize the parameters for saving the bunch profile to some first values.           		*/
+    /**初始化保存束配置文件的参数为一些初始值。*/
     bunchProfile_            	= false;
     bunchProfileDirectory_    	= "./";
     bunchProfileBasename_     	= "";
     bunchProfileTime_.clear();
     bunchProfileRhythm_		= 0.0;
 
-    /* Initialize the zu and beta parameters.								*/
+    /*初始化zu和beta参数。*/
     zu_ 			= 0.0;
     beta_			= 0.0;
   }
 
-  /* Initialize a bunch with a manual type. This bunch produces one charge equal to the cloudCharge_. 	*/
+  /*用手动类型初始化一堆。这一束产生一个电荷，等于cloudCharge_。*/
   void Bunch::initializeManual (BunchInitialize bunchInit, ChargeVector & chargeVector, Double (zp) [2], int rank, int size, int ia)
   {
-    /* Declare the required parameters for the initialization of charge vectors.                      	*/
+    /*声明初始化电荷矢量所需的参数。*/
     Charge        charge;
 
-    /* Determine the properties of each charge point and add them to the charge vector.               	*/
+    /*确定每个电荷点的性质，并将它们添加到电荷矢量中。*/
     charge.q  	= bunchInit.cloudCharge_;
     charge.rnp  = bunchInit.position_[ia];
     charge.gb.mv( bunchInit.initialGamma_, bunchInit.betaVector_ );
 
-    /* Insert this charge to the charge list if and only if it resides in the processor's portion.    	*/
+    /*当且仅当该费用位于处理器的部分时，将该费用插入到费用列表中。*/
     if ( ( charge.rnp[2] < zp[1] || rank == size - 1 ) && ( charge.rnp[2] >= zp[0] || rank == 0 ) )
       chargeVector.push_back(charge);
   }
 
-  /* Initialize a bunch with an ellipsoid type. This bunch produces a number of charges equal to the
-   * numberOfParticles_ with the total charge equal to the cloudCharge_ which are distributed in an
-   * ellipsoid with dimensions given by sigmaPosition_ and center given by the position vector. The
-   * particles have uniform energy distribution centered at initialEnergy_ with variances determined by
-   * sigmaGammaBeta_.                                                         				*/
+  /*用椭球类型初始化束。这一束产生的电荷数等于
+  * numberOfParticles_与总电荷等于cloudCharge_分布在一个
+  *椭球体，尺寸由sigmapposition_给出，中心由位置向量给出。的
+  *粒子具有以initialEnergy_为中心的均匀能量分布，其方差由
+  * sigmaGammaBeta_。*/
   void Bunch::initializeEllipsoid (BunchInitialize bunchInit, ChargeVector & chargeVector, int rank, int size, int ia)
   {
-    /* Correct the number of particles if it is not a multiple of four.					*/
+    /*如果不是4的倍数，则纠正粒子数。*/
     if ( bunchInit.numberOfParticles_ % 4 != 0 )
       {
 	unsigned int n = bunchInit.numberOfParticles_ % 4;
@@ -112,10 +112,10 @@ namespace MITHRA
 		     std::string("It is corrected to ") +  stringify(bunchInit.numberOfParticles_) );
       }
 
-    /* Save the initially given number of particles.							*/
+    /*保存最初给定的粒子数。*/
     unsigned int	Np = bunchInit.numberOfParticles_, i, Np0 = chargeVector.size();
 
-    /* Declare the required parameters for the initialization of charge vectors.                      	*/
+    /*声明初始化电荷矢量所需的参数。*/
     Charge            	charge; charge.q  = bunchInit.cloudCharge_ / Np;
     FieldVector<Double> gb (0.0); gb.mv( bunchInit.initialGamma_, bunchInit.betaVector_ );
     FieldVector<Double> r  (0.0);
@@ -126,30 +126,30 @@ namespace MITHRA
     unsigned int	bmi;
     std::vector<Double>	randomNumbers;
 
-    /* The initialization in group of four particles should only be done if there exists an undulator in
-     * the interaction.											*/
+    /*四粒子群的初始化只有在存在波动时才能进行
+    *互动。*/
     unsigned int	ng = ( bunchInit.lambda_ == 0.0 ) ? 1 : 4;
 
-    /* Check the bunching factor.                                                                     	*/
+    /*检查聚束系数。*/
     if ( bunchInit.bF_ > 2.0 || bunchInit.bF_ < 0.0 )
       {
 	printmessage(std::string(__FILE__), __LINE__, std::string("The bunching factor can not be larger than one or a negative value !!!") );
 	exit(1);
       }
 
-    /* If the generator is random we should make sure that different processors do not produce the same
-     * random numbers.											*/
+    /*如果生成器是随机的，我们应该确保不同的处理器不会产生相同的结果
+    *随机数。*/
     if 	( bunchInit.generator_ == "random" )
       {
-	/* Initialize the random number generator.								*/
+	/*初始化随机数生成器。*/
 	srand ( time(NULL) );
-	/* Np / ng * 20 is the maximum number of particles.							*/
+	/*Np / ng * 20为最大粒子数。*/
 	randomNumbers.resize( Np / ng * 20, 0.0);
 	for ( unsigned int ri = 0; ri < Np / ng * 20; ri++)
 	  randomNumbers[ri] = ( (double) rand() ) / RAND_MAX;
       }
 
-    /* Declare the generator function depending on the input.						*/
+    /*根据输入声明生成器函数。*/
     auto generate = [&] (unsigned int n, unsigned int m) {
       if 	( bunchInit.generator_ == "random" )
 	return  ( randomNumbers[ n * 2 * Np/ng + m ] );
@@ -157,18 +157,18 @@ namespace MITHRA
 	return 	( halton(n,m) );
     };
 
-    /* Declare the function for injecting the shot noise.						*/
+    /*声明注入枪弹噪声的函数。*/
     auto insertCharge = [&] (Charge q) {
 
       for ( unsigned int ii = 0; ii < ng; ii++ )
 	{
-	  /* The random modulation is introduced depending on the shot-noise being activated.		*/
+	  /*随机调制是根据被激活的弹噪声引入的。*/
 	  if ( bunchInit.shotNoise_ )
 	    {
-	      /* Obtain the number of beamlet.								*/
+	      /*获取光束数。*/
 	      bmi = int( ( charge.rnp[2] - zmin ) / bunchInit.lambda_ );
 
-	      /* Obtain the phase and amplitude of the modulation.					*/
+	      /*得到调制的相位和幅度。*/
 	      bFi = bF * sqrt( - 2.0 * log( generate( 8 , bmi ) ) );
 
 	      q.rnp[2]  = charge.rnp[2] - bunchInit.lambda_ / 4 * ii;
@@ -182,13 +182,13 @@ namespace MITHRA
 	      q.rnp[2] -= bunchInit.lambda_ / PI * bunchInit.bF_ * sin( 2.0 * PI / bunchInit.lambda_ * q.rnp[2] + bunchInit.bFP_ * PI / 180.0 );
 	    }
 
-	  /* Set this charge into the charge vector.							*/
+	  /*将这个电荷设置为电荷矢量。*/
 	  chargeVector.push_back(q);
 	}
     };
 
-    /* If the shot noise is on, we need the minimum value of the bunch z coordinate to be able to
-     * calculate the FEL bucket number.									*/
+    /*如果有射击噪声，我们需要z轴坐标的最小值
+    *计算FEL桶数。*/
     if ( bunchInit.shotNoise_ )
       {
 	for (i = 0; i < Np / ng; i++)
@@ -215,23 +215,23 @@ namespace MITHRA
 
 	zmin = zmin + bunchInit.position_[ia][2];
 
-	/* Obtain the average number of electrons per FEL beamlet.					*/
+	/*得到每个自由电子束流的平均电子数。*/
 	Ne = bunchInit.cloudCharge_ * bunchInit.lambda_ / ( 2.0 * bunchInit.sigmaPosition_[2] );
 
-	/* Set the bunching factor level for the shot noise depending on the given values.		*/
+	/*根据给定的值设置镜头噪声的聚束系数级别。*/
 	bF = ( bunchInit.bF_ == 0.0 ) ? 1.0 / sqrt(Ne) : bunchInit.bF_;
 
 	printmessage(std::string(__FILE__), __LINE__, std::string("The standard deviation of the bunching factor for the shot noise implementation is set to ") + stringify(bF) );
       }
 
-    /* Determine the properties of each charge point and add them to the charge vector.               	*/
+    /*确定每个电荷点的性质，并将它们添加到电荷矢量中。*/
     for (i = rank; i < Np / ng; i += size)
       {
-	/* Determine the transverse coordinate.								*/
+	/*确定横向坐标。*/
 	r[0] = bunchInit.sigmaPosition_[0] * sqrt( - 2.0 * log( generate(0, i + Np0) ) ) * cos( 2.0 * PI * generate(1, i + Np0) );
 	r[1] = bunchInit.sigmaPosition_[1] * sqrt( - 2.0 * log( generate(0, i + Np0) ) ) * sin( 2.0 * PI * generate(1, i + Np0) );
 
-	/* Determine the longitudinal coordinate.							*/
+	/*确定纵坐标。*/
 	if ( bunchInit.distribution_ == "uniform" )
 	  r[2] = ( 2.0 * generate(2, i + Np0) - 1.0 ) * bunchInit.sigmaPosition_[2];
 	else if ( bunchInit.distribution_ == "gaussian" )
@@ -242,71 +242,71 @@ namespace MITHRA
 	    exit(1);
 	  }
 
-	/* Determine the transverse momentum.								*/
+	/*确定横向动量。*/
 	t[0] = bunchInit.sigmaGammaBeta_[0] * sqrt( - 2.0 * log( generate(4, i + Np0) ) ) * cos( 2.0 * PI * generate(5, i + Np0) );
 	t[1] = bunchInit.sigmaGammaBeta_[1] * sqrt( - 2.0 * log( generate(4, i + Np0) ) ) * sin( 2.0 * PI * generate(5, i + Np0) );
 	t[2] = bunchInit.sigmaGammaBeta_[2] * sqrt( - 2.0 * log( generate(6, i + Np0) ) ) * cos( 2.0 * PI * generate(7, i + Np0) );
 
 	if ( fabs(r[0]) < bunchInit.tranTrun_ && fabs(r[1]) < bunchInit.tranTrun_ && fabs(r[2]) < bunchInit.longTrun_)
 	  {
-	    /* Shift the generated charge to the center position and momentum space.			*/
+	    /*将产生的电荷移动到中心位置和动量空间。*/
 	    charge.rnp    = bunchInit.position_[ia];
 	    charge.rnp   += r;
 
 	    charge.gb   = gb;
 	    charge.gb  += t;
 
-	    /* Insert this charge and the mirrored ones into the charge vector.				*/
+	    /*将这个电荷和镜像电荷插入到电荷矢量中。*/
 	    insertCharge(charge);
 	  }
       }
 
-    /* If the longitudinal type of the bunch is uniform a tapered part needs to be added to remove the
-     * CSE from the tail of the bunch.									*/
+    /*如果束的纵向类型是均匀的，则需要添加一个锥形部分以去除
+    * CSE来自一群人的尾部。*/
     if ( bunchInit.distribution_ == "uniform" )
       for ( ; i < unsigned( Np / ng * ( 1.0 + 2.0 * bunchInit.lambda_ * sqrt( 2.0 * PI ) / ( 2.0 * bunchInit.sigmaPosition_[2] ) ) ); i += size)
 	{
 	  r[0] = bunchInit.sigmaPosition_[0] * sqrt( - 2.0 * log( generate(0, i + Np0) ) ) * cos( 2.0 * PI * generate(1, i + Np0) );
 	  r[1] = bunchInit.sigmaPosition_[1] * sqrt( - 2.0 * log( generate(0, i + Np0) ) ) * sin( 2.0 * PI * generate(1, i + Np0) );
 
-	  /* Determine the longitudinal coordinate.							*/
+	  /*确定纵坐标。*/
 	  r[2] = 2.0 * bunchInit.lambda_ * sqrt( - 2.0 * log( generate(2, i + Np0) ) ) * sin( 2.0 * PI * generate(3, i + Np0) );
 	  r[2] += ( r[2] < 0.0 ) ? ( - bunchInit.sigmaPosition_[2] ) : ( bunchInit.sigmaPosition_[2] );
 
-	  /* Determine the transverse momentum.								*/
+	  /*确定横向动量。*/
 	  t[0] = bunchInit.sigmaGammaBeta_[0] * sqrt( - 2.0 * log( generate(4, i + Np0) ) ) * cos( 2.0 * PI * generate(5, i + Np0) );
 	  t[1] = bunchInit.sigmaGammaBeta_[1] * sqrt( - 2.0 * log( generate(4, i + Np0) ) ) * sin( 2.0 * PI * generate(5, i + Np0) );
 	  t[2] = bunchInit.sigmaGammaBeta_[2] * sqrt( - 2.0 * log( generate(6, i + Np0) ) ) * cos( 2.0 * PI * generate(7, i + Np0) );
 
 	  if ( fabs(r[0]) < bunchInit.tranTrun_ && fabs(r[1]) < bunchInit.tranTrun_ && fabs(r[2]) < bunchInit.longTrun_)
 	    {
-	      /* Shift the generated charge to the center position and momentum space.			*/
+	      /*将产生的电荷移动到中心位置和动量空间。*/
 	      charge.rnp   = bunchInit.position_[ia];
 	      charge.rnp  += r;
 
 	      charge.gb  = gb;
 	      charge.gb += t;
 
-	      /* Insert this charge and the mirrored ones into the charge vector.			*/
+	      /*将这个电荷和镜像电荷插入到电荷矢量中。*/
 	      insertCharge(charge);
 	    }
 	}
 
-    /* Reset the value for the number of particle variable according to the installed number of
-     * macro-particles and perform the corresponding changes.                                         	*/
+    /*根据安装的粒子数重新设置粒子数变量的值
+    *宏粒子，并执行相应的更改。*/
     bunchInit.numberOfParticles_ = chargeVector.size();
   }
 
-  /* Initialize a bunch with a 3D-crystal type. This bunch produces a number of charges equal to the
-   * numberOfParticles_ with the total charge equal to the cloudCharge_ which are arranged in a 3D crystal.
-   * The number of particles in each direction is given by numbers_. Therefore, numberOfParticles_ should
-   * be a multiple of the product of all these three numbers. The ratio gives the number of particles in
-   * each crystal point. Position of each particle is determined by the lattice constants and the crystal
-   * is centered at the position_ vector. At each point, the charges have a small Gaussian distribution
-   * around the crsytal.                                           					*/
+  /*用3d水晶类型初始化一束。这一束产生的电荷数等于
+  * numberOfParticles_与总电荷等于cloudCharge_排列在一个3D晶体。
+  *每个方向的粒子数由numbers_给出。因此，numberOfParticles_应该
+  *是这三个数的乘积的倍数。这个比率给出了粒子的数量
+  *每个水晶点。每个粒子的位置由晶格常数和晶体决定
+  *以position_向量为中心。在每一点上，电荷都有一个小的高斯分布
+  *在水晶周围。*/
   void Bunch::initialize3DCrystal (BunchInitialize bunchInit, ChargeVector & chargeVector, Double (zp) [2], int rank, int size, int ia)
   {
-    /* Check if the numberOfParticles_ is a multiple of the product of values in numbers_.            	*/
+    /*检查numberOfParticles_是否是numbers_中值的乘积的倍数。*/
     if ( bunchInit.numberOfParticles_ % (bunchInit.numbers_[0] * bunchInit.numbers_[1] * bunchInit.numbers_[2]) != 0 )
       {
 	printmessage(std::string(__FILE__), __LINE__,
@@ -314,16 +314,16 @@ namespace MITHRA
 	exit(1);
       }
 
-    /* Declare the required parameters for the initialization of charge vectors.                      	*/
+    /*声明初始化电荷矢量所需的参数。*/
     Charge            	charge;
     FieldVector<Double> 	gb (0.0);
     gb.mv( bunchInit.initialGamma_, bunchInit.betaVector_ );
     unsigned int np = bunchInit.numberOfParticles_ / (bunchInit.numbers_[0] * bunchInit.numbers_[1] * bunchInit.numbers_[2]);
 
-    /* Clear the charge vector for adding the charges.							*/
+    /*清除电荷矢量以添加电荷。*/
     chargeVector.clear();
 
-    /* Determine the properties of each charge point and add them to the charge vector.               	*/
+    /*确定每个电荷点的性质，并将它们添加到电荷矢量中。*/
     for (unsigned int i = 0; i < bunchInit.numbers_[0]; i++)
       {
 	for (unsigned int j = 0; j < bunchInit.numbers_[1]; j++)
@@ -346,8 +346,8 @@ namespace MITHRA
 		    charge.gb[1] += bunchInit.sigmaGammaBeta_[1] * sqrt( - 2.0 * log( halton(8,i) ) ) * sin( 2.0 * PI * halton(9,i) );
 		    charge.gb[2] += bunchInit.sigmaGammaBeta_[2] * sqrt( - 2.0 * log( halton(10,i)) ) * sin( 2.0 * PI * halton(11,i));
 
-		    /* Insert this charge to the charge list if and only if it resides in the processor
-		     * portion.    									*/
+		    /*当且仅当该费用存在于处理器中时，将该费用插入到费用列表中
+        *部分。*/
 		    if ( ( charge.rnp[2] < zp[1] || rank == size - 1 ) && ( charge.rnp[2] >= zp[0] || rank == 0 ) )
 		      chargeVector.push_back(charge);
 		  }
@@ -356,22 +356,22 @@ namespace MITHRA
       }
   }
 
-  /* Initialize a bunch with a file type. This bunch produces a number of charges read from a given file.
-   * The number of initialized charge is equal to the vertical length of the table in the text file. The
-   * file format should contain the charge value, 3 position coordinates and 3 momentum coordinates of
-   * of the charge distribution.							                */
+  /*用一个文件类型初始化一个束。这个集合产生从给定文件读取的许多电荷。
+  *初始化的次数等于文本文件中表的垂直长度。的
+  *文件格式应包含电荷值、3个位置坐标和3个动量坐标
+  *电荷分布。*/
   void Bunch::initializeFile (BunchInitialize bunchInit, ChargeVector & chargeVector, Double (zp) [2], int rank, int size, int ia)
   {
 
-    /* Declare the required parameters for the initialization of charge vectors.                	*/
+    /*声明初始化电荷矢量所需的参数。*/
     Charge                    	charge;
     int 			saveRank = 0;
     bool 			flag = false;
 
-    /* Clear the charge vector for adding the charges.							*/
+    /*清除电荷矢量以添加电荷。*/
     chargeVector.clear();
 
-    /* Read the file and fill the position and electric field vectors according to the saved values.	*/
+    /*读取文件，并根据保存的值填充位置和电场矢量。*/
     std::ifstream myfile ( bunchInit.fileName_.c_str() );
 
     charge.q  = bunchInit.cloudCharge_ / bunchInit.numberOfParticles_;
@@ -389,7 +389,7 @@ namespace MITHRA
 
 	charge.rnp += bunchInit.position_[ia];
 
-	/* Insert this charge to the charge list only in one processor.										*/
+	/*将此费用仅插入到一个处理器中的费用列表中。*/
 	if (saveRank == rank)
 	  chargeVector.push_back(charge);
 	saveRank = ( saveRank == size - 1 ) ? 0 : saveRank + 1;
@@ -399,16 +399,16 @@ namespace MITHRA
 	    flag = true;
       }
 
-    /* Write the warning about truncation parameters.							*/
+    /*编写关于截断参数的警告。*/
     if ( flag )
       printmessage(std::string(__FILE__), __LINE__, std::string("Warning: Some particle coordinates are out of the transverse truncation length for the bunch. "
     	      "The results may be inaccurate !!!") );
 
-    /* Calculate the total amount of installed particles.						*/
+    /*计算安装粒子的总量。*/
     unsigned int NqL = chargeVector.size(), NqG = 0;
     MPI_Reduce(&NqL,&NqG,1,MPI_INT,MPI_SUM,0,MPI_COMM_WORLD);
 
-    /* Check the size of the charge vector with the number of particles.                            	*/
+    /*检查电荷矢量的大小与粒子的数量。*/
     if ( bunchInit.numberOfParticles_ != NqG && rank == 0 )
       {
 	printmessage(std::string(__FILE__), __LINE__, std::string("The number of the particles and the file size do not match !!! The file contains " + stringify(NqG) + " particles.") );
@@ -416,7 +416,7 @@ namespace MITHRA
       }
   }
 
-  /* Show the stored values for the bunch.                                                          	*/
+  /*显示集群的存储值。*/
   void Bunch::show ()
   {
     for (unsigned int i = 0; i < bunchInit_.size(); i++)
@@ -470,9 +470,9 @@ namespace MITHRA
       }
   }
 
-  /*** Signal class *************************************************************************************/
+  /** 信号类  *************************************************************************************/
 
-  /* Initialize the values of the parameters.								*/
+  /*初始化参数值。*/
   Signal::Signal ()
   {
     t0_ 		= 0.0;
@@ -484,10 +484,10 @@ namespace MITHRA
     sigmaInvG_.resize(2,0.0);
   }
 
-  /* Initializer with signal type, time offset, variance, frequency and carrier-envelope-phase.       	*/
+  /*带有信号类型、时间偏移、方差、频率和载波包络相位的初始化器。*/
   void Signal::initialize (std::string type, Double l0, Double s, Double l, Double cep, unsigned int nR, std::vector<Double> sigmaInvG)
   {
-    /* Initialize the signal type.                                                                    	*/
+    /*初始化信号类型。*/
     if      ( type.compare("neumann") == 0 )            signalType_ = NEUMANN;
     else if ( type.compare("gaussian") == 0 )           signalType_ = GAUSSIAN;
     else if ( type.compare("secant-hyperbolic") == 0 )  signalType_ = SECANT;
@@ -495,21 +495,21 @@ namespace MITHRA
     else if ( type.compare("inverse-gaussian") == 0 )   signalType_ = INVGAUSSIAN;
     else { std::cout << type << " is an unknown signal type for the given set of parameters." << std::endl; exit(1); }
 
-    /* Initialize the time delay, variance and the frequency of the carrier.                          	*/
+    /*初始化载波的时延、方差和频率。*/
     t0_ = l0;
     s_  = s;
     f0_ = 1 / l;
 
-    /* Initialize the carrier envelope phase.                                                         	*/
+    /*初始化载波信封阶段。*/
     cep_ = cep * PI / 180;
 
-    /* Initialize the number of rising cylces for the flat-top pulse.					*/
+    /*初始化平顶脉冲的上升周期数。*/
     nR_  = nR;
 
-    /* Initialize the value of the sigma in inverse-gaussian signal.					*/
+    /*初始化反高斯信号中sigma的值。*/
     sigmaInvG_ = sigmaInvG;
 
-    /* Check if variance is unequal zero.                                                             	*/
+    /*检查方差是否不等于零。*/
     if (s_ == 0.0)
       {
 	printmessage(std::string(__FILE__), __LINE__, std::string(" Variance of signal is set to zero. "));
@@ -518,7 +518,7 @@ namespace MITHRA
 	exit(1);
       }
 
-    /* Check if sigma value of the inverse-gaussian signal is unequal zero.				*/
+    /*检查反高斯信号的σ值是否不等于零。*/
     if ( signalType_ == INVGAUSSIAN )
       {
 	if ( sigmaInvG_[0] * sigmaInvG_[1] == 0.0 )
@@ -533,7 +533,7 @@ namespace MITHRA
 
   Double Signal::self (Double & t, Double & phase)
   {
-    /* If the signal is out of the 20*s range around the center, consider it to be zero.		*/
+    /*如果信号在中心周围的20*s范围之外，则认为它是零。*/
     if ( fabs(t - t0_) > 10.0 * s_ )	return ( 0.0 );
     else
       {
@@ -574,7 +574,7 @@ namespace MITHRA
     return (0.0);
   }
 
-  /* Show the stored values for this signal.                                                          	*/
+  /*显示此信号的存储值。*/
   void Signal::show ()
   {
     if      (signalType_ == NEUMANN)
@@ -591,7 +591,7 @@ namespace MITHRA
     printmessage(std::string(__FILE__), __LINE__, std::string(" Signal carrier envelope phase = ") + stringify(cep_));
   }
 
-  /*** Seed class ***************************************************************************************/
+  /** *种子类  ***************************************************************************************/
 
   Seed::Seed ()
   {
@@ -652,7 +652,7 @@ namespace MITHRA
 			 std::vector<int>	order,
 			 Signal                 signal)
   {
-    /* Set the seed type according to the returned string for seedType.                   		*/
+    /*根据seedType返回的字符串设置种子类型。*/
     if      ( type.compare("plane-wave"         	  ) == 0 ) seedType_ = PLANEWAVE;
     else if ( type.compare("truncated-plane-wave"	  ) == 0 ) seedType_ = PLANEWAVETRUNCATED;
     else if ( type.compare("gaussian-beam"      	  ) == 0 ) seedType_ = GAUSSIANBEAM;
@@ -663,12 +663,12 @@ namespace MITHRA
     else if ( type.compare("standing-super-gaussian-beam" ) == 0 ) seedType_ = STANDINGSUPERGAUSSIANBEAM;
     else    { std::cout << type << " is an unknown type." << std::endl; exit(1); }
 
-    /* Set the vectors position, direction and polarization for the seed class.                 	*/
+    /*设置种子类的矢量位置、方向和极化。*/
     position_ 		= position;
     polarization_ 	= polarization;
     direction_ 		= direction;
 
-    /* check if length of diection vector is zero and normalize the vector.				*/
+    /*检查方向向量的长度是否为零，并对向量进行归一化。*/
     if ( direction_.norm2() == 0.0)
       {
 	printmessage(std::string(__FILE__), __LINE__, std::string("The direction vector has length zero."));
@@ -681,7 +681,7 @@ namespace MITHRA
 	direction_ /= vl;
       }
 
-    /* check if length of polarization vector is zero and normalize the vector.				*/
+    /*检查偏振矢量的长度是否为零，并对矢量进行归一化。*/
     if ( polarization_.norm2() == 0.0)
       {
 	printmessage(std::string(__FILE__), __LINE__, std::string("The polarization vector has length zero."));
@@ -694,7 +694,7 @@ namespace MITHRA
 	polarization_ /= vl;
       }
 
-    /* check if polarization and direction are normal to each other.                       		*/
+    /*检查极化和方向是否互为法向。*/
     if ( fabs( polarization_ * direction_ ) > 1.0e-50 )
       {
 	printmessage(std::string(__FILE__), __LINE__, std::string("Polarization is not normal to the direction."));
@@ -702,13 +702,13 @@ namespace MITHRA
 	exit(1);
       }
 
-    /* Initialize the amplitude of the seed.                                                    	*/
+    /*初始化种子的振幅。*/
     a0_ 		= a0;
 
-    /* Initialize the Rayleigh radius of the Gaussian beam.                                           	*/
+    /*初始化高斯光束的瑞利半径。*/
     radius_ 		= radius;
 
-    /* check if length of polarization vector is zero and normalize the vector.                       	*/
+    /*检查偏振矢量的长度是否为零，并对矢量进行归一化。*/
     if ( seedType_ == GAUSSIANBEAM || seedType_ == STANDINGGAUSSIANBEAM || seedType_ == SUPERGAUSSIANBEAM || seedType_ == STANDINGSUPERGAUSSIANBEAM )
       {
 	if ( radius_[0] * radius_[1] == 0.0 )
@@ -719,10 +719,10 @@ namespace MITHRA
 	  }
       }
 
-    /* Initialize the signal of the seed.                                                             	*/
+    /*初始化种子的信号。*/
     signal_           = signal;
 
-    /* Initialize the values for the super-gaussian beam.						*/
+    /*初始化超高斯光束的值。*/
     if ( seedType_ == SUPERGAUSSIANBEAM || seedType_ == STANDINGSUPERGAUSSIANBEAM )
       {
 	order_ = order;
@@ -736,31 +736,31 @@ namespace MITHRA
       }
   }
 
-  /* Return the potentials at any desired location and time.                    			*/
+  /*返回任意位置和时间的电位。*/
   void Seed::fields (const FieldVector<Double>& aufpunkt, const Double& time, FieldVector<Double>& a)
   {
-    /* Transfer the coordinate from the bunch rest frame to the lab frame.				*/
+    /*将坐标系从束静止坐标系转移到实验坐标系。*/
     rl[0] = aufpunkt[0]; rl[1] = aufpunkt[1];
     rl[2] = gamma_ * ( aufpunkt[2] + beta_ * c0_ * ( time + dt_ ) );
     tl    = gamma_ * ( time + dt_  + beta_ / c0_ * aufpunkt[2]    );
 
-    /* Calculate the distance to the reference position along the propagation direction.   		*/
+    /*计算沿传播方向到参考位置的距离。*/
     rv = rl; rv -= position_;
     z  = rv * direction_ ;
 
-    /* Compute propagation delay and subtract it from the time.                         		*/
+    /*计算传播延迟并从时间中减去它。*/
     tl -= z / c0_;
 
-    /* Reset the carrier envelope phase of the pulse.							*/
+    /*重置脉冲的载波包络相位。*/
     p = 0.0;
 
-    /* Now manipulate the electric field vector depending on the specific seed given.          		*/
+    /*现在根据给定的特定种子来操作电场矢量。*/
     if ( seedType_ == PLANEWAVE )
       {
-	/* Retrieve signal value at corrected time.                                                   	*/
+	/*在校正时间检索信号值。*/
 	tsignal = signal_.self(tl, p);
 
-	/* Calculate the field only if the signal value is larger than a limit.				*/
+	/*仅当信号值大于限制时才计算该字段。*/
 	if ( fabs(tsignal) < 1.0e-6 )
 	  a = 0.0;
 	else
@@ -768,15 +768,15 @@ namespace MITHRA
       }
     else if ( seedType_ == PLANEWAVETRUNCATED )
       {
-	/* Retrieve signal value at corrected time.                                                   	*/
+	/*在校正时间检索信号值。*/
 	tsignal = signal_.self(tl, p);
 
-	/* Calculate the transverse distance to the center line.   					*/
+	/*计算到中心线的横向距离。*/
 	x  = rv * polarization_;
 	yv = cross(direction_, polarization_);
 	y  = rv * yv;
 
-	/* Calculate the field only if the signal value is larger than a limit.				*/
+	/*仅当信号值大于限制时才计算该字段。*/
 	if ( fabs(tsignal) < 1.0e-6  || fabs(x) > radius_[0] || fabs(y) > radius_[1] )
 	  a = 0.0;
 	else
@@ -784,27 +784,27 @@ namespace MITHRA
       }
     else if ( seedType_ == GAUSSIANBEAM )
       {
-	/* Retrieve signal value at corrected time.                                         		*/
+	/*在校正时间检索信号值。*/
 	tsignal = signal_.self(tl, p);
 
 	if ( fabs(tsignal) < 1.0e-6 ) a = 0.0;
 	else
 	  {
-	    /* Calculate the transverse distance to the center line.   					*/
+	    /*计算到中心线的横向距离。*/
 	    x  = rv * polarization_;
 	    yv = cross(direction_, polarization_);
 	    y  = rv * yv;
 
-	    /* Calculate the wavelength corresponding to the given central frequency.              	*/
+	    /*计算与给定中心频率相对应的波长。*/
 	    l = c0_ / signal_.f0_;
 
-	    /* Calculate the Rayleigh length and the relative radius of the beam.                	*/
+	    /*计算光束的瑞利长度和相对半径。*/
 	    zRp = PI * radius_[0] * radius_[0] / l;
 	    wrp = sqrt(1.0 + z * z / ( zRp * zRp ));
 	    zRs = PI * radius_[1] * radius_[1] / l;
 	    wrs = sqrt(1.0 + z * z / ( zRs * zRs ));
 
-	    /* Compute the transverse vector between the point and the reference point.          	*/
+	    /*计算点和参考点之间的横向矢量。*/
 	    p         = 0.5 * ( atan(z/zRp) + atan(z/zRs) - PI ) - PI*z/l * ( pow(x/(zRp*wrp),2) + pow(y/(zRs*wrs),2) );
 	    tsignal   = signal_.self(tl, p);
 	    t         = exp( - pow(x/(radius_[0]*wrp),2) - pow(y/(radius_[1]*wrs),2) ) / sqrt(wrs*wrp) * amplitude_;
@@ -813,35 +813,35 @@ namespace MITHRA
       }
     else if ( seedType_ == SUPERGAUSSIANBEAM )
       {
-	/* Retrieve signal value at corrected time.                                         		*/
+	/*在校正时间检索信号值。*/
 	tsignal = signal_.self(tl, p);
 
 	if ( fabs(tsignal) < 1.0e-6 ) a = 0.0;
 	else
 	  {
-	    /* Calculate the transverse distance to the center line.   					*/
+	    /*计算到中心线的横向距离。*/
 	    x  = rv * polarization_;
 	    yv = cross(direction_, polarization_);
 	    y  = rv * yv;
 
-	    /* Calculate the wavelength corresponding to the given central frequency.              	*/
+	    /*计算与给定中心频率相对应的波长。*/
 	    l = c0_ / signal_.f0_;
 
-	    /* Calculate the Rayleigh length and the relative radius of the beam.                	*/
+	    /*计算光束的瑞利长度和相对半径。*/
 	    zRp = PI * radius_[0] * radius_[0] / l;
 	    wrp = sqrt(1.0 + z * z / ( zRp * zRp ));
 	    zRs = PI * radius_[1] * radius_[1] / l;
 	    wrs = sqrt(1.0 + z * z / ( zRs * zRs ));
 
-	    /* Loop over elements of the super-gaussian beam and add their fields.			*/
+	    /*循环超高斯光束的元素并添加它们的场。*/
 	    for ( int i = - order_[0]; i <= order_[0]; i++ )
 	      for ( int j = - order_[1]; j <= order_[1]; j++ )
 		{
-		  /* Compute the transverse vector between the point and the reference point.		*/
+		  /*计算点和参考点之间的横向矢量。*/
 		  x0 = ( x - i * radius_[0] ) / wrp;
 		  y0 = ( y - j * radius_[1] ) / wrs;
 
-		  /* Compute the transverse vector between the point and the reference point.          	*/
+		  /*计算点和参考点之间的横向矢量。*/
 		  p         = 0.5 * ( atan(z/zRp) + atan(z/zRs) - PI ) - PI*z/l * ( pow(x/(zRp*wrp),2) + pow(y/(zRs*wrs),2) );
 		  tsignal   = signal_.self(tl, p);
 		  t         = exp( - pow(x/(radius_[0]*wrp),2) - pow(y/(radius_[1]*wrs),2) ) / sqrt(wrs*wrp) * amplitude_;
@@ -850,11 +850,11 @@ namespace MITHRA
 	  }
       }
 
-    /* Now transfer the computed magnetic vector potential into the bunch rest frame.			*/
+    /*现在将计算得到的磁矢量势转移到束静止坐标系中。*/
     a[2] *= gamma_;
   }
 
-  /* Initialize the data-base for field visualization.							*/
+  /*初始化数据库以实现字段可视化。*/
   Seed::vtk::vtk ()
   {
     sample_			= false;
@@ -867,7 +867,7 @@ namespace MITHRA
     position_			= 0.0;
   }
 
-  /* Set the sampling type of the seed.                                                               	*/
+  /*设置种子的采样类型。*/
   SamplingType Seed::samplingType (std::string samplingType)
   {
     if      ( samplingType.compare("at-point")   == 0 )	return( ATPOINT  );
@@ -875,7 +875,7 @@ namespace MITHRA
     else { std::cout << samplingType << " is an unknown sampling type." << std::endl; exit(1); }
   }
 
-  /* Set the sampling type of the seed.                                                               	*/
+  /*设置种子的采样类型。*/
   SamplingType Seed::vtkType (std::string vtkType)
   {
     if      ( vtkType.compare("in-plane") == 0 )	return( INPLANE   );
@@ -883,7 +883,7 @@ namespace MITHRA
     else { std::cout << vtkType << " is an unknown vtk type." << std::endl; exit(1); }
   }
 
-  /* Set the plane type for vtk in plane visualization.                                           	*/
+  /*在平面可视化中设置vtk的平面类型。*/
   PlaneType Seed::planeType (std::string planeType)
   {
     if      ( planeType.compare("yz")     == 0 )	return( XNORMAL );
@@ -892,7 +892,7 @@ namespace MITHRA
     else { std::cout << planeType << " is an unknown vtk plane type." << std::endl; exit(1); }
   }
 
-  /* Set the field sampling type of the seed.                                                         */
+  /*设置种子的田间采样类型。*/
   FieldType Seed::fieldType (std::string fieldType)
   {
     if      ( fieldType.compare("Ex") == 0 )  return(Ex);
@@ -908,7 +908,7 @@ namespace MITHRA
     else { std::cout << fieldType << " is an unknown sampling field." << std::endl; exit(1); }
   }
 
-  /* Show the stored values for this signal.                                                          */
+  /*显示此信号的存储值。*/
   void Seed::show ()
   {
     if        (seedType_ == PLANEWAVE)      		printmessage(std::string(__FILE__), __LINE__, std::string("Seed type = plane-wave"));
@@ -968,7 +968,7 @@ namespace MITHRA
     signal_.show();
   }
 
-  /*** Undulator class **********************************************************************************/
+  /** 波荡器类  **********************************************************************************/
 
   Undulator::Undulator ()
   {
@@ -995,7 +995,7 @@ namespace MITHRA
     zR_.resize(2,0.0);
   }
 
-  /* Set the type of the undulator.                                                                   	*/
+  /*设置波动器的类型。*/
   UndulatorType Undulator::undulatorType (std::string undulatorType)
   {
     if      ( undulatorType.compare("static")   == 0 )   return( STATIC  );
@@ -1003,7 +1003,7 @@ namespace MITHRA
     else { std::cout << undulatorType << " is an unknown sampling type." << std::endl; exit(1); }
   }
 
-  /* Initialize the data of the undulator according to the input parameters.				*/
+  /*根据输入参数初始化波动器的数据。*/
   void Undulator::initialize (std::string        	type,
 			      std::vector<Double>    	position,
 			      std::vector<Double>    	direction,
@@ -1014,7 +1014,7 @@ namespace MITHRA
 			      std::vector<int>		order,
 			      Signal                   	signal)
   {
-    /* Set the seed type according to the returned string for seedType.                   		*/
+    /*根据seedType返回的字符串设置种子类型。*/
     if      ( type.compare("plane-wave"         	  ) == 0 ) seedType_ = PLANEWAVE;
     else if ( type.compare("truncated-plane-wave"	  ) == 0 ) seedType_ = PLANEWAVETRUNCATED;
     else if ( type.compare("gaussian-beam"      	  ) == 0 ) seedType_ = GAUSSIANBEAM;
@@ -1025,12 +1025,12 @@ namespace MITHRA
     else if ( type.compare("standing-super-gaussian-beam" ) == 0 ) seedType_ = STANDINGSUPERGAUSSIANBEAM;
     else    { std::cout << type << " is an unknown type." << std::endl; exit(1); }
 
-    /* Set the vectors position, direction and polarization for the seed class.                 	*/
+    /*设置种子类的矢量位置、方向和极化。*/
     position_ 		= position;
     polarization_ 	= polarization;
     direction_ 		= direction;
 
-    /* check if length of diection vector is zero and normalize the vector.                           	*/
+    /*检查方向向量的长度是否为零，并对向量进行归一化。*/
     if ( direction_.norm2() == 0.0)
       {
 	printmessage(std::string(__FILE__), __LINE__, std::string("The direction vector has length zero."));
@@ -1043,7 +1043,7 @@ namespace MITHRA
 	direction_ /= vl;
       }
 
-    /* check if length of polarization vector is zero and normalize the vector.                       	*/
+    /*检查偏振矢量的长度是否为零，并对矢量进行归一化。*/
     if ( polarization_.norm2() == 0.0)
       {
 	printmessage(std::string(__FILE__), __LINE__, std::string("The polarization vector has length zero."));
@@ -1056,7 +1056,7 @@ namespace MITHRA
 	polarization_ /= vl;
       }
 
-    /* check if polarization and direction are normal to each other.                       		*/
+    /*检查极化和方向是否互为法向。*/
     if ( fabs( polarization_ * direction_ ) > 1.0e-50 )
       {
 	printmessage(std::string(__FILE__), __LINE__, std::string("Polarization is not normal to the direction."));
@@ -1064,16 +1064,16 @@ namespace MITHRA
 	exit(1);
       }
 
-    /* Initialize the amplitude of the seed and undulator.                                              */
+    /*初始化种子和波动器的振幅。*/
     a0_ 		= a0;
 
-    /* Initialize the Rayleigh radius of the Gaussian beam.                                           	*/
+    /*初始化高斯光束的瑞利半径。*/
     radius_ 		= radius;
 
-    /* Initialize the undulator period according to the given wavelength for the signal.		*/
+    /*根据信号的给定波长初始化波动周期。*/
     lu_			= wavelength;
 
-    /* check if length of polarization vector is zero and normalize the vector.                       	*/
+    /*检查偏振矢量的长度是否为零，并对矢量进行归一化。*/
     if ( seedType_ == GAUSSIANBEAM || seedType_ == STANDINGGAUSSIANBEAM || seedType_ == SUPERGAUSSIANBEAM || seedType_ == STANDINGSUPERGAUSSIANBEAM )
       {
 	if ( radius_[0] * radius_[1] == 0.0 )
@@ -1084,10 +1084,10 @@ namespace MITHRA
 	  }
       }
 
-    /* Initialize the signal of the seed.                                                             	*/
+    /*初始化种子的信号。*/
     signal_           = signal;
 
-    /* Initialize the values for the super-gaussian beam.						*/
+    /*初始化超高斯光束的值。*/
     if ( seedType_ == SUPERGAUSSIANBEAM || seedType_ == STANDINGSUPERGAUSSIANBEAM )
       {
 	order_ = order;
@@ -1101,7 +1101,7 @@ namespace MITHRA
       }
   }
 
-  /* Show the stored values for the undulator.                                                        	*/
+  /*显示波动器的存储值。*/
   void Undulator::show ()
   {
     if ( type_ == STATIC )
@@ -1140,7 +1140,7 @@ namespace MITHRA
       }
   }
 
-  /*** ExtField class ***********************************************************************************/
+  /*** ExtField 类 ***********************************************************************************/
 
   ExtField::ExtField ()
   {
@@ -1158,7 +1158,7 @@ namespace MITHRA
     zR_.resize(2,0.0);
   }
 
-  /* Initialize the data of the undulator according to the input parameters.				*/
+  /*根据输入参数初始化波动器的数据。*/
   void ExtField::initialize (std::string                type,
 			     std::vector<Double>        position,
 			     std::vector<Double>        direction,
@@ -1169,7 +1169,7 @@ namespace MITHRA
 			     std::vector<int>		order,
 			     Signal                     signal)
   {
-    /* Set the seed type according to the returned string for seedType.                               	*/
+    /*根据seedType返回的字符串设置种子类型。*/
     if      ( type.compare("plane-wave"         	  ) == 0 ) seedType_ = PLANEWAVE;
     else if ( type.compare("truncated-plane-wave"	  ) == 0 ) seedType_ = PLANEWAVETRUNCATED;
     else if ( type.compare("gaussian-beam"      	  ) == 0 ) seedType_ = GAUSSIANBEAM;
@@ -1180,12 +1180,12 @@ namespace MITHRA
     else if ( type.compare("standing-super-gaussian-beam" ) == 0 ) seedType_ = STANDINGSUPERGAUSSIANBEAM;
     else    { std::cout << type << " is an unknown type." << std::endl; exit(1); }
 
-    /* Set the vectors position, direction and polarization for the seed class.                       	*/
+    /*设置种子类的矢量位置、方向和极化。*/
     position_         = position;
     polarization_     = polarization;
     direction_        = direction;
 
-    /* check if length of diection vector is zero and normalize the vector.                           	*/
+    /*检查方向向量的长度是否为零，并对向量进行归一化。*/
     if ( direction_.norm() == 0.0)
       {
 	printmessage(std::string(__FILE__), __LINE__, std::string("The direction vector has length zero."));
@@ -1198,7 +1198,7 @@ namespace MITHRA
 	direction_ /= vl;
       }
 
-    /* check if length of polarization vector is zero and normalize the vector.                       	*/
+    /*检查偏振矢量的长度是否为零，并对矢量进行归一化。*/
     if ( polarization_.norm() == 0.0)
       {
 	printmessage(std::string(__FILE__), __LINE__, std::string("The polarization vector has length zero."));
@@ -1211,7 +1211,7 @@ namespace MITHRA
 	polarization_ /= vl;
       }
 
-    /* check if polarization and direction are normal to each other.                       		*/
+    /*检查极化和方向是否互为法向。*/
     if ( fabs( polarization_ * direction_ ) > 1.0e-50 )
       {
 	printmessage(std::string(__FILE__), __LINE__, std::string("Polarization is not normal to the direction."));
@@ -1219,13 +1219,13 @@ namespace MITHRA
 	exit(1);
       }
 
-    /* Initialize the amplitude of the seed.                                                          	*/
+    /*初始化种子的振幅。*/
     a0_        		= a0;
 
-    /* Initialize the Rayleigh radius of the Gaussian beam.                                           	*/
+    /*初始化高斯光束的瑞利半径。*/
     radius_           	= radius;
 
-    /* check if length of polarization vector is zero and normalize the vector.                       	*/
+    /*检查偏振矢量的长度是否为零，并对矢量进行归一化。*/
     if ( seedType_ == GAUSSIANBEAM || seedType_ == STANDINGGAUSSIANBEAM || seedType_ == SUPERGAUSSIANBEAM || seedType_ == STANDINGSUPERGAUSSIANBEAM )
       {
 	if ( radius_[0] * radius_[1] == 0.0 )
@@ -1236,10 +1236,10 @@ namespace MITHRA
 	  }
       }
 
-    /* Initialize the signal of the seed.                                                             	*/
+    /*初始化种子的信号。*/
     signal_           = signal;
 
-    /* Initialize the values for the super-gaussian beam.						*/
+    /*初始化超高斯光束的值。*/
     if ( seedType_ == SUPERGAUSSIANBEAM || seedType_ == STANDINGSUPERGAUSSIANBEAM )
       {
 	order_ = order;
@@ -1253,7 +1253,7 @@ namespace MITHRA
       }
   }
 
-  /* Show the stored values for the external field.							*/
+  /*显示外部字段的存储值。*/
   void ExtField::show ()
   {
     if ( type_ == EMWAVE )
@@ -1283,9 +1283,9 @@ namespace MITHRA
       }
   }
 
-  /*** FreeElectronLaser class **************************************************************************/
+  /*** FreeElectronLaser **************************************************************************/
 
-  /* Set the sampling type of the radiation power.                                                	*/
+  /*设置辐射功率的采样类型。*/
   void FreeElectronLaser::RadiationSampling::samplingType (std::string samplingType)
   {
     if      ( samplingType.compare("at-point")   == 0 )   samplingType_ = ATPOINT;
@@ -1293,7 +1293,7 @@ namespace MITHRA
     else { std::cout << samplingType << " is an unknown sampling type." << std::endl; exit(1); }
   }
 
-  /* Initialize the values for initializing the radiation power.                     			*/
+  /*初始化用于初始化辐射功率的值。*/
   FreeElectronLaser::RadiationSampling::RadiationSampling ()
   {
     z_.clear();
@@ -1310,7 +1310,7 @@ namespace MITHRA
     lambdaRes_		= 0.0;
   }
 
-  /* Initialize the values for initializing the radiation power.                     			*/
+  /*初始化用于初始化辐射功率的值。*/
   FreeElectronLaser::RadiationVisualization::RadiationVisualization ()
   {
     z_			= 0.0;
@@ -1320,7 +1320,7 @@ namespace MITHRA
     rhythm_		= 0.0;
   }
 
-  /* Initialize the values for saving the particles hitting screens.                   			*/
+  /*初始化保存撞击屏幕的粒子的值。*/
   FreeElectronLaser::ScreenProfile::ScreenProfile ()
   {
     sampling_          	= false;

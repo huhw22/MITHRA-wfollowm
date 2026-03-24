@@ -1,6 +1,6 @@
 /********************************************************************************************************
- *  solver.h : Implementation of the solver class for the darius code
- ********************************************************************************************************/
+* solve.h: darius代码的求解器类的实现
+********************************************************************************************************/
 
 #ifndef SOLVER_H_
 #define SOLVER_H_
@@ -16,7 +16,7 @@
 namespace MITHRA
 {
 
-  /* Class of functions used for the solution of the fields in time domain using FDTD.			*/
+  /*该类函数用于求解时域中的时域有限差分域。*/
   class Solver
   {
 
@@ -29,196 +29,196 @@ namespace MITHRA
 	    std::vector<ExtField>& 		extField,
 	    std::vector<FreeElectronLaser>& 	FEL);
 
-    /* Using the parsed data, set the required parameters for simulation.				*/
+    /*使用解析后的数据，设置仿真所需的参数。*/
     void 		setSimulationParameters 	();
 
-    /* Boost the mesh into the electron rest frame.							*/
+    /*将网格推进电子静止框架。*/
     void 		lorentzBoostMesh		();
 
-    /* Boost particles into the electron rest frame.							*/
+    /*推动粒子进入电子静止框架。*/
     void 		lorentzBoostBunch 		();
 
-    /* Distribute particles in their respective processor, depending on their longituinal coordinate.	*/
+    /*根据粒子的纵向坐标，在它们各自的处理器中分布粒子。*/
     void 		distributeParticles 		(std::list<Charge>& chargeVector);
 
-    /* Recycle particles removes the particles that no more belong to the processor.			*/
+    /*回收颗粒去除不再属于处理器的颗粒。*/
     void		recycleParticles		();
 
-    /* Get the average gamma and average direction of a bunch read in from a file.			*/
+    /*得到从文件中读取的一堆的平均伽马和平均方向。*/
     void 		computeFileGamma 		(BunchInitialize & bunchInit);
 
-    /* Initialize the matrix for the field values and the coordinates.					*/
+    /*为字段值和坐标初始化矩阵。*/
     void 		initialize			();
 
-    /* Initialize the temporal and spatial mesh of the problem.						*/
+    /*初始化问题的时间和空间网格。*/
     void 		initializeMesh			();
 
-    /* Initialize the data for updating the field in the fdtd algorithm.				*/
+    /*初始化数据以更新fdtd算法中的字段。*/
     void 		initializeField			();
 
-    /* Initialize the data required for sampling seed or the total field in the computational domain.	*/
+    /*初始化采样种子或计算域中的总字段所需的数据。*/
     void 		initializeSeedSampling		();
 
-    /* Initialize the required data for visualizing and saving the field.				*/
+    /*初始化可视化和保存字段所需的数据。*/
     void 		initializeSeedVTK		();
 
-    /* Initialize the required data for profiling and saving the field.					*/
+    /*初始化分析和保存字段所需的数据。*/
     void 		initializeSeedProfile		();
 
-    /* Initialize the required data for updating the bunch.						*/
+    /*初始化更新堆所需的数据。*/
     void 		initializeBunchUpdate		();
 
-    /* Initialize the charge vector containing the bunch given by the user.				*/
+    /*初始化包含用户给出的束的电荷向量。*/
     void 		initializeBunch			();
 
-    /* The function which is called for solving the fields in time domain.				*/
+    /*用于求解时域域的函数。*/
     void 		solve					();    
 
-    /* Update the fields for one time-step.								*/
+    /*为一个时间步更新字段。*/
     void 		bunchUpdate			();
 
-    /* Sample the bunch data and save it to the given file.						*/
+    /*采样这些数据并将其保存到给定的文件中。*/
     void 		bunchSample			();
 
-    /* Visualize the bunch as vtk files and save them to the file with given name.			*/
+    /*将这些文件可视化为vtk文件，并将它们保存到给定名称的文件中。*/
     void 		bunchVisualize			();
 
-    /* Write the total profile of the field into the given file name.					*/
+    /*将字段的总概要文件写入给定的文件名中。*/
     void 		bunchProfile			();
 
-    /* Calculate the magnetic field of undulator and add it to the magnetic field of the seed.		*/
+    /*计算出波动器的磁场，并将其与种子磁场相加。*/
     void 		undulatorField 			(UpdateBunchParallel& ubp, FieldVector<Double>& r);
 
-    /* Calculate the field of external field and add it to the field of the seed.			*/
+    /*计算外场的场并将其添加到种子的场中。*/
     void 		externalField			(UpdateBunchParallel& ubp, FieldVector<Double>& r);
 
-    /* Initialize the data required for sampling and saving the radiation power at the given position.	*/
+    /*初始化采样所需的数据，并在给定位置保存辐射功率。*/
     void 		initializePowerSample		();
 
-    /* Sample the radiation power at the given position and save it to the file.			*/
+    /*在给定位置取样辐射功率并保存到文件中。*/
     void 		powerSample			();
 
-    /* Initialize the data required for visualizing the radiation power at the given position.		*/
+    /*初始化在给定位置显示辐射功率所需的数据。*/
     void 		initializePowerVisualize	();
 
-    /* Visualize the radiation power at the given position and save it to the file.			*/
+    /*可视化给定位置的辐射功率并将其保存到文件中。*/
     void 		powerVisualize			();
 
-    /* Initialize the data required for sampling and saving the radiation energy at the given position.	*/
+    /*初始化采样所需的数据，并在给定位置保存辐射能量。*/
     void 		initializeEnergySample		();
 
-    /* Sample the radiation energy at the given position and save it to the file. 			*/
+    /*在给定位置采集辐射能量并保存到文件中。*/
     void 		energySample			();
 
-    /* Initialize the data required for storing particles hitting a screen at the given position.	*/
+    /*初始化在给定位置存储击中屏幕的粒子所需的数据。*/
     void 		initializeScreenProfile		();
 
-    /* Store the bunch profile from particles hitting a screen at the given position and save it to the
-     * file. 												*/
+    /*存储粒子在给定位置撞击屏幕的束状轮廓，并将其保存到
+    *文件。*/
     void 		screenProfile			();
 
-    /* Finalize the field calculations. 								*/
+    /*完成字段计算。*/
     void 		finalize			();
 
-    /* Define the boolean function for comparing undulator begins.					*/
+    /*定义一个布尔函数来比较波动量的起始值。*/
     static bool 	undulatorCompare 		(Undulator i, Undulator j);
 
-    /* Define the function for linear interpolation.							*/
+    /*定义线性插值函数。*/
     Double	 	interp				(Double x0, Double x1, Double y0, Double y1, Double x);
 
-    /* Define the function for checking if the particle belongs to the processor.			*/
+    /*定义检查粒子是否属于处理器的函数。*/
     bool 		particleInProcessor		(const Double& z );
 
-    /* Shift the time of the bunch and undulator according to the given time shift.			*/
+    /*根据给定的时移，移动束和波动器的时间。*/
     void    		shiftBackInTime			();
 
-    /* Return the real coordinate in the lab-frame from the grid index values.				*/
+    /*从网格索引值返回实验室帧中的实际坐标。*/
     FieldVector<Double> rc				(const long int& i);
 
-    /* Reset the currents to zero.									*/
+    /*将电流复位为零。*/
     virtual void currentReset () = 0;
 
-    /* Update the currents at cell points for the filed update.						*/
+    /*为字段更新更新单元格点上的电流。*/
     virtual void currentUpdate () = 0;
 
-    /* Communicate the currents among different processors.						*/
+    /*在不同的处理器之间传输电流。*/
     virtual void currentCommunicate () = 0;
 
-    /* Update the fields for one time-step								*/
+    /*为一个时间步更新字段*/
     virtual void fieldUpdate () = 0;
 
-    /* Evaluate the field of the m'th pixel from the potentials.					*/
+    /*从电位中计算第m个像素的场。*/
     virtual void fieldShift () = 0;
 
-    /* Evaluate the field of the m'th pixel from the potentials.					*/
+    /*从电位中计算第m个像素的场。*/
     virtual void fieldEvaluate (long int m) = 0;
 
-    /* Sample the field and save it to the given file.							*/
+    /*采样字段并将其保存到给定的文件中。*/
     virtual void fieldSample () = 0;
 
-    /* Visualize the field as vtk files on the whole domain and save them to the file with given name.	*/
+    /*将字段可视化为整个域上的vtk文件，并将它们保存到给定名称的文件中。*/
     virtual void fieldVisualizeAllDomain 	(unsigned int ivtk) = 0;
 
-    /* Visualize the field as vtk files in plane and save them to the file with the given name.		*/
+    /*将字段可视化为平面中的vtk文件，并将它们保存到具有给定名称的文件中。*/
     virtual void fieldVisualizeInPlane 		(unsigned int ivtk) = 0;
 
-    /* Visualize the field as vtk files in a plane normal to x axis and save them to the file with the
-     * given name.											*/
+    /*将字段可视化为垂直于x轴的平面上的vtk文件，并将它们保存到文件中
+    *名字。*/
     virtual void fieldVisualizeInPlaneXNormal 	(unsigned int ivtk) = 0;
 
-    /* Visualize the field as vtk files in a plane normal to y axis and save them to the file with the
-     * given name.											*/
+    /*将字段可视化为垂直于y轴的平面上的vtk文件，并将它们保存到文件中
+    *名字。*/
     virtual void fieldVisualizeInPlaneYNormal 	(unsigned int ivtk) = 0;
 
-    /* Visualize the field as vtk files in a plane normal to z axis and save them to the file with the
-     * given name.											*/
+    /*将字段可视化为垂直于z轴的平面上的vtk文件，并将它们保存到文件中
+    *名字。*/
     virtual void fieldVisualizeInPlaneZNormal 	(unsigned int ivtk) = 0;
 
-    /* Write the total profile of the field into the given file name.					*/
+    /*将字段的总概要文件写入给定的文件名中。*/
     virtual void fieldProfile () = 0;
 
-    /* Calculate the fields of a static undulator.							*/
+    /*计算静态波动器的场。*/
     void 	staticUndulator			(UpdateBunchParallel& ubp, typename std::vector<Undulator>::iterator& iter);
 
-    /* Calculate the fields of a plane-wave.								*/
+    /*计算平面波的场。*/
     template<class T>
     void 	planeWave			(UpdateBunchParallel& ubp, T& s);
 
-    /* Calculate the fields of a truncated plane-wave.							*/
+    /*计算截断平面波的场。*/
     template<class T>
     void 	planeWaveTruncated		(UpdateBunchParallel& ubp, T& s);
 
-    /* Calculate the fields of a gaussian beam.								*/
+    /*计算高斯光束的场。*/
     template<class T>
     void 	gaussianBeam			(UpdateBunchParallel& ubp, T& s);
 
-    /* Calculate the fields of a super-gaussian beam.						*/
+    /*计算超高斯光束的场。*/
     template<class T>
     void 	superGaussianBeam		(UpdateBunchParallel& ubp, T& s);
 
-    /* Calculate the fields of a standing plane wave.							*/
+    /*计算驻平面波的场。*/
     template<class T>
     void 	standingPlaneWave		(UpdateBunchParallel& ubp, T& s);
 
-    /* Calculate the fields of a truncated standing plane wave.						*/
+    /*计算截断驻平面波的场。*/
     template<class T>
     void 	standingPlaneWaveTruncated	(UpdateBunchParallel& ubp, T& s);
 
-    /* Calculate the fields of a standing gaussian beam.						*/
+    /*计算固定高斯光束的场。*/
     template<class T>
     void 	standingGaussianBeam		(UpdateBunchParallel& ubp, T& s);
 
-    /* Calculate the fields of a standing gaussian beam.						*/
+    /*计算固定高斯光束的场。*/
     template<class T>
     void 	standingSuperGaussianBeam	(UpdateBunchParallel& ubp, T& s);
 
 
     /****************************************************************************************************
-     * List of required parameters in the FdTd code.
-     ****************************************************************************************************/
+    * FdTd代码中所需参数的列表。
+    ****************************************************************************************************/
 
-    /* The parsed parameters for the simulation are written in four classes: mesh, bunch, seed, and
-     * undulator.											*/
+    /*仿真的解析参数分为四类：mesh， bunch, seed, and
+    *und。*/
     Mesh& 								mesh_;
     Bunch&								bunch_;
     Seed&								seed_;
@@ -226,121 +226,121 @@ namespace MITHRA
     std::vector<ExtField>&                                              extField_;
     std::vector<FreeElectronLaser>&					FEL_;
 
-    /* The vector potential at the nodes in the computational mesh at three different time points. The
-     * vector anp1_ is also used for storing the currents after the field shift is performed.		*/
+    /*计算网格中节点在三个不同时间点的矢量势。的
+    *矢量anp1_也用于存储场移位后的电流。*/
     std::vector<FieldVector<Double> >* 					anp1_;
     std::vector<FieldVector<Double> >* 					an_;
     std::vector<FieldVector<Double> >* 					anm1_;
 
-    /* The static potential at the nodes in the computational mesh at three different time points.	*/
+    /*计算网格中节点在三个不同时间点的静态电位。*/
     std::vector<Double>* 						fnp1_;
     std::vector<Double>* 						fn_;
     std::vector<Double>* 						fnm1_;
 
-    /* Boolean vector determining the inclusion of particles.                                           */
+    /*布尔向量决定粒子的包含。*/
     std::vector<bool>                                                   pic_;
 
-    /* The vector potential at the nodes in the computational mesh at three different time points.	*/
+    /*计算网格中节点在三个不同时间点的矢量势。*/
     std::vector<FieldVector<float> > 					en_;
     std::vector<FieldVector<float> > 					bn_;
 
-    /* Number of nodes in each direction.								*/
+    /*每个方向上的节点数。*/
     int									N0_, N1_, N2_, N1N0_;
 
-    /* total number of charges in the simulation.							*/
+    /*模拟中的电荷总数。*/
     unsigned int							Nc_;
 
-    /* Number of nodes along z in the specific processor and the index of the first column.		*/
+    /*特定处理器中沿z的节点数和第一列的索引。*/
     int									np_, k0_;
 
-    /* z coordinates of the critical points in the mesh partitioning.					*/
+    /*网格划分中关键点的Z坐标。*/
     Double								zp_ [2];
 
-    /* borders of the computational mesh.                                                               */
+    /*计算网格的边界。*/
     Double                                                              xmin_, xmax_;
     Double                                                              ymin_, ymax_;
     Double                                                              zmin_, zmax_;
 
-    /* Time and the time step number for the field calculations.					*/
+    /*字段计算的时间和时间步长数。*/
     Double								timep1_;
     Double								time_;
     Double								timem1_;
     unsigned int 							nTime_;
 
-    /* vector of charge structures containing the position and momentum of the charge points.		*/
+    /*电荷结构的矢量，包含电荷点的位置和动量。*/
     std::list<Charge>							chargeVectorn_;
 
-    /* Time and the time step number for the bunch calculations.					*/
+    /*时间和时间步长数的束计算。*/
     Double								timeBunch_;
     unsigned int 							nTimeBunch_;
 
-    /* Number of bunch updates within each field update.						*/
+    /*每个字段更新中的束更新数。*/
     Double 								nUpdateBunch_;
 
-    /* The gamma, beta and dt factor for the moving frame derived from the first undulator parameter.	*/
+    /*由第一个波动参数导出的运动帧的gamma， beta和dt因子。*/
     Double								gamma_;
     Double								beta_;
     Double								dt_;
 
-    /* The MPI datatype used for communicating charges.							*/
+    /*用于通信收费的MPI数据类型。*/
     MPI_Datatype 							MPI_CHARGE;
 
-    /* Define a structure containing the parameters needed to update the values. These parameters are
-     * defined once in the class to avoid declaring them every time a field is updated.			*/
+    /*定义一个包含更新值所需参数的结构。这些参数是
+    *在类中定义一次，以避免每次字段更新时都声明它们。*/
     UpdateField								uf_;
 
-    /* Define a structure containing the parameters needed to sample the fields the values. These
-     * parameters are defined once in the class to avoid declaring them every time a field is updated.	*/
+    /*定义一个结构，其中包含采样字段和值所需的参数。这些
+    *参数在类中定义一次，以避免每次字段更新时都声明它们。*/
     SampleField								sf_;
 
-    /* Define a structure containing the parameters needed to visualize the field profile. These
-     * parameters are defined once in the class to avoid declaring them every time a field is updated.	*/
+    /*定义一个结构，其中包含可视化字段配置文件所需的参数。这些
+    *参数在类中定义一次，以避免每次字段更新时都声明它们。*/
     std::vector<VisualizeField>						vf_;
 
-    /* Define a structure containing the parameters needed to save the field profile. These
-     * parameters are defined once in the class to avoid declaring them every time a field is updated.	*/
+    /*定义一个包含保存字段概要文件所需参数的结构。这些
+    *参数在类中定义一次，以避免每次字段更新时都声明它们。*/
     ProfileField							pf_;
 
-    /* Define a structure containing the parameters needed to update the bunch distribution. These
-     * parameters are defined once in the class to avoid declaring them every time a field is updated.	*/
+    /*定义一个包含更新束分布所需参数的结构。这些
+    *参数在类中定义一次，以避免每次字段更新时都声明它们。*/
     UpdateBunch						                ub_;
 
-    /* Define a structure containing the parameters needed to sample the bunch values. These parameters
-     * are defined once in the class to avoid declaring them every time a field is updated.		*/
+    /*定义一个结构，其中包含采样组值所需的参数。这些参数
+    *在类中只定义一次，以避免每次字段更新时都声明它们。*/
     SampleBunch								sb_;
 
-    /* Define a structure containing the parameters needed to visualize the bunch distribution. These
-     * parameters are defined once in the class to avoid declaring them every time a field is updated.	*/
+    /*定义一个包含可视化束分布所需参数的结构。这些
+    *参数在类中定义一次，以避免每次字段更新时都声明它们。*/
     VisualizeBunch							vb_;
 
-    /* Define a structure containing the parameters needed to save the bunch profile. These parameters
-     * are defined once in the class to avoid declaring them every time a field is updated.		*/
+    /*定义一个包含保存堆配置文件所需参数的结构。这些参数
+    *在类中只定义一次，以避免每次字段更新时都声明它们。*/
     ProfileBunch							pb_;
 
-    /* Define a structure containing the parameters needed to update the current. These parameters
-     * are defined once in the class to avoid declaring them every time a field is updated.		*/
+    /*定义一个结构，其中包含更新当前对象所需的参数。这些参数
+    *在类中只定义一次，以避免每次字段更新时都声明它们。*/
     UpdateCurrent						        uc_;
 
-    /* Define a structure containing the parameters needed to sample the FEL radiation power the values.
-     * These parameters are defined once in the class to avoid declaring them every time a field is
-     * updated.												*/
+    /*定义一个包含采样FEL辐射功率值所需参数的结构。
+    *这些参数在类中定义一次，以避免每次字段都声明它们
+    *更新。*/
     std::vector<SampleRadiationPower>				        rp_;
 
-    /* Define a structure containing the parameters needed to sample the FEL radiation power the values.
-     * These parameters are defined once in the class to avoid declaring them every time a field is
-     * updated.												*/
+    /*定义一个包含采样FEL辐射功率值所需参数的结构。
+    *这些参数在类中定义一次，以避免每次字段都声明它们
+    *更新。*/
     std::vector<SampleRadiationEnergy>				        re_;
 
-    /* Define a structure containing the parameters needed to store the particles hitting screens
-     * These parameters are defined once in the class to avoid declaring them every time a bunch is
-     * updated.												*/
+    /*定义一个结构，其中包含存储击中屏幕的粒子所需的参数
+    *这些参数在类中定义一次，以避免每次都声明它们
+    *更新。*/
     std::vector<SampleScreenProfile>				        scrp_;
 
-    /* Define the value of MPI variables.								*/
+    /*定义MPI变量的值。*/
     int									rank_, size_;
     int									rankB_, rankF_;
 
-    /* Speed of light value in terms of the given length-scale and time-scale.				*/
+    /*光速在给定的长度尺度和时间尺度下的值。*/
     Double								c0_, m0_, e0_;
   };
 

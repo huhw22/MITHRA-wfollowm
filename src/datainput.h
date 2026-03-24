@@ -1,6 +1,6 @@
 /********************************************************************************************************
- *  datainput.hh : Implementation of the parameter parser for the code
- *********************************************************************************************************/
+* datainput.hh：代码参数解析器的实现
+*********************************************************************************************************/
 
 #ifndef DATAINPUT_H_
 #define DATAINPUT_H_
@@ -17,14 +17,14 @@
 namespace MITHRA
 {
 
-  /* The class of functions used for reading the text file of parameters and parsing them to the darius
-   * solver.                                                                                            */
+  /*这类函数用于读取参数的文本文件并将其解析为大流士
+  *解决者。*/
   class ParseDarius
   {
 
   private:
 
-    /* The parameters and data files needed for parsing the values.                                     */
+    /*解析值所需的参数和数据文件。*/
     std::list<std::string>&		jobFile_;
     Mesh& 				mesh_;
     Bunch&				bunch_;
@@ -39,25 +39,25 @@ namespace MITHRA
 			 std::vector<Undulator>& undulator, std::vector<ExtField>& extField,
 			 std::vector<FreeElectronLaser>& FEL);
 
-    /* Read the parameters from the file and set all the parsed parameters for FEL simulation.         	*/
+    /*从文件中读取参数，并为FEL仿真设置所有解析参数。*/
     void setJobParameters ();
 
-    /* Read the parameters parsed for the mesh in the solver.                                    	*/
+    /*在求解器中读取为网格解析的参数。*/
     void readMesh 	(std::list <std::string>::iterator & iter);
 
-    /* Read the parameters parsed for the bunch in the darius solver.                     		*/
+    /*读取darius解算器中为一组解析的参数。*/
     void readBunch 	(std::list <std::string>::iterator & iter);
 
-    /* Read the parameters parsed for the seed in the darius solver.                               	*/
+    /*读取darius解算器中为种子解析的参数。*/
     void readField 	(std::list <std::string>::iterator & iter);
 
-    /* Read the parameters parsed for the mesh in the solver.                                    	*/
+    /*在求解器中读取为网格解析的参数。*/
     void readUndulator 	(std::list <std::string>::iterator & iter);
 
-    /* Read the parameters parsed for the seed in the darius solver.                                    */
+    /*读取darius解算器中为种子解析的参数。*/
     void readExtField 	(std::list <std::string>::iterator & iter);
 
-    /* Read the parameters parsed for the FEL output in the darius solver.                              */
+    /*读取在darius解算器中为FEL输出解析的参数。*/
     void readFEL 	(std::list <std::string>::iterator & iter);
   };
 }

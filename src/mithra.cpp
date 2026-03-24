@@ -12,6 +12,7 @@
  git add -u - git commit -m "message" - git push
  ********************************************************************************************************/
 
+
 #include <list>
 #include <mpi.h>
 #include <string>
@@ -32,49 +33,49 @@
 int main (int argc, char * (argv) [])
 {
 
-  /* initialize MPI, finalize is done automatically on exit                                             */
+  /*初始化MPI，退出时自动完成finalize*/
   MPI_Init(&argc,&argv);
 
-  /* Activate namespaces                                                                                */
+  /*激活名称空间*/
   using namespace MITHRA;
 
-  /* Retrieve time when we start the simulation.                                                        */
+  /*当我们开始模拟时检索时间。*/
   timeval simulationStart, simulationEnd;
   gettimeofday(&simulationStart, NULL);
 
   helloMessage();
 
-  /* Parse the command line options                                                                     */
+  /*解析命令行选项*/
   std::list<std::string> jobFile = read_file(argv[1]);
   cleanJobFile(jobFile);
 
-  /* Create the solver database.                                                                        */
+  /*创建求解器数据库。*/
   Mesh                                  mesh;
   mesh.initialize();
 
-  /* Create the bunch database.                                                                         */
+  /*创建集群数据库。*/
   Bunch                                 bunch;
 
-  /* Create the seed database.                                                                          */
+  /*创建种子数据库。*/
   Seed                                  seed;
 
-  /* Create the undulator database.                                                                     */
+  /*创建波动器数据库。*/
   std::vector<Undulator>                undulator;
   undulator.clear();
 
-  /* Create the external field database.                                                                */
+  /*创建外部字段数据库。*/
   std::vector<ExtField>                 extField;
   extField.clear();
 
-  /* Create the free electron laser database.                                                           */
+  /*创建自由电子激光数据库。*/
   std::vector<FreeElectronLaser>        FEL;
   FEL.clear();
 
-  /* Open input parameter parser and instantiate the databases.                                         */
+  /*打开输入参数解析器并实例化数据库。*/
   ParseDarius parser (jobFile, mesh, bunch, seed, undulator, extField, FEL);
   parser.setJobParameters();
 
-  /* Show the parameters for the simulation.                                                            */
+  /*显示模拟的参数。*/
   mesh.show();
   bunch.show();
   seed.show();
@@ -82,17 +83,17 @@ int main (int argc, char * (argv) [])
   for (unsigned int i = 0; i < undulator.size(); i++) 	undulator[i].show();
   for (unsigned int i = 0; i < extField.size();  i++) 	extField[i] .show();
 
-  /* Initialize the class for the FDTD computations.                                                    */
+  /*初始化用于FDTD计算的类。*/
   Solver *solver;
   if ( mesh.spaceCharge_ )
     solver = new FdTdSC (mesh, bunch, seed, undulator, extField, FEL);
   else
     solver = new FdTd (mesh, bunch, seed, undulator, extField, FEL);
 
-  /* Solve for the fields and the bunch distribution over the specified time.                           */
+  /*求解指定时间内的场和束分布。*/
   solver->solve();
 
-  /* Calculate the total simulation time.                                                               */
+  /*计算总模拟时间。*/
   gettimeofday(&simulationEnd, NULL);
   Double deltaTime = ( simulationEnd.tv_usec - simulationStart.tv_usec ) / 1.0e6;
   deltaTime += ( simulationEnd.tv_sec - simulationStart.tv_sec );

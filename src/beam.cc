@@ -1,6 +1,6 @@
 /********************************************************************************************************
- *  undulator.cpp : Implementation of the functions for calculation of external field
- ********************************************************************************************************/
+* undulator.cpp：实现计算外场的功能
+********************************************************************************************************/
 
 #include <string>
 #include <fstream>
@@ -10,7 +10,7 @@
 
 namespace MITHRA
 {
-  /* Calculate the fields of a static undulator.							*/
+  /*计算静态波动器的场。*/
   void Solver::staticUndulator(UpdateBunchParallel& ubp, typename std::vector<Undulator>::iterator& iter)
   {
     if ( ubp.lz >= 0.0 && ubp.lz <= iter->length_ * iter->lu_ )
@@ -75,14 +75,14 @@ namespace MITHRA
       }
   }
 
-  /* Calculate the fields of a plane-wave.								*/
+  /*计算平面波的场。*/
   template<class T>
   void Solver::planeWave(UpdateBunchParallel& ubp, T& s)
   {
-    /* Retrieve signal value at corrected time.                                               		*/
+    /*在校正时间检索信号值。*/
     ubp.tsignal = s.signal_.self(ubp.tl, ubp.p0);
 
-    /* Calculate the field only if the signal value is larger than a limit.                   		*/
+    /*仅当信号值大于限制时才计算该字段。*/
     if ( fabs(ubp.tsignal) < 1.0e-6 )
       {
 	ubp.eT = 0.0;
@@ -90,22 +90,22 @@ namespace MITHRA
 	return;
       }
 
-    /* Provide vector to store the electric field of the external field.                  		*/
+    /*提供矢量来存储外场的电场。*/
     ubp.eT.mv( s.amplitude_ * ubp.tsignal, s.polarization_ );
 
-    /* Provide vector to store the magnetic field of the external field.                  		*/
+    /*提供矢量来存储外场的磁场。*/
     ubp.bT = cross( s.direction_, s.polarization_ );
     ubp.bT.mv( s.amplitude_ * ubp.tsignal / c0_, ubp.bT );
   }
 
-  /* Calculate the fields of a truncated plane-wave.							*/
+  /*计算截断平面波的场。*/
   template<typename T>
   void Solver::planeWaveTruncated(UpdateBunchParallel& ubp, T& s)
   {
-    /* Retrieve signal value at corrected time.                                               		*/
+    /*在校正时间检索信号值。*/
     ubp.tsignal = s.signal_.self(ubp.tl, ubp.p0);
 
-    /* Calculate the field only if the signal value is larger than a limit.				*/
+    /*仅当信号值大于限制时才计算该字段。*/
     if ( fabs(ubp.tsignal) < 1.0e-6 )
       {
 	ubp.eT = 0.0;
@@ -113,12 +113,12 @@ namespace MITHRA
 	return;
       }
 
-    /* Calculate the transverse distance to the center line.   						*/
+    /*计算到中心线的横向距离。*/
     ubp.x  = ubp.rv * s.polarization_;
     ubp.yv = cross( s.direction_, s.polarization_ );
     ubp.y  = ubp.rv * ubp.yv;
 
-    /* Calculate the field only if the particle stays inside the truncated region.			*/
+    /*仅当粒子停留在截断区域内时才计算场。*/
     if ( pow(ubp.x/s.radius_[0],2) + pow(ubp.y/s.radius_[1],2) > 1.0 )
       {
 	ubp.eT = 0.0;
@@ -126,31 +126,31 @@ namespace MITHRA
 	return;
       }
 
-    /* Provide vector to store the electric field of the undulator.                       		*/
+    /*提供矢量来存储波动器的电场。*/
     ubp.eT.mv( s.amplitude_ * ubp.tsignal, s.polarization_ );
 
-    /* Provide vector to store the magnetic field of the undulator.                       		*/
+    /*提供矢量来存储波动器的磁场。*/
     ubp.bT = cross( s.direction_, s.polarization_ );
     ubp.bT.mv( s.amplitude_ * ubp.tsignal / c0_, ubp.bT );
   }
 
-  /* Calculate the fields of a gaussian beam.								*/
+  /*计算高斯光束的场。*/
   template<typename T>
   void Solver::gaussianBeam(UpdateBunchParallel& ubp, T& s)
   {
-    /* Calculate the transverse distance to the center line.                              		*/
+    /*计算到中心线的横向距离。*/
     ubp.x  = ubp.rv * s.polarization_;
     ubp.yv = cross( s.direction_, s.polarization_ );
     ubp.y  = ubp.rv * ubp.yv;
 
-    /* Calculate the relative radius of the beam.                 					*/
+    /*计算光束的相对半径。*/
     ubp.wrp = sqrt( 1.0 + ubp.z * ubp.z / ( s.zR_[0] * s.zR_[0] ) );
     ubp.wrs = sqrt( 1.0 + ubp.z * ubp.z / ( s.zR_[1] * s.zR_[1] ) );
 
     ubp.x0 = ubp.x / ubp.wrp;
     ubp.y0 = ubp.y / ubp.wrs;
 
-    /* Calculate the field only if the particle stays close enough to the center of the beam.		*/
+    /*只有当粒子离光束中心足够近时才计算场。*/
     if ( fabs(ubp.x0) > 4.0 * s.radius_[0] ||  fabs(ubp.y0) > 4.0 * s.radius_[1] )
       {
 	ubp.eT = 0.0;
@@ -158,10 +158,10 @@ namespace MITHRA
 	return;
       }
 
-    /* Retrieve signal value at corrected time.                                               		*/
+    /*在校正时间检索信号值。*/
     ubp.tsignal = s.signal_.self(ubp.tl, ubp.p0);
 
-    /* Calculate the field only if the signal value is larger than a limit.				*/
+    /*仅当信号值大于限制时才计算该字段。*/
     if ( fabs(ubp.tsignal) < 1.0e-6 )
       {
 	ubp.eT = 0.0;
@@ -169,17 +169,17 @@ namespace MITHRA
 	return;
       }
 
-    /* Get the required atan data.									*/
+    /*获取所需的数据。*/
     ubp.atanP = atan( ubp.z / s.zR_[0] );
     ubp.atanS = atan( ubp.z / s.zR_[1] );
 
-    /* Compute the transverse vector between the point and the reference point.           		*/
+    /*计算点和参考点之间的横向矢量。*/
     ubp.p0  = 0.5 * ( ubp.atanP + ubp.atanS ) - PI * ubp.z / s.l_ * ( pow( ubp.x0 / s.zR_[0] , 2 ) + pow( ubp.y0 / s.zR_[1] , 2 ) );
 
     ubp.t   = exp( - pow( ubp.x0/s.radius_[0], 2) - pow( ubp.y0/s.radius_[1], 2) ) / sqrt(ubp.wrs*ubp.wrp);
     ubp.t  *= s.amplitude_;
 
-    /* Retrieve signal value at corrected time.                                           		*/
+    /*在校正时间检索信号值。*/
     ubp.p1         = ubp.p0 - PI/2.0;
     ubp.tsignal    = s.signal_.self(ubp.tl, ubp.p1);
     ubp.ex.mv( ubp.t * ubp.tsignal,					s.polarization_ );
@@ -193,25 +193,25 @@ namespace MITHRA
     ubp.tsignal    = s.signal_.self(ubp.tl, ubp.p1);
     ubp.bz.mv( ubp.t * ( - ubp.y0 / s.zR_[1] ) / c0_ * ubp.tsignal, 	s.direction_);
 
-    /* Calculate the total electric and magnetic field.                                   		*/
+    /*计算总电场和磁场。*/
     ubp.eT = ubp.ex; ubp.eT += ubp.ez;
     ubp.bT = ubp.by; ubp.bT += ubp.bz;
   }
 
-  /* Calculate the fields of a standing gaussian beam.							*/
+  /*计算固定高斯光束的场。*/
   template<typename T>
   void Solver::superGaussianBeam(UpdateBunchParallel& ubp, T& s)
   {
-    /* Calculate the transverse distance to the center line.                              		*/
+    /*计算到中心线的横向距离。*/
     ubp.x  = ubp.rv * s.polarization_;
     ubp.yv = cross( s.direction_, s.polarization_ );
     ubp.y  = ubp.rv * ubp.yv;
 
-    /* Calculate the relative radius of the beam.                 					*/
+    /*计算光束的相对半径。*/
     ubp.wrp = sqrt( 1.0 + ubp.z * ubp.z / ( s.zR_[0] * s.zR_[0] ) );
     ubp.wrs = sqrt( 1.0 + ubp.z * ubp.z / ( s.zR_[1] * s.zR_[1] ) );
 
-    /* Calculate the field only if the particle stays close enough to the center of the beam.		*/
+    /*只有当粒子离光束中心足够近时才计算场。*/
     if ( ( fabs(ubp.x) - s.order_[0] * s.radius_[0] ) > 4.0 * s.radius_[0] * ubp.wrp ||
 	 ( fabs(ubp.y) - s.order_[1] * s.radius_[1] ) > 4.0 * s.radius_[1] * ubp.wrs )
       {
@@ -220,7 +220,7 @@ namespace MITHRA
 	return;
       }
 
-    /* Retrieve signal value at corrected time.                                               		*/
+    /*在校正时间检索信号值。*/
     ubp.tsignal  = s.signal_.self(ubp.tl,  ubp.p0);
 
     if ( fabs(ubp.tsignal) < 1.0e-6 )
@@ -230,21 +230,21 @@ namespace MITHRA
 	return;
       }
 
-    /* Get the required atan data.									*/
+    /*获取所需的数据。*/
     ubp.atanP = atan( ubp.z / s.zR_[0] );
     ubp.atanS = atan( ubp.z / s.zR_[1] );
 
-    /*  Calculate the effective amplitude.								*/
+    /*计算有效振幅。*/
     ubp.af = s.amplitude_ / sqrt(ubp.wrs*ubp.wrp);
 
-    /* Initialize the values for E and B fields.							*/
+    /*初始化E和B字段的值。*/
     ubp.ex = 0.0; ubp.ez = 0.0; ubp.bz = 0.0; ubp.by = 0.0;
 
-    /* Loop over elements of the super-gaussian beam and add their fields.				*/
+    /*循环超高斯光束的元素并添加它们的场。*/
     for ( int i = - s.order_[0]; i <= s.order_[0]; i++ )
       for ( int j = - s.order_[1]; j <= s.order_[1]; j++ )
 	{
-	  /* Compute the transverse vector between the point and the reference point.			*/
+	  /*计算点和参考点之间的横向矢量。*/
 	  ubp.x0 = ( ubp.x - i * s.radius_[0] ) / ubp.wrp;
 	  ubp.y0 = ( ubp.y - j * s.radius_[1] ) / ubp.wrs;
 
@@ -253,7 +253,7 @@ namespace MITHRA
 	  ubp.p0 = 0.5 * ( ubp.atanP + ubp.atanS ) - PI * ubp.z / s.l_ * ( pow( ubp.x0 / s.zR_[0] , 2 ) + pow( ubp.y / s.zR_[1] , 2 ) );
 	  ubp.t  = ubp.af * exp( - pow( ubp.x0 / s.radius_[0], 2) - pow( ubp.y0 / s.radius_[1], 2) );
 
-	  /* Retrieve signal value at corrected time.                                           	*/
+	  /*在校正时间检索信号值。*/
 	  ubp.p1         = ubp.p0 - PI/2.0;
 	  ubp.tsignal    = s.signal_.self(ubp.tl,  ubp.p1);
 
@@ -271,22 +271,22 @@ namespace MITHRA
 	  ubp.bz.pmv( ubp.t * ( - ubp.y0 / s.zR_[1] ) * ubp.tsignal / c0_,	s.direction_    );
 	}
 
-    /* Calculate the total electric and magnetic field.                                   		*/
+    /*计算总电场和磁场。*/
     ubp.eT = ubp.ex; ubp.eT += ubp.ez;
     ubp.bT = ubp.by; ubp.bT += ubp.bz;
   }
 
-  /* Calculate the fields of a standing plane wave.							*/
+  /*计算驻平面波的场。*/
   template<typename T>
   void Solver::standingPlaneWave(UpdateBunchParallel& ubp, T& s)
   {
-    /* Retrieve signal value at corrected time.                                               		*/
+    /*在校正时间检索信号值。*/
     ubp.tsignal  = s.signal_.self(ubp.tl,  ubp.p0);
     ubp.tsignalm = s.signal_.self(ubp.tlm, ubp.p0);
     ubp.tsignale = ubp.tsignal - ubp.tsignalm;
     ubp.tsignalb = ubp.tsignal + ubp.tsignalm;
 
-    /* Calculate the fields only if the signal value is larger than a limit.				*/
+    /*仅当信号值大于限制时才计算字段。*/
     if ( fabs(ubp.tsignale) < 1.0e-6 && fabs(ubp.tsignalb) < 1.0e-6 )
       {
 	ubp.eT = 0.0;
@@ -300,11 +300,11 @@ namespace MITHRA
     ubp.bT.mv( s.amplitude_ * ubp.tsignalb / c0_, ubp.bT );
   }
 
-  /* Calculate the fields of a truncated standing plane wave.						*/
+  /*计算截断驻平面波的场。*/
   template<typename T>
   void Solver::standingPlaneWaveTruncated(UpdateBunchParallel& ubp, T& s)
   {
-    /* Calculate the transverse distance to the center line.   						*/
+    /*计算到中心线的横向距离。*/
     ubp.x  = ubp.rv * s.polarization_;
     ubp.yv = cross( s.direction_, s.polarization_ );
     ubp.y  = ubp.rv * ubp.yv;
@@ -316,13 +316,13 @@ namespace MITHRA
 	return;
       }
 
-    /* Retrieve signal value at corrected time.                                               		*/
+    /*在校正时间检索信号值。*/
     ubp.tsignal  = s.signal_.self(ubp.tl,  ubp.p0);
     ubp.tsignalm = s.signal_.self(ubp.tlm, ubp.p0);
     ubp.tsignale = ubp.tsignal - ubp.tsignalm;
     ubp.tsignalb = ubp.tsignal + ubp.tsignalm;
 
-    /* Calculate the fields only if the signal value is larger than a limit.				*/
+    /*仅当信号值大于限制时才计算字段。*/
     if ( fabs(ubp.tsignale) < 1.0e-6 && fabs(ubp.tsignalb) < 1.0e-6 )
       {
 	ubp.eT = 0.0;
@@ -336,23 +336,23 @@ namespace MITHRA
     ubp.bT.mv( s.amplitude_ * ubp.tsignalb / c0_, ubp.bT );
   }
 
-  /* Calculate the fields of a standing gaussian beam.							*/
+  /*计算固定高斯光束的场。*/
   template<typename T>
   void Solver::standingGaussianBeam(UpdateBunchParallel& ubp, T& s)
   {
-    /* Calculate the transverse distance to the center line.                              		*/
+    /*计算到中心线的横向距离。*/
     ubp.x  = ubp.rv * s.polarization_;
     ubp.yv = cross( s.direction_, s.polarization_ );
     ubp.y  = ubp.rv * ubp.yv;
 
-    /* Calculate the relative radius of the beam.                 					*/
+    /*计算光束的相对半径。*/
     ubp.wrp = sqrt( 1.0 + ubp.z * ubp.z / ( s.zR_[0] * s.zR_[0] ) );
     ubp.wrs = sqrt( 1.0 + ubp.z * ubp.z / ( s.zR_[1] * s.zR_[1] ) );
 
     ubp.x0 = ubp.x / ubp.wrp;
     ubp.y0 = ubp.y / ubp.wrs;
 
-    /* Calculate the field only if the particle stays close enough to the center of the beam.		*/
+    /*只有当粒子离光束中心足够近时才计算场。*/
     if ( fabs(ubp.x0) > 4.0 * s.radius_[0] ||  fabs(ubp.y0) > 4.0 * s.radius_[1] )
       {
 	ubp.eT = 0.0;
@@ -360,7 +360,7 @@ namespace MITHRA
 	return;
       }
 
-    /* Retrieve signal value at corrected time.                                               		*/
+    /*在校正时间检索信号值。*/
     ubp.tsignal  = s.signal_.self(ubp.tl,  ubp.p0);
     ubp.tsignalm = s.signal_.self(ubp.tlm, ubp.p0);
     ubp.tsignale = ubp.tsignal - ubp.tsignalm;
@@ -373,17 +373,17 @@ namespace MITHRA
 	return;
       }
 
-    /* Get the required atan data.									*/
+    /*获取所需的数据。*/
     ubp.atanP = atan( ubp.z / s.zR_[0] );
     ubp.atanS = atan( ubp.z / s.zR_[1] );
 
-    /* Compute the transverse vector between the point and the reference point.           		*/
+    /*计算点和参考点之间的横向矢量。*/
     ubp.p0  = 0.5 * ( ubp.atanP + ubp.atanS ) - PI * ubp.z / s.l_ * ( pow( ubp.x0 / s.zR_[0] , 2 ) + pow( ubp.y0 / s.zR_[1] , 2 ) );
 
     ubp.t   = exp( - pow( ubp.x0/s.radius_[0], 2) - pow( ubp.y0/s.radius_[1], 2) ) / sqrt(ubp.wrs*ubp.wrp);
     ubp.t  *= s.amplitude_;
 
-    /* Retrieve signal value at corrected time.                                           		*/
+    /*在校正时间检索信号值。*/
     ubp.p1         = ubp.p0 - PI/2.0;
     ubp.tsignal    = s.signal_.self(ubp.tl,  ubp.p1);
     ubp.p1	   = ubp.p0 - PI/2.0;
@@ -403,25 +403,25 @@ namespace MITHRA
     ubp.tsignalm   = s.signal_.self(ubp.tlm, ubp.p1);
     ubp.bz.mv( ubp.t * ( - ubp.y0 / s.zR_[1] ) / c0_ * ( ubp.tsignal - ubp.tsignalm ), 	s.direction_ );
 
-    /* Calculate the total electric and magnetic field.                                   		*/
+    /*计算总电场和磁场。*/
     ubp.eT = ubp.ex; ubp.eT += ubp.ez;
     ubp.bT = ubp.by; ubp.bT += ubp.bz;
   }
 
-  /* Calculate the fields of a standing gaussian beam.							*/
+  /*计算固定高斯光束的场。*/
   template<typename T>
   void Solver::standingSuperGaussianBeam(UpdateBunchParallel& ubp, T& s)
   {
-    /* Calculate the transverse distance to the center line.                              		*/
+    /*计算到中心线的横向距离。*/
     ubp.x  = ubp.rv * s.polarization_;
     ubp.yv = cross( s.direction_, s.polarization_ );
     ubp.y  = ubp.rv * ubp.yv;
 
-    /* Calculate the relative radius of the beam.                 					*/
+    /*计算光束的相对半径。*/
     ubp.wrp = sqrt( 1.0 + ubp.z * ubp.z / ( s.zR_[0] * s.zR_[0] ) );
     ubp.wrs = sqrt( 1.0 + ubp.z * ubp.z / ( s.zR_[1] * s.zR_[1] ) );
 
-    /* Calculate the field only if the particle stays close enough to the center of the beam.		*/
+    /*只有当粒子离光束中心足够近时才计算场。*/
     if ( ( fabs(ubp.x) - s.order_[0] * s.radius_[0] ) > 4.0 * s.radius_[0] * ubp.wrp ||
 	( fabs(ubp.y) - s.order_[1] * s.radius_[1] ) > 4.0 * s.radius_[1] * ubp.wrs )
       {
@@ -430,7 +430,7 @@ namespace MITHRA
 	return;
       }
 
-    /* Retrieve signal value at corrected time.                                               		*/
+    /*在校正时间检索信号值。*/
     ubp.tsignal  = s.signal_.self(ubp.tl,  ubp.p0);
     ubp.tsignalm = s.signal_.self(ubp.tlm, ubp.p0);
     ubp.tsignale = ubp.tsignal - ubp.tsignalm;
@@ -443,21 +443,21 @@ namespace MITHRA
 	return;
       }
 
-    /* Get the required atan data.									*/
+    /*获取所需的数据。*/
     ubp.atanP = atan( ubp.z / s.zR_[0] );
     ubp.atanS = atan( ubp.z / s.zR_[1] );
 
-    /*  Calculate the effective amplitude.								*/
+    /*计算有效振幅。*/
     ubp.af = s.amplitude_ / sqrt(ubp.wrs*ubp.wrp);
 
-    /* Initialize the values for E and B fields.							*/
+    /*初始化E和B字段的值。*/
     ubp.ex = 0.0; ubp.ez = 0.0; ubp.bz = 0.0; ubp.by = 0.0;
 
-    /* Loop over elements of the super-gaussian beam and add their fields.				*/
+    /*循环超高斯光束的元素并添加它们的场。*/
     for ( int i = - s.order_[0]; i <= s.order_[0]; i++ )
       for ( int j = - s.order_[1]; j <= s.order_[1]; j++ )
 	{
-	  /* Compute the transverse vector between the point and the reference point.			*/
+	  /*计算点和参考点之间的横向矢量。*/
 	  ubp.x0 = ( ubp.x - i * s.radius_[0] ) / ubp.wrp;
 	  ubp.y0 = ( ubp.y - j * s.radius_[1] ) / ubp.wrs;
 
@@ -466,7 +466,7 @@ namespace MITHRA
 	  ubp.p0 = 0.5 * ( ubp.atanP + ubp.atanS ) - PI * ubp.z / ubp.l * ( pow( ubp.x0 / s.zR_[0] , 2 ) + pow( ubp.y / s.zR_[1] , 2 ) );
 	  ubp.t  = ubp.af * exp( - pow( ubp.x0 / s.radius_[0], 2) - pow( ubp.y0 / s.radius_[1], 2) );
 
-	  /* Retrieve signal value at corrected time.                                           	*/
+	  /*在校正时间检索信号值。*/
 	  ubp.p1         = ubp.p0 - PI/2.0;
 	  ubp.tsignal    = s.signal_.self(ubp.tl,  ubp.p1);
 	  ubp.p1	 = ubp.p0 - PI/2.0;
@@ -490,9 +490,9 @@ namespace MITHRA
 	  ubp.bz.pmv( ubp.t * ( - ubp.y0 / s.zR_[1] ) * ( ubp.tsignal - ubp.tsignalm ) / c0_,	s.direction_    	);
 	}
 
-    /* Calculate the total electric and magnetic field.                                   		*/
+    /*计算总电场和磁场。*/
     ubp.eT = ubp.ex; ubp.eT += ubp.ez;
     ubp.bT = ubp.by; ubp.bT += ubp.bz;
   }
 
-}       /* End of namespace MITHRA.                                                                    	*/
+}       /*名称空间MITHRA结束。*/

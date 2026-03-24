@@ -1,6 +1,6 @@
 /********************************************************************************************************
- *  datainput.cpp : Implementation of the functions to parse the parameters for the code
- ********************************************************************************************************/
+* datainput.cpp：实现了解析代码参数的函数
+********************************************************************************************************/
 
 #include "datainput.h"
 #include "readdata.h"
@@ -14,28 +14,28 @@ namespace MITHRA
       extField_ ( extField ), FEL_ ( FEL )
   {};
 
-  /* Read the parameters from the file and set all the parsed parameters for FEL simulation.         	*/
+  /*从文件中读取参数，并为FEL仿真设置所有解析参数。*/
   void ParseDarius::setJobParameters ()
   {
     std::list<std::string>::iterator iter = jobFile_.begin();
     do
       {
-	/* Parse the solver parameters.                                                           	*/
+	/*解析求解器参数。*/
 	if      (*iter == "MESH")		this->readMesh		( iter );
 
-	/* Parse the materials parameters.                                                         	*/
+	/*解析材料参数。*/
 	else if (*iter == "BUNCH")            	this->readBunch		( iter );
 
-	/* Parse the surfaces parameters.                                                         	*/
+	/*解析曲面参数。*/
 	else if (*iter == "FIELD")        	this->readField		( iter );
 
-	/* Parse the undulator parameters.                                                        	*/
+	/*解析波动器参数。*/
 	else if (*iter == "UNDULATOR")        	this->readUndulator	( iter );
 
-	/* Parse the external field parameters.                                                       	*/
+	/*解析外部字段参数。*/
 	else if (*iter == "EXTERNAL-FIELD")   	this->readExtField      ( iter );
 
-	/* Parse the FEL output parameters.                                                        	*/
+	/*解析FEL输出参数。*/
 	else if (*iter == "FEL-OUTPUT")       	this->readFEL		( iter );
 
 	else { std::cout << (*iter) << " is not a defined group." << std::endl; exit(1); }
@@ -45,7 +45,7 @@ namespace MITHRA
     while (iter != jobFile_.end());
   }
 
-  /* Read the parameters parsed for the mesh in the solver.                                    		*/
+  /*在求解器中读取为网格解析的参数。*/
   void ParseDarius::readMesh (std::list <std::string>::iterator & iter)
   {
     ++iter;
@@ -133,7 +133,7 @@ namespace MITHRA
     while (*iter != "}");
   }
 
-  /* Read the parameters parsed for the bunch in the darius solver.                     		*/
+  /*读取darius解算器中为一组解析的参数。*/
   void ParseDarius::readBunch (std::list <std::string>::iterator & iter)
   {
     ++iter;
@@ -141,7 +141,7 @@ namespace MITHRA
     else ++iter;
     do
       {
-	/* The data related to the bunch initialization are to be parsed.                            	*/
+	/*与堆初始化相关的数据将被解析。*/
 	if (*iter == "bunch-initialization")
 	  {
 	    ++iter;
@@ -208,11 +208,11 @@ namespace MITHRA
 	      }
 	    while (*iter != "}");
 
-	    /* Add the bunch to the set of bunches in the database.					*/
+	    /*将该束添加到数据库中的束集合中。*/
 	    (bunch_.bunchInit_).push_back(bunchInit);
 	  }
 
-	/* The data related to the bunch sampling are to be parsed.                          		*/
+	/*与群采样相关的数据将被解析。*/
 	else if (*iter == "bunch-sampling")
 	  {
 	    ++iter;
@@ -230,7 +230,7 @@ namespace MITHRA
 	    while (*iter != "}");
 	  }
 
-	/* The data related to the electron acceleration visualization are to be parsed.              */
+	/*与电子加速度可视化相关的数据将被解析。*/
 	else if (*iter == "bunch-visualization")
 	  {
 	    ++iter;
@@ -247,7 +247,7 @@ namespace MITHRA
 	      }
 	    while (*iter != "}");
 	  }
-	/* The data related to the field emission bunch report are to be parsed.                      */
+	/*对场发射束报告的相关数据进行解析。*/
 	else if (*iter == "bunch-profile")
 	  {
 	    ++iter;
@@ -271,7 +271,7 @@ namespace MITHRA
     while (*iter != "}");
   }
 
-  /* Read the parameters parsed for the seed in the darius solver.                               	*/
+  /*读取darius解算器中为种子解析的参数。*/
   void ParseDarius::readField (std::list <std::string>::iterator & iter)
   {
     ++iter;
@@ -279,7 +279,7 @@ namespace MITHRA
     else ++iter;
     do
       {
-	/* The data related to the seed initialization are to be parsed.                            	*/
+	/*与种子初始化相关的数据将被解析。*/
 	if (*iter == "field-initialization")
 	  {
 	    ++iter;
@@ -290,7 +290,7 @@ namespace MITHRA
 	    std::string			type, signalType;
 	    std::vector<Double>		position (3,0.0), direction (3,0.0), polarization (3,0.0), sigmaInvG (2,0.0);
 
-	    /* Initialize variables with values from class constructors.				*/
+	    /*用类构造函数的值初始化变量。*/
 	    Double                	amplitude = 0.0, offset = 0.0,
 					pulseLength = 0.0, wavelength = 0.0, cep = 0.0;
 	    unsigned int		nR = 2;
@@ -328,7 +328,7 @@ namespace MITHRA
 	    seed_.initialize(type, position, direction, polarization, amplitude, radius, order, signal);
 	  }
 
-	/* The data related to the seed sampling are to be parsed.                            	*/
+	/*要解析与种子抽样有关的数据。*/
 	else if (*iter == "field-sampling")
 	  {
 	    ++iter;
@@ -367,14 +367,14 @@ namespace MITHRA
 
 	  }
 
-	/* The data related to the seed visualization are to be parsed.                            	*/
+	/*与种子可视化相关的数据将被解析。*/
 	else if (*iter == "field-visualization")
 	  {
 	    ++iter;
 	    if (*iter != "{") { std::cout << "The seed-visualization directory is empty" << std::endl; exit(1); }
 	    else ++iter;
 
-	    /* Increase the size of the vtk vector in the ssed class by one;				*/
+	    /*将sed类中的vtk向量的大小增加1；*/
 	    unsigned int i = seed_.vtk_.size(); seed_.vtk_.resize(i+1);
 
 	    do
@@ -397,7 +397,7 @@ namespace MITHRA
 	    while (*iter != "}");
 	  }
 
-	/* The data related to the seed visualization are to be parsed.                            	*/
+	/*与种子可视化相关的数据将被解析。*/
 	else if (*iter == "field-profile")
 	  {
 	    ++iter;
@@ -423,7 +423,7 @@ namespace MITHRA
     while (*iter != "}");
   }
 
-  /* Read the parameters parsed for the mesh in the solver.                                    		*/
+  /*在求解器中读取为网格解析的参数。*/
   void ParseDarius::readUndulator (std::list <std::string>::iterator & iter)
   {
     ++iter;
@@ -431,7 +431,7 @@ namespace MITHRA
     else ++iter;
     do
       {
-	/* The data related to the static undulator are to be parsed.                            	*/
+	/*要分析与静态波动器有关的数据。*/
 	if (*iter == "static-undulator")
 	  {
 	    ++iter;
@@ -453,11 +453,11 @@ namespace MITHRA
 	      }
 	    while (*iter != "}");
 
-	    /* Add the given undulator to the undulator vector.					*/
+	    /*将给定的波动器添加到波动矢量中。*/
 	    undulator_.push_back(undulator);
 	  }
 
-	/* The data related to the static undulator are to be parsed.                            	*/
+	/*要分析与静态波动器有关的数据。*/
 	if (*iter == "static-undulator-array")
 	  {
 	    ++iter;
@@ -465,7 +465,7 @@ namespace MITHRA
 	    else ++iter;
 
 	    Undulator undulator;
-	    /* Initialize variables with default values from undulator constructor.			*/
+	    /*用波动器构造函数中的默认值初始化变量。*/
 	    Double k = undulator.k_, lu = undulator.lu_, theta = undulator.theta_, g = 0.0, t = 0.0, d = 0.0;
 	    unsigned int l = undulator.length_, N = 1;
 
@@ -484,10 +484,10 @@ namespace MITHRA
 	      }
 	    while (*iter != "}");
 
-	    /* Now add each undulator module to the array of undulators.				*/
+	    /*现在将每个波动器模块添加到波动器数组中。*/
 	    for (unsigned int i = 0; i < N; i++)
 	      {
-		/* First, calculate the values of the undulator module.				*/
+		/*首先，计算波动器模块的值。*/
 		undulator.type_ 	= STATIC;
 		undulator.k_  	= k + i * t;
 		undulator.lu_ 	= lu;
@@ -496,12 +496,12 @@ namespace MITHRA
 		undulator.rb_		= i * ( l * lu + g );
 		undulator.dist_	= d;
 
-		/* Now, add the undulator module ot the array of undulators.				*/
+		/*现在，将波动器模块添加到波动器数组中。*/
 		undulator_.push_back(undulator);
 	      }
 	  }
 
-	/* The data related to the optical undulator are to be parsed.                            	*/
+	/*要解析与光波动器有关的数据。*/
 	else if (*iter == "optical-undulator")
 	  {
 	    ++iter;
@@ -512,7 +512,7 @@ namespace MITHRA
 	    Undulator 		undulator; undulator.type_ = OPTICAL;
 	    std::string		type, signalType;
 
-	    /* Initialize variables with default variables from the constructor.			*/
+	    /*使用构造函数中的默认变量初始化变量。*/
 	    std::vector<Double>		position (3,0.0), direction (3,0.0), polarization (3,0.0), sigmaInvG (2,0.0);
 	    Double              	a0, offset, pulseLength, wavelength, cep;
 	    unsigned int		nR = 2;
@@ -558,7 +558,7 @@ namespace MITHRA
     while (*iter != "}");
   }
 
-  /* Read the parameters parsed for the seed in the darius solver.                                    	*/
+  /*读取darius解算器中为种子解析的参数。*/
   void ParseDarius::readExtField (std::list <std::string>::iterator & iter)
   {
     ++iter;
@@ -569,7 +569,7 @@ namespace MITHRA
 
     do
       {
-	/* The data related to the seed initialization are to be parsed.                              */
+	/*与种子初始化相关的数据将被解析。*/
 	if (*iter == "electromagnetic-wave")
 	  {
 	    ++iter;
@@ -628,7 +628,7 @@ namespace MITHRA
     while (*iter != "}");
   }
 
-  /* Read the parameters parsed for the FEL output in the darius solver.                              	*/
+  /*读取在darius解算器中为FEL输出解析的参数。*/
   void ParseDarius::readFEL (std::list <std::string>::iterator & iter)
   {
     ++iter;
@@ -636,7 +636,7 @@ namespace MITHRA
     else ++iter;
     do
       {
-	/* The data related to the seed initialization are to be parsed.                              */
+	/*与种子初始化相关的数据将被解析。*/
 	if (*iter == "radiation-power")
 	  {
 	    ++iter;
@@ -667,7 +667,7 @@ namespace MITHRA
 	    FEL_.push_back(FEL);
 	  }
 
-	/* The data related to the power visualization are to be parsed.                            	*/
+	/*与电源可视化相关的数据将被解析。*/
 	if (*iter == "power-visualization")
 	  {
 	    ++iter;
@@ -692,7 +692,7 @@ namespace MITHRA
 	    FEL_.push_back(FEL);
 	  }
 
-	/* The data related to the seed initialization are to be parsed.                            	*/
+	/*与种子初始化相关的数据将被解析。*/
 	if (*iter == "radiation-energy")
 	  {
 	    ++iter;
@@ -723,7 +723,7 @@ namespace MITHRA
 	    FEL_.push_back(FEL);
 	  }
 
-	/* The data related to the screen to measure bunch profile.                      		*/
+	/*相关数据用筛网测量束形。*/
 	if (*iter == "bunch-profile-lab-frame")
 	  {
 	    ++iter;

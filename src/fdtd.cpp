@@ -1,7 +1,7 @@
 /********************************************************************************************************
- *  fdtd.cpp : Implementation of the functions for real fdtd time marching solution class for the darius
- *  code
- ********************************************************************************************************/
+* fdtd.cpp：实现函数的实时时域解
+*代码
+********************************************************************************************************/
 
 #include "fdtd.h"
 
@@ -17,12 +17,12 @@ namespace MITHRA
   {};
 
   /******************************************************************************************************
-   * Reset the currents to zero.
-   ******************************************************************************************************/
+  *将电流复位为零。
+  ******************************************************************************************************/
 
   void FdTd::currentReset ()
   {
-    /* To reduce the requirements in memory consumption, we use the vector anp1 to store the currents.	*/
+    /*为了减少对内存消耗的要求，我们使用向量anp1来存储电流。*/
 
     Double*  jn = &(*anp1_)[0][0];
     Double*  je = &(*anp1_)[(long)N1N0_*np_-1][2];
@@ -32,25 +32,25 @@ namespace MITHRA
   }
 
   /******************************************************************************************************
-   * Update the currents at cell points for the filed update.
-   ******************************************************************************************************/
+  *更新单元格点的电流以进行字段更新。
+  ******************************************************************************************************/
 
   void FdTd::currentUpdate ()
   {
-    /* To reduce the requirements in memory consumption, we use the vector anp1 to store the currents.	*/
+    /*为了减少对内存消耗的要求，我们使用向量anp1来存储电流。*/
 
     FieldVector<Double>*	      jn   = &(*anp1_)[0];
     bool                              bp, bm;
     std::list<Charge>::iterator       it = chargeVectorn_.begin();
 
-    /* Now, a loop over the charges should be performed and the currents should be updated.           	*/
+    /*现在，应该在电荷上执行一个循环，并且应该更新电流。*/
     for (it = chargeVectorn_.begin(); it != chargeVectorn_.end(); it++)
       {
-	/* Find the current of the particle.                                                          	*/
+	/*求出粒子的电流。*/
 	uc_.rp  = it->rnp;
 	uc_.rm  = it->rnm;
 
-	/* Save the flag detecting that the particle is in the domain of the processor.               	*/
+	/*保存检测粒子在处理器域中的标志。*/
 	bp = (
 	    uc_.rp[0] < xmax_ - uc_.dx && uc_.rp[0] > xmin_ + uc_.dx &&
 	    uc_.rp[1] < ymax_ - uc_.dy && uc_.rp[1] > ymin_ + uc_.dy &&
@@ -60,23 +60,23 @@ namespace MITHRA
 	    uc_.rm[1] < ymax_ - uc_.dy && uc_.rm[1] > ymin_ + uc_.dy &&
 	    uc_.rm[2] < zp_[1]         && uc_.rm[2] >= zp_[0] );
 
-	/* Continue the loop if none of the above conditions are met.                                 	*/
+	/*如果以上条件都不满足，则继续循环。*/
 	if ( ! (bp || bm) ) continue;
 
-	/* Get the charge of the particle.                                                            	*/
+	/*得到粒子的电荷。*/
 	uc_.q = it->q;
 
-	/* Get the indices of the macro-particle in the next time step.                               	*/
+	/*得到下一个时间步长的宏观粒子的指数。*/
 	uc_.ip  = (int) floor( ( uc_.rp[0] - xmin_ ) / uc_.dx );
 	uc_.jp  = (int) floor( ( uc_.rp[1] - ymin_ ) / uc_.dy );
 	uc_.kp  = (int) floor( ( uc_.rp[2] - zmin_ ) / uc_.dz );
 
-	/* Get the indices of the macro-particle in the previous time-step.                           	*/
+	/*得到上一个时间步长的宏观粒子的指数。*/
 	uc_.im  = (int) floor( ( uc_.rm[0] - xmin_ ) / uc_.dx );
 	uc_.jm  = (int) floor( ( uc_.rm[1] - ymin_ ) / uc_.dy );
 	uc_.km  = (int) floor( ( uc_.rm[2] - zmin_ ) / uc_.dz );
 
-	/* Compute the relay point.                                                                   	*/
+	/*计算中继点。*/
 	uc_.r[0]  = std::min( std::min( uc_.im, uc_.ip ) * uc_.dx + uc_.dx + xmin_,
 			      std::max( std::max( uc_.im, uc_.ip ) * uc_.dx + xmin_, 0.5 * (uc_.rm[0] + uc_.rp[0]) ) );
 	uc_.r[1]  = std::min( std::min( uc_.jm, uc_.jp ) * uc_.dy + uc_.dy + ymin_,
@@ -84,23 +84,23 @@ namespace MITHRA
 	uc_.r[2]  = std::min( std::min( uc_.km, uc_.kp ) * uc_.dz + uc_.dz + zmin_,
 			      std::max( std::max( uc_.km, uc_.kp ) * uc_.dz + zmin_, 0.5 * (uc_.rm[2] + uc_.rp[2]) ) );
 
-	/* Compute the charge fluxes.                                                                 	*/
+	/*计算电荷通量。*/
 	uc_.jcm  = uc_.r;
 	uc_.jcm -= uc_.rm;
 	uc_.jcp  = uc_.rp;
 	uc_.jcp -= uc_.r;
 
-	/* If the charge is outside the computational domain stop the simulation.                     	*/
+	/*如果电荷在计算域之外，则停止模拟。*/
 	if ( bp )
 	  {
-	    /* Find the indices of the node whose current should be considered.                       	*/
+	    /*找出要考虑其电流的节点的索引。*/
 	    uc_.m   = N1N0_ * ( uc_.kp - k0_ ) + N1_ * uc_.ip + uc_.jp;
 
 	    uc_.dxp = modf( ( 0.5 * ( uc_.rp[0] + uc_.r[0] ) - xmin_ ) / uc_.dx , &uc_.c );
 	    uc_.dyp = modf( ( 0.5 * ( uc_.rp[1] + uc_.r[1] ) - ymin_ ) / uc_.dy , &uc_.c );
 	    uc_.dzp = modf( ( 0.5 * ( uc_.rp[2] + uc_.r[2] ) - zmin_ ) / uc_.dz , &uc_.c );
 
-	    /* Calculate the contributions to the currents of each vertex.                            	*/
+	    /*计算每个顶点对电流的贡献。*/
 	    uc_.x1  = 1.0 - uc_.dxp;
 	    uc_.x2  = uc_.dxp;
 	    uc_.y1  = 1.0 - uc_.dyp;
@@ -136,17 +136,17 @@ namespace MITHRA
 	    (*(jn+uc_.m+N1N0_+N1_+1))[2] += uc_.q * 0.5 * uc_.x2 * uc_.y2 * uc_.jcp[2];
 	  }
 
-	/* If the charge is outside the computational domain stop the simulation.                     	*/
+	/*如果电荷在计算域之外，则停止模拟。*/
 	if ( bm )
 	  {
-	    /* Find the indices of the node whose current should be considered.                       	*/
+	    /*找出要考虑其电流的节点的索引。*/
 	    uc_.m   = N1N0_ * ( uc_.km - k0_ ) + N1_ * uc_.im + uc_.jm;
 
 	    uc_.dxm = modf( ( 0.5 * ( uc_.rm[0] + uc_.r[0] ) - xmin_ ) / uc_.dx , &uc_.c );
 	    uc_.dym = modf( ( 0.5 * ( uc_.rm[1] + uc_.r[1] ) - ymin_ ) / uc_.dy , &uc_.c );
 	    uc_.dzm = modf( ( 0.5 * ( uc_.rm[2] + uc_.r[2] ) - zmin_ ) / uc_.dz , &uc_.c );
 
-	    /* Calculate the contributions to the currents of each vertex.                            	*/
+	    /*计算每个顶点对电流的贡献。*/
 	    uc_.x1  = 1.0 - uc_.dxm;
 	    uc_.x2  = uc_.dxm;
 	    uc_.y1  = 1.0 - uc_.dym;
@@ -185,19 +185,19 @@ namespace MITHRA
   }
 
   /******************************************************************************************************
-   * Communicate the currents among different processors.
-   ******************************************************************************************************/
+  *在不同的处理器之间传输电流。
+  ******************************************************************************************************/
 
   void FdTd::currentCommunicate ()
   {
-    /* To reduce the requirements in memory consumption, we use the vector anp1 to store the currents.	*/
+    /*为了减少对内存消耗的要求，我们使用向量anp1来存储电流。*/
 
     int                       	msgtag9 = 9;
     MPI_Status                	status;
     std::list<Charge>::iterator	it = chargeVectorn_.begin();
     Double			zr;
 
-    /* Add the contribution of each processor to the charge and current density at the boundaries.    	*/
+    /*将每个处理器对边界处电荷和电流密度的贡献相加。*/
     if (rank_ != 0)
       MPI_Send(&(*anp1_)[0][0],                                    3*N1N0_,MPI_DOUBLE,rank_-1,msgtag9, MPI_COMM_WORLD);
 
@@ -209,8 +209,8 @@ namespace MITHRA
 	  (*anp1_)[(np_-2)*N1N0_+i] += uc_.jt[i];
       }
 
-    /* Now that the charge and current densities are deposited, remove the out of domain charges from the
-     * list.                                                                                      	*/
+    /*现在电荷和电流密度已经沉积，从
+	*列表。*/
     it = chargeVectorn_.begin();
     while ( it != chargeVectorn_.end() )
       {
@@ -225,12 +225,12 @@ namespace MITHRA
   }
 
   /******************************************************************************************************
-   * Update the fields for one time-step
-   ******************************************************************************************************/
+  *更新一个时间步的字段
+  ******************************************************************************************************/
 
   void FdTd::fieldUpdate ()
   {
-    /* Define the values temporally needed for updating the fields.					*/
+    /*定义更新字段时临时需要的值。*/
     unsigned int 	i, j, k;
     long int            m, l;
     MPI_Status 		status;
@@ -258,15 +258,15 @@ namespace MITHRA
     const long int L10 = 3*(1-N1_+N1N0_);
     const long int L11 = 3*(1-N1_-N1N0_);
 
-    /* First set all the particle-in-cell flags equal to zero.						*/
+    /*首先将所有单元格中的粒子标记设置为零。*/
     std::vector<bool>::iterator  pn = pic_.begin();
     std::vector<bool>::iterator  pe = pic_.end();
     while ( pn != pe ) *(pn++) = false;
 
-    /* Loop over the points in the mesh and update the fields by one time step. Since, the time update
-     * for the points in the computational domain are different from the ones on the boundary, we will
-     * do a loop first on the internal points. After all of them are updated, the points on the boundary
-     * will be updated accordingly.									*/
+    /*循环遍历网格中的点并按一个时间步更新字段。自，时间更新
+	*对于计算域中的点与边界上的点不同，我们将
+	*在内部点上先做一个循环。在所有这些更新之后，边界上的点
+	*将相应更新。*/
     if ( mesh_.solver_ == NSFD )
       {
 	for (unsigned i = 1; i < uf_.N0m1; i++)
@@ -302,8 +302,8 @@ namespace MITHRA
 	      }
       }
 
-    /* If the amplitude of the seed exceeds a certain limit inject the seed into the computational domain
-     * through TF/SF boundaries.									*/
+    /*如果种子的振幅超过一定的极限，则将种子注入计算域
+	*通过TF/SF边界。*/
     if ( fabs(seed_.amplitude_) > 1.0e-50 )
       {
 	unsigned int KI = ( rank_ == 0         ) ? 2       : 1;
@@ -372,8 +372,8 @@ namespace MITHRA
 	  }
       }
 
-    /* Loop over the points in the mesh on the x = xmin boundary and update the fields using the first
-     * order absorbing boundary condition.								*/
+    /*在x = xmin边界上循环网格中的点，并使用第一个更新字段
+	*阶吸收边界条件。*/
     uf_.af.ufB_ = &uf_.bB[0];
     for (unsigned j = 1; j < uf_.N1m1; j++)
       for (unsigned k = 1; k < uf_.npm1; k++)
@@ -388,8 +388,8 @@ namespace MITHRA
 	      uf_.an  +l+L1,  	uf_.an  +l-L1);
 	}
 
-    /* Loop over the points in the mesh on the x = xmax boundary and update the fields using the first
-     * order absorbing boundary condition.								*/
+    /*在x = xmax边界上循环网格中的点，并使用第一个更新字段
+	*阶吸收边界条件。*/
     for (unsigned j = 1; j < uf_.N1m1; j++)
       for (unsigned k = 1; k < uf_.npm1; k++)
 	{
@@ -403,8 +403,8 @@ namespace MITHRA
 	      uf_.an  +l+L1,  	uf_.an  +l-L1 );
 	}
 
-    /* Loop over the points in the mesh on the y = ymin boundary and update the fields using the first
-     * order absorbing boundary condition.								*/
+    /*循环网格中y = ymin边界上的点，并使用第一个更新字段
+	*阶吸收边界条件。*/
     uf_.af.ufB_ = &uf_.cB[0];
     for (unsigned i = 1; i < uf_.N0m1; i++)
       for (unsigned k = 1; k < uf_.npm1; k++)
@@ -419,8 +419,8 @@ namespace MITHRA
 	      uf_.an  +l+L1,  	uf_.an  +l-L1);
 	}
 
-    /* Loop over the points in the mesh on the y = ymax boundary and update the fields using the first
-     * order absorbing boundary condition.								*/
+    /*循环网格中y = ymax边界上的点，并使用第一个更新字段
+	*阶吸收边界条件。*/
     for (unsigned i = 1; i < uf_.N0m1; i++)
       for (unsigned k = 1; k < uf_.npm1; k++)
 	{
@@ -434,8 +434,8 @@ namespace MITHRA
 	      uf_.an  +l+L1,  	uf_.an  +l-L1);
 	}
 
-    /* Loop over the points in the mesh on the z = zmin boundary and update the fields using the first
-     * order absorbing boundary condition.								*/
+    /*在z = zmin边界上循环网格中的点，并使用第一个更新字段
+	*阶吸收边界条件。*/
     uf_.af.ufB_ = &uf_.dB[0];
     if ( rank_ == 0 )
       {
@@ -453,8 +453,8 @@ namespace MITHRA
 	    }
       }
 
-    /* Loop over the points in the mesh on the z = zmax boundary and update the fields using the first
-     * order absorbing boundary condition.								*/
+    /*在z = zmax边界上循环网格中的点，并使用第一个更新字段
+	*阶吸收边界条件。*/
     if (rank_ == size_ - 1)
       {
 	for (unsigned i = 1; i < uf_.N0m1; i++)
@@ -474,9 +474,9 @@ namespace MITHRA
     if ( mesh_.truncationOrder_ == 2 )
       {
 
-	/* Loop over the edge points in the mesh on the x = (xmin,xmax) and y = (ymin,ymax) boundary
-	 * and update the fields using the first order absorbing boundary condition. To understand
-	 * the following lines of codes, it is better to list the values of Li at the side.		*/
+	/*循环网格中x = (xmin,xmax)和y = (ymin,ymax)边界上的边缘点
+	*并使用一阶吸收边界条件更新字段。理解
+	*下面几行代码，最好在旁边列出Li的值。*/
 	uf_.af.ufB_ = &uf_.eE[0];
 	for (unsigned k = 1; k < uf_.npm1; k++)
 	  {
@@ -521,9 +521,9 @@ namespace MITHRA
 		uf_.an  +l+L1,		uf_.an+l-L3,	uf_.an  +l-L5,	uf_.an+l-L9);
 	  }
 
-	/* Loop over the edge points in the mesh on the z = (zmin,zmax) and y = (ymin,ymax) boundary and
-	 * update the fields using the first order absorbing boundary condition. To understand the
-	 * following lines of codes, it is better to list the values of Li at the side.			*/
+	/*循环网格中z = (zmin,zmax)和y = (ymin,ymax)边界上的边缘点和
+	*使用一阶吸收边界条件更新场。要了解
+	*在代码行之后，最好在旁边列出Li的值。*/
 	uf_.af.ufB_ = &uf_.fE[0];
 	for (unsigned i = 1; i < uf_.N0m1; i++)
 	  {
@@ -574,9 +574,9 @@ namespace MITHRA
 	      }
 	  }
 
-	/* Loop over the edge points in the mesh on the z = (zmin,zmax) and x = (xmin,xmax) boundary and
-	 * update the fields using the first order absorbing boundary condition. To understand the
-	 * following lines of codes, it is better to list the values of Li at the side.			*/
+	/*循环网格中z = (zmin,zmax)和x = (xmin,xmax)边界上的边缘点和
+	*使用一阶吸收边界条件更新场。要了解
+	*在代码行之后，最好在旁边列出Li的值。*/
 	uf_.af.ufB_ = &uf_.gE[0];
 	for (unsigned j = 1; j < uf_.N1m1; j++)
 	  {
@@ -627,7 +627,7 @@ namespace MITHRA
 	      }
 	  }
 
-	/* Now update the fields of the eight corners in the computational domain.			*/
+	/*现在更新计算域中八个角的字段。*/
 	uf_.af.ufB_ = &uf_.hC[0];
 	if ( rank_ == 0 )
 	  {
@@ -724,7 +724,7 @@ namespace MITHRA
 	  }
       }
 
-    /* Communicate the calculated fields throughout the processors.					*/
+    /*在整个处理器中通信计算字段。*/
     if (rank_ != size_ - 1)
       MPI_Send(uf_.anp1+3*(np_-2)*N1N0_, 	3*N1N0_,MPI_DOUBLE,rank_+1,msgtag1,MPI_COMM_WORLD);
 
@@ -737,20 +737,20 @@ namespace MITHRA
     if (rank_ != size_ - 1)
       MPI_Recv(uf_.anp1+3*(np_-1)*N1N0_,	3*N1N0_,MPI_DOUBLE,rank_+1,msgtag3,MPI_COMM_WORLD,&status);
 
-    /* Now that A and phi quantities are updated, calculate E and B at boundary grid points for later
-     * acceleration and power measurement.								*/
+    /*现在更新了A和phi量，计算边界网格点的E和B以供稍后使用
+	*加速度和功率测量。*/
     for (unsigned i = 1; i < uf_.N0m1; i++)
       for (unsigned j = 1; j < uf_.N1m1; j++)
 	{
 	  m = N1N0_ + N1_ * i + j;
 
-	  /* Evaluate the field at this pixel.                                                        	*/
+	  /*计算这个像素处的场。*/
 	  fieldEvaluate(m);
 
-	  /* Set the boolean flag for this pixel and the one before it to true.                       	*/
+	  /*为这个像素和它之前的像素设置布尔标志为true。*/
 	  pic_[m-N1N0_] = true;
 
-	  /* For the left boundary (z=zmin) just set the fields equal to the next z-plane.		*/
+	  /*对于左边界（z=zmin），只需将场设置为下一个z平面。*/
 	  if ( rank_ == 0 )
 	    {
 	      en_[m-N1N0_] = en_[m];
@@ -759,13 +759,13 @@ namespace MITHRA
 
 	  m = N1N0_ * ( np_ - 2 ) + N1_ * i + j;
 
-	  /* Evaluate the field at this pixel.                                                        	*/
+	  /*计算这个像素处的场。*/
 	  fieldEvaluate(m);
 
-	  /* Set the boolean flag for this pixel and the one in front of it to true.                  	*/
+	  /*为这个像素和它前面的像素设置布尔标志为true。*/
 	  pic_[m+N1N0_] = true;
 
-	  /* For the right boundary (z=zmax) just set the fields equal to the previous z-plane.		*/
+	  /*对于右边界（z=zmax），只需将字段设置为与之前的z平面相等。*/
 	  if ( rank_ == size_ - 1 )
 	    {
 	      en_[m+N1N0_] = en_[m];
@@ -773,7 +773,7 @@ namespace MITHRA
 	    }
 	}
 
-    /* Communicate the calculated fields throughout the processors.					*/
+    /*在整个处理器中通信计算字段。*/
     if (rank_ != size_ - 1)
       {
 	MPI_Send(uf_.en+3*(np_-2)*N1N0_, 	3*N1N0_,MPI_FLOAT,rank_+1,msgtag5,MPI_COMM_WORLD);
@@ -800,8 +800,8 @@ namespace MITHRA
   }
 
   /******************************************************************************************************
-   * Shift computed fields and the time points for the fields.
-   ******************************************************************************************************/
+  *移动计算字段和字段的时间点。
+  ******************************************************************************************************/
 
   void FdTd::fieldShift ()
   {
@@ -812,16 +812,16 @@ namespace MITHRA
   }
 
   /******************************************************************************************************
-   * Evaluate the field of the m'th pixel from the potentials.
-   ******************************************************************************************************/
+  *从电位中评估第m个像素的场。
+  ******************************************************************************************************/
 
   void FdTd::fieldEvaluate (long int m)
   {
-    /* Calculate the electric field.                                                                  	*/
+    /*计算电场。*/
     en_[m].dv ( - uf_.dt, (*anp1_)[m] );
     en_[m].mdv( - uf_.dt, (*an_)  [m] );
 
-    /* Calculate the magnetic field.                                                                  	*/
+    /*计算磁场。*/
     bn_[m][0] = 0.5 * (
 	( *(uf_.an  +3*(m+1    )+2 ) - *(uf_.an  +3*(m-1    )+2  ) ) / uf_.dy2 -
 	( *(uf_.an  +3*(m+N1N0_)+1 ) - *(uf_.an  +3*(m-N1N0_)+1  ) ) / uf_.dz2 +
@@ -840,32 +840,32 @@ namespace MITHRA
 	( *(uf_.anp1+3*(m+N1_  )+1 ) - *(uf_.anp1+3*(m-N1_  )+1  ) ) / uf_.dx2 -
 	( *(uf_.anp1+3*(m+1    )   ) - *(uf_.anp1+3*(m-1    )    ) ) / uf_.dy2 );
 
-    /* Set the boolean flag of this pixel to true.                                                    	*/
+    /*将该像素的布尔标志设置为true。*/
     pic_[m] = true;
   }
 
   /******************************************************************************************************
-   * Sample the field and save it to the given file.
-   ******************************************************************************************************/
+  *采样字段并将其保存到给定的文件。
+  ******************************************************************************************************/
 
   void FdTd::fieldSample ()
   {
 
-    /* Do the field sampling if and only if sampling points are residing within this processor range.	*/
+    /*当且仅当采样点位于此处理器范围内时，执行字段采样。*/
     if ( sf_.N > 0 )
       {
 	( *(sf_.file) ).setf(std::ios::scientific);
 	( *(sf_.file) ).precision(4);
 
-	/* Write time into the first column.                                                       	*/
+	/*把时间写在第一列。*/
 	*(sf_.file) << time_ * gamma_ << "\t";
 
 	for (unsigned int n = 0; n < sf_.N; ++n)
 	  {
-	    /* Get the position of the sampling point.							*/
+	    /*得到采样点的位置。*/
 	    sf_.position 	= seed_.samplingPosition_[n];
 
-	    /* Get the indices of the sampling point.							*/
+	    /*得到采样点的指数。*/
 	    sf_.dxr = modf( ( sf_.position[0] - xmin_ ) / mesh_.meshResolution_[0] , &sf_.c1);
 	    sf_.i   = (int) sf_.c1;
 	    sf_.dyr = modf( ( sf_.position[1] - ymin_ ) / mesh_.meshResolution_[1] , &sf_.c1);
@@ -874,7 +874,7 @@ namespace MITHRA
 	    sf_.k   = (int) sf_.c1;
 	    sf_.m   = ( sf_.k - k0_ ) * N1N0_ + sf_.i * N1_ + sf_.j;
 
-	    /* Calculate the fields to find the values at the sampling point.				*/
+	    /*计算字段以找到采样点处的值。*/
 	    if (!pic_[sf_.m            ])     fieldEvaluate(sf_.m            );
 	    if (!pic_[sf_.m+N1_        ])     fieldEvaluate(sf_.m+N1_        );
 	    if (!pic_[sf_.m+1          ])     fieldEvaluate(sf_.m+1          );
@@ -884,7 +884,7 @@ namespace MITHRA
 	    if (!pic_[sf_.m+N1N0_+1    ])     fieldEvaluate(sf_.m+N1N0_+1    );
 	    if (!pic_[sf_.m+N1N0_+N1_+1])     fieldEvaluate(sf_.m+N1N0_+N1_+1);
 
-	    /* Calculate and interpolate the electric field to find the value at the sampling point.	*/
+	    /*计算并插值电场，求出采样点处的值。*/
 	    sf_.et.mv ((1.0 - sf_.dxr) * (1.0 - sf_.dyr)   * (1.0 - sf_.dzr), en_[sf_.m]);
 	    sf_.et.pmv(sf_.dxr         * (1.0 - sf_.dyr)   * (1.0 - sf_.dzr), en_[sf_.m+N1_]);
 	    sf_.et.pmv((1.0 - sf_.dxr) * sf_.dyr           * (1.0 - sf_.dzr), en_[sf_.m+1]);
@@ -894,7 +894,7 @@ namespace MITHRA
 	    sf_.et.pmv((1.0 - sf_.dxr) * sf_.dyr           * sf_.dzr,         en_[sf_.m+N1N0_+1]);
 	    sf_.et.pmv(sf_.dxr         * sf_.dyr           * sf_.dzr,         en_[sf_.m+N1N0_+N1_+1]);
 
-	    /* Calculate and interpolate the magnetic field to find its value at the sampling point.	*/
+	    /*计算并插值磁场，求其在采样点处的值。*/
 	    sf_.bt.mv ((1.0 - sf_.dxr) * (1.0 - sf_.dyr)   * (1.0 - sf_.dzr), bn_[sf_.m]);
 	    sf_.bt.pmv(sf_.dxr         * (1.0 - sf_.dyr)   * (1.0 - sf_.dzr), bn_[sf_.m+N1_]);
 	    sf_.bt.pmv((1.0 - sf_.dxr) * sf_.dyr           * (1.0 - sf_.dzr), bn_[sf_.m+1]);
@@ -913,12 +913,12 @@ namespace MITHRA
 	    sf_.at.pmv((1.0 - sf_.dxr) * sf_.dyr           * sf_.dzr,         (*an_)[sf_.m+N1N0_+1]);
 	    sf_.at.pmv(sf_.dxr         * sf_.dyr           * sf_.dzr,         (*an_)[sf_.m+N1N0_+N1_+1]);
 
-	    /* Write the coordinates in the next column.						*/
+	    /*写下下一列的坐标。*/
 	    *(sf_.file) << sf_.position[0] << "\t";
 	    *(sf_.file) << sf_.position[1] << "\t";
 	    *(sf_.file) << sf_.position[2] << "\t";
 
-	    /* Write the fields in the next columns.							*/
+	    /*写下下一列中的字段。*/
 	    for (unsigned int i = 0; i < seed_.samplingField_.size(); i++)
 	      {
 		if 		( seed_.samplingField_[i] == Ex )
@@ -944,27 +944,27 @@ namespace MITHRA
 	      }
 	  }
 
-	/* Take the file cursor to the next line.							*/
+	/*将文件光标移到下一行。*/
 	*(sf_.file) << std::endl;
       }
   }
 
   /******************************************************************************************************
-   * Visualize the field as vtk files on the whole domain and save them to the file with given name.
-   ******************************************************************************************************/
+  *可视化的领域作为vtk文件在整个领域，并将其保存到文件与给定的名称。
+  ******************************************************************************************************/
 
   void FdTd::fieldVisualizeAllDomain (unsigned int ivtk)
   {
     long int			m;
 
-    /* The old files if existing should be deleted.                                          		*/
+    /*旧文件如果存在，应该删除。*/
     vf_[ivtk].fileName = seed_.vtk_[ivtk].basename_ + "-p" + stringify(rank_) + "-" + stringify(nTime_) + VTS_FILE_SUFFIX;
     (vf_[ivtk].file) = new std::ofstream(vf_[ivtk].fileName.c_str(),std::ios::trunc);
 
     vf_[ivtk].file->setf(std::ios::scientific);
     vf_[ivtk].file->precision(4);
 
-    /* Calculate the field to be visualized in the vtk files.						*/
+    /*计算要在vtk文件中可视化的字段。*/
     for (int k = 0; k < np_; k++ )
       for (int j = 1; j < N1_-1; j++)
 	for (int i = 1; i < N0_-1; i++)
@@ -987,7 +987,7 @@ namespace MITHRA
 	      }
 	  }
 
-    /* Write the initial data for the vtk file.                                                       	*/
+    /*为vtk文件写入初始数据。*/
     *vf_[ivtk].file << "<?xml version=\"1.0\"?>"							<< std::endl;
     *vf_[ivtk].file << "<VTKFile type=\"StructuredGrid\" version=\"0.1\" byte_order=\"LittleEndian\" "
 	"compressor=\"vtkZLibDataCompressor\">" 							<< std::endl;
@@ -998,7 +998,7 @@ namespace MITHRA
 	k0_ << " " << k0_ + np_ - 2 + ( (rank_ == size_ - 1) ? 1 : 0 )
 	<< "\">"											<< std::endl;
 
-    /* Insert the coordinates of the grid for the charge points.                                      	*/
+    /*插入充电点的网格坐标。*/
     *vf_[ivtk].file << "<Points>"                                                                	<< std::endl;
     *vf_[ivtk].file << "<DataArray type = \"Float64\" NumberOfComponents=\"3\" format=\"ascii\">"	<< std::endl;
     FieldVector<Double> r (0.0);
@@ -1013,11 +1013,11 @@ namespace MITHRA
     *vf_[ivtk].file << "</DataArray>"                                                       		<< std::endl;
     *vf_[ivtk].file << "</Points>"                                                         		<< std::endl;
 
-    /* Insert each cell data into the vtk file.                                            		*/
+    /*将每个单元格数据插入到vtk文件中。*/
     *vf_[ivtk].file << "<CellData>"                                                        		<< std::endl;
     *vf_[ivtk].file << "</CellData>"                                                          	<< std::endl;
 
-    /* Insert the point data based on the computed electric field.					*/
+    /*根据计算的电场插入点数据。*/
     *vf_[ivtk].file << "<PointData Vectors = \"field\">"                                    		<< std::endl;
     *vf_[ivtk].file << "<DataArray type=\"Float64\" Name=\"field\" NumberOfComponents=\"" << seed_.vtk_[ivtk].field_.size() << "\" format=\"ascii\">"
 	<< std::endl;
@@ -1036,18 +1036,18 @@ namespace MITHRA
     *vf_[ivtk].file << "</StructuredGrid>"                                                    	<< std::endl;
     *vf_[ivtk].file << "</VTKFile>"                                                         		<< std::endl;
 
-    /* Close the file.                                                                      		*/
+    /*关闭文件。*/
     (*vf_[ivtk].file).close();
 
-    /* Write the file connecting the parallel files.							*/
+    /*写入连接并行文件的文件。*/
 
     if ( rank_ == 0)
       {
-	/* Add the vtk suffix and the number of the vtk file to the file name.                     	*/
+	/*在文件名后加上vtk后缀和vtk文件编号。*/
 	vf_[ivtk].fileName = seed_.vtk_[ivtk].basename_ + "-" + stringify(nTime_) + PTS_FILE_SUFFIX;
 	unsigned int k0, np;
 
-	/* It is assumed that all the files in the directory are deleted before running the code.    	*/
+	/*假设在运行代码之前删除了目录中的所有文件。*/
 	vf_[ivtk].file = new std::ofstream(vf_[ivtk].fileName.c_str(),std::ios::trunc);
 
 	*vf_[ivtk].file << "<?xml version=\"1.0\"?>"							<< std::endl;
@@ -1055,7 +1055,7 @@ namespace MITHRA
 	*vf_[ivtk].file << "<PStructuredGrid WholeExtent=\"0 " << N0_-1 << " 0 " << N1_-1 << " 0 "  <<
 	    N2_-1 << "\" GhostLevel = \"0\" >"                                    			<< std::endl;
 
-	/* Insert the coordinates of the grid for the charge cloud.                            		*/
+	/*插入电荷云的网格坐标。*/
 	*vf_[ivtk].file << "<PPoints>"                                                          	<< std::endl;
 	*vf_[ivtk].file << "<DataArray type = \"Float64\" NumberOfComponents=\"3\" format=\"ascii\" />"	<< std::endl;
 	*vf_[ivtk].file << "</PPoints>"                                                             	<< std::endl;
@@ -1067,7 +1067,7 @@ namespace MITHRA
 
 	for (int i = 0; i < size_; ++i)
 	  {
-	    /* Evaluate the number of nodes in each processor.						*/
+	    /*评估每个处理器中的节点数量。*/
 	    if ( size_ > 1 )
 	      {
 		if ( i == 0 )
@@ -1100,14 +1100,14 @@ namespace MITHRA
 	*vf_[ivtk].file << "</PStructuredGrid>"                                                     	<< std::endl;
 	*vf_[ivtk].file << "</VTKFile>"                                                             	<< std::endl;
 
-	/* Close the file.										*/
+	/*关闭文件。*/
 	(*vf_[ivtk].file).close();
       }
   }
 
   /******************************************************************************************************
-   * Visualize the field as vtk files in plane and save them to the file with the given name.
-   ******************************************************************************************************/
+  *可视化领域的vtk文件在平面上，并将其保存到文件与给定的名称。
+  ******************************************************************************************************/
 
   void FdTd::fieldVisualizeInPlane (unsigned int ivtk)
   {
@@ -1121,9 +1121,9 @@ namespace MITHRA
   }
 
   /******************************************************************************************************
-   * Visualize the field as vtk files in a plane normal to x axis and save them to the file with the
-   * given name.
-   ******************************************************************************************************/
+  *将字段可视化为vtk文件，在平面上垂直于x轴，并将它们保存到文件中
+  *名字。
+  ******************************************************************************************************/
 
   void FdTd::fieldVisualizeInPlaneXNormal (unsigned int ivtk)
   {
@@ -1131,18 +1131,18 @@ namespace MITHRA
     long int			m;
     Double			dxr, c;
 
-    /* The old files if existing should be deleted.                                          		*/
+    /*旧文件如果存在，应该删除。*/
     vf_[ivtk].fileName = seed_.vtk_[ivtk].basename_ + "-p" + stringify(rank_) + "-" + stringify(nTime_) + VTS_FILE_SUFFIX;
     (vf_[ivtk].file) = new std::ofstream(vf_[ivtk].fileName.c_str(),std::ios::trunc);
 
     vf_[ivtk].file->setf(std::ios::scientific);
     vf_[ivtk].file->precision(4);
 
-    /* Calculate the index of the cell at which the plane resides.					*/
+    /*计算平面所在单元格的索引。*/
     dxr = modf( ( seed_.vtk_[ivtk].position_[0] - xmin_ ) / mesh_.meshResolution_[0] , &c);
     i   = (int) c;
 
-    /* Calculate the field to be visualized in the vtk files.						*/
+    /*计算要在vtk文件中可视化的字段。*/
     for (int k = 0; k < np_; k++ )
       for (int j = 1; j < N1_-1; j++)
 	{
@@ -1166,7 +1166,7 @@ namespace MITHRA
 	    }
 	}
 
-    /* Write the initial data for the vtk file.                                                       	*/
+    /*为vtk文件写入初始数据。*/
     *vf_[ivtk].file << "<?xml version=\"1.0\"?>"							<< std::endl;
     *vf_[ivtk].file << "<VTKFile type=\"StructuredGrid\" version=\"0.1\" byte_order=\"LittleEndian\" "
 	"compressor=\"vtkZLibDataCompressor\">" 							<< std::endl;
@@ -1177,7 +1177,7 @@ namespace MITHRA
 	k0_ << " " << k0_ + np_ - 2 + ( (rank_ == size_ - 1) ? 1 : 0 )
 	<< "\">"											<< std::endl;
 
-    /* Insert the coordinates of the grid for the charge points.                                      	*/
+    /*插入充电点的网格坐标。*/
     *vf_[ivtk].file << "<Points>"                                                                	<< std::endl;
     *vf_[ivtk].file << "<DataArray type = \"Float64\" NumberOfComponents=\"3\" format=\"ascii\">"	<< std::endl;
     FieldVector<Double> r1 (0.0), r2 (0.0);
@@ -1191,11 +1191,11 @@ namespace MITHRA
     *vf_[ivtk].file << "</DataArray>"                                                       		<< std::endl;
     *vf_[ivtk].file << "</Points>"                                                         		<< std::endl;
 
-    /* Insert each cell data into the vtk file.                                            		*/
+    /*将每个单元格数据插入到vtk文件中。*/
     *vf_[ivtk].file << "<CellData>"                                                        		<< std::endl;
     *vf_[ivtk].file << "</CellData>"                                                          	<< std::endl;
 
-    /* Insert the point data based on the computed electric field.					*/
+    /*根据计算的电场插入点数据。*/
     *vf_[ivtk].file << "<PointData Vectors = \"field\">"                                    	<< std::endl;
     *vf_[ivtk].file << "<DataArray type=\"Float64\" Name=\"field\" NumberOfComponents=\"" << seed_.vtk_[ivtk].field_.size() << "\" format=\"ascii\">"
 	<< std::endl;
@@ -1213,18 +1213,18 @@ namespace MITHRA
     *vf_[ivtk].file << "</StructuredGrid>"                                                    	<< std::endl;
     *vf_[ivtk].file << "</VTKFile>"                                                         		<< std::endl;
 
-    /* Close the file.                                                                      		*/
+    /*关闭文件。*/
     (*vf_[ivtk].file).close();
 
-    /* Write the file connecting the parallel files.							*/
+    /*写入连接并行文件的文件。*/
 
     if ( rank_ == 0)
       {
-	/* Add the vtk suffix and the number of the vtk file to the file name.                     	*/
+	/*在文件名后加上vtk后缀和vtk文件编号。*/
 	vf_[ivtk].fileName = seed_.vtk_[ivtk].basename_ + "-" + stringify(nTime_) + PTS_FILE_SUFFIX;
 	unsigned int k0, np;
 
-	/* It is assumed that all the files in the directory are deleted before running the code.    	*/
+	/*假设在运行代码之前删除了目录中的所有文件。*/
 	vf_[ivtk].file = new std::ofstream(vf_[ivtk].fileName.c_str(),std::ios::trunc);
 
 	*vf_[ivtk].file << "<?xml version=\"1.0\"?>"							<< std::endl;
@@ -1232,7 +1232,7 @@ namespace MITHRA
 	*vf_[ivtk].file << "<PStructuredGrid WholeExtent=\" 0 0 0 " << N1_-1 << " 0 "  <<
 	    N2_-1 << "\" GhostLevel = \"0\" >"                                    			<< std::endl;
 
-	/* Insert the coordinates of the grid for the charge cloud.                            		*/
+	/*插入电荷云的网格坐标。*/
 	*vf_[ivtk].file << "<PPoints>"                                                          	<< std::endl;
 	*vf_[ivtk].file << "<DataArray type = \"Float64\" NumberOfComponents=\"3\" format=\"ascii\" />"	<< std::endl;
 	*vf_[ivtk].file << "</PPoints>"                                                             	<< std::endl;
@@ -1244,7 +1244,7 @@ namespace MITHRA
 
 	for (int i = 0; i < size_; ++i)
 	  {
-	    /* Evaluate the number of nodes in each processor.						*/
+	    /*评估每个处理器中的节点数量。*/
 	    if ( size_ > 1 )
 	      {
 		if ( i == 0 )
@@ -1277,15 +1277,15 @@ namespace MITHRA
 	*vf_[ivtk].file << "</PStructuredGrid>"                                                     	<< std::endl;
 	*vf_[ivtk].file << "</VTKFile>"                                                             	<< std::endl;
 
-	/* Close the file.										*/
+	/*关闭文件。*/
 	(*vf_[ivtk].file).close();
       }
   }
 
   /******************************************************************************************************
-   * Visualize the field as vtk files in a plane normal to y axis and save them to the file with the
-   * given name.
-   ******************************************************************************************************/
+  *将字段可视化为垂直于y轴的平面中的vtk文件，并将它们保存到文件中
+  *名字。
+  ******************************************************************************************************/
 
   void FdTd::fieldVisualizeInPlaneYNormal (unsigned int ivtk)
   {
@@ -1293,18 +1293,18 @@ namespace MITHRA
     long int			m;
     Double			dyr, c;
 
-    /* The old files if existing should be deleted.                                          		*/
+    /*旧文件如果存在，应该删除。*/
     vf_[ivtk].fileName = seed_.vtk_[ivtk].basename_ + "-p" + stringify(rank_) + "-" + stringify(nTime_) + VTS_FILE_SUFFIX;
     (vf_[ivtk].file) = new std::ofstream(vf_[ivtk].fileName.c_str(),std::ios::trunc);
 
     vf_[ivtk].file->setf(std::ios::scientific);
     vf_[ivtk].file->precision(4);
 
-    /* Calculate the index of the cell at which the plane resides.					*/
+    /*计算平面所在单元格的索引。*/
     dyr = modf( ( seed_.vtk_[ivtk].position_[1] - ymin_ ) / mesh_.meshResolution_[1] , &c);
     j   = (int) c;
 
-    /* Calculate the field to be visualized in the vtk files.						*/
+    /*计算要在vtk文件中可视化的字段。*/
     for (int k = 0; k < np_; k++ )
       for (int i = 1; i < N0_-1; i++)
 	{
@@ -1328,7 +1328,7 @@ namespace MITHRA
 	    }
 	}
 
-    /* Write the initial data for the vtk file.                                                       	*/
+    /*为vtk文件写入初始数据。*/
     *vf_[ivtk].file << "<?xml version=\"1.0\"?>"							<< std::endl;
     *vf_[ivtk].file << "<VTKFile type=\"StructuredGrid\" version=\"0.1\" byte_order=\"LittleEndian\" "
 	"compressor=\"vtkZLibDataCompressor\">" 							<< std::endl;
@@ -1339,7 +1339,7 @@ namespace MITHRA
 	k0_ << " " << k0_ + np_ - 2 + ( (rank_ == size_ - 1) ? 1 : 0 )
 	<< "\">"											<< std::endl;
 
-    /* Insert the coordinates of the grid for the charge points.                                      	*/
+    /*插入充电点的网格坐标。*/
     *vf_[ivtk].file << "<Points>"                                                                	<< std::endl;
     *vf_[ivtk].file << "<DataArray type = \"Float64\" NumberOfComponents=\"3\" format=\"ascii\">"	<< std::endl;
     FieldVector<Double> r1 (0.0), r2 (0.0);
@@ -1353,11 +1353,11 @@ namespace MITHRA
     *vf_[ivtk].file << "</DataArray>"                                                       		<< std::endl;
     *vf_[ivtk].file << "</Points>"                                                         		<< std::endl;
 
-    /* Insert each cell data into the vtk file.                                            		*/
+    /*将每个单元格数据插入到vtk文件中。*/
     *vf_[ivtk].file << "<CellData>"                                                        		<< std::endl;
     *vf_[ivtk].file << "</CellData>"                                                          	<< std::endl;
 
-    /* Insert the point data based on the computed electric field.					*/
+    /*根据计算的电场插入点数据。*/
     *vf_[ivtk].file << "<PointData Vectors = \"field\">"                                    	<< std::endl;
     *vf_[ivtk].file << "<DataArray type=\"Float64\" Name=\"field\" NumberOfComponents=\"" << seed_.vtk_[ivtk].field_.size() << "\" format=\"ascii\">"
 	<< std::endl;
@@ -1375,18 +1375,18 @@ namespace MITHRA
     *vf_[ivtk].file << "</StructuredGrid>"                                                    	<< std::endl;
     *vf_[ivtk].file << "</VTKFile>"                                                         		<< std::endl;
 
-    /* Close the file.                                                                      		*/
+    /*关闭文件。*/
     (*vf_[ivtk].file).close();
 
-    /* Write the file connecting the parallel files.							*/
+    /*写入连接并行文件的文件。*/
 
     if ( rank_ == 0)
       {
-	/* Add the vtk suffix and the number of the vtk file to the file name.                     	*/
+	/*在文件名后加上vtk后缀和vtk文件编号。*/
 	vf_[ivtk].fileName = seed_.vtk_[ivtk].basename_ + "-" + stringify(nTime_) + PTS_FILE_SUFFIX;
 	unsigned int k0, np;
 
-	/* It is assumed that all the files in the directory are deleted before running the code.    	*/
+	/*假设在运行代码之前删除了目录中的所有文件。*/
 	vf_[ivtk].file = new std::ofstream(vf_[ivtk].fileName.c_str(),std::ios::trunc);
 
 	*vf_[ivtk].file << "<?xml version=\"1.0\"?>"							<< std::endl;
@@ -1394,7 +1394,7 @@ namespace MITHRA
 	*vf_[ivtk].file << "<PStructuredGrid WholeExtent=\"0 " << N0_ - 1 << " 0 0 0 "  <<
 	    N2_-1 << "\" GhostLevel = \"0\" >"                                    			<< std::endl;
 
-	/* Insert the coordinates of the grid for the charge cloud.                            		*/
+	/*插入电荷云的网格坐标。*/
 	*vf_[ivtk].file << "<PPoints>"                                                          	<< std::endl;
 	*vf_[ivtk].file << "<DataArray type = \"Float64\" NumberOfComponents=\"3\" format=\"ascii\" />"	<< std::endl;
 	*vf_[ivtk].file << "</PPoints>"                                                             	<< std::endl;
@@ -1406,7 +1406,7 @@ namespace MITHRA
 
 	for (int i = 0; i < size_; ++i)
 	  {
-	    /* Evaluate the number of nodes in each processor.						*/
+	    /*评估每个处理器中的节点数量。*/
 	    if ( size_ > 1 )
 	      {
 		if ( i == 0 )
@@ -1439,15 +1439,15 @@ namespace MITHRA
 	*vf_[ivtk].file << "</PStructuredGrid>"                                                     	<< std::endl;
 	*vf_[ivtk].file << "</VTKFile>"                                                             	<< std::endl;
 
-	/* Close the file.										*/
+	/*关闭文件。*/
 	(*vf_[ivtk].file).close();
       }
   }
 
   /******************************************************************************************************
-   * Visualize the field as vtk files in a plane normal to z axis and save them to the file with the
-   * given name.
-   ******************************************************************************************************/
+  *将字段可视化为垂直于z轴的平面上的vtk文件，并将它们保存到文件中
+  *名字。
+  ******************************************************************************************************/
 
   void FdTd::fieldVisualizeInPlaneZNormal (unsigned int ivtk)
   {
@@ -1455,18 +1455,18 @@ namespace MITHRA
     long int			m;
     Double		        dzr, c;
 
-    /* The old files if existing should be deleted.                                          		*/
+    /*旧文件如果存在，应该删除。*/
     vf_[ivtk].fileName = seed_.vtk_[ivtk].basename_ + "-p" + stringify(rank_) + "-" + stringify(nTime_) + VTS_FILE_SUFFIX;
     (vf_[ivtk].file) = new std::ofstream(vf_[ivtk].fileName.c_str(),std::ios::trunc);
 
     vf_[ivtk].file->setf(std::ios::scientific);
     vf_[ivtk].file->precision(4);
 
-    /* Calculate the index of the cell at which the plane resides.					*/
+    /*计算平面所在单元格的索引。*/
     dzr = modf( ( seed_.vtk_[ivtk].position_[2] - zmin_ ) / mesh_.meshResolution_[2] , &c);
     k   = (int) c - k0_;
 
-    /* Calculate the field to be visualized in the vtk files.						*/
+    /*计算要在vtk文件中可视化的字段。*/
     for (int j = 1; j < N1_-1; j++)
       for (int i = 1; i < N0_-1; i++)
 	{
@@ -1490,7 +1490,7 @@ namespace MITHRA
 	    }
 	}
 
-    /* Write the initial data for the vtk file.                                                       	*/
+    /*为vtk文件写入初始数据。*/
     *vf_[ivtk].file << "<?xml version=\"1.0\"?>"							<< std::endl;
     *vf_[ivtk].file << "<VTKFile type=\"StructuredGrid\" version=\"0.1\" byte_order=\"LittleEndian\" "
 	"compressor=\"vtkZLibDataCompressor\">" 							<< std::endl;
@@ -1499,7 +1499,7 @@ namespace MITHRA
     *vf_[ivtk].file << "<Piece Extent=\"0 " << N0_ - 1 << " 0 " << N1_ - 1 << " " <<
 	0 << " " << 0 << "\">"									<< std::endl;
 
-    /* Insert the coordinates of the grid for the charge points.                                      	*/
+    /*插入充电点的网格坐标。*/
     *vf_[ivtk].file << "<Points>"                                                                	<< std::endl;
     *vf_[ivtk].file << "<DataArray type = \"Float64\" NumberOfComponents=\"3\" format=\"ascii\">"	<< std::endl;
     FieldVector<Double> r1 (0.0), r2 (0.0);
@@ -1513,11 +1513,11 @@ namespace MITHRA
     *vf_[ivtk].file << "</DataArray>"                                                       		<< std::endl;
     *vf_[ivtk].file << "</Points>"                                                         		<< std::endl;
 
-    /* Insert each cell data into the vtk file.                                            		*/
+    /*将每个单元格数据插入到vtk文件中。*/
     *vf_[ivtk].file << "<CellData>"                                                        		<< std::endl;
     *vf_[ivtk].file << "</CellData>"                                                          	<< std::endl;
 
-    /* Insert the point data based on the computed electric field.					*/
+    /*根据计算的电场插入点数据。*/
     *vf_[ivtk].file << "<PointData Vectors = \"field\">"                                    		<< std::endl;
     *vf_[ivtk].file << "<DataArray type=\"Float64\" Name=\"field\" NumberOfComponents=\"" << seed_.vtk_[ivtk].field_.size()
 		      << "\" format=\"ascii\">"									<< std::endl;
@@ -1535,24 +1535,24 @@ namespace MITHRA
     *vf_[ivtk].file << "</StructuredGrid>"                                                    	<< std::endl;
     *vf_[ivtk].file << "</VTKFile>"                                                         		<< std::endl;
 
-    /* Close the file.                                                                      		*/
+    /*关闭文件。*/
     (*vf_[ivtk].file).close();
   }
 
   /******************************************************************************************************
-   * Write the total profile of the field into the given file name.
-   ******************************************************************************************************/
+  *将字段的总概要文件写入给定的文件名中。
+  ******************************************************************************************************/
 
   void FdTd::fieldProfile ()
   {
-    /* Declare the iterators for the loop over the points.						*/
+    /*声明点上循环的迭代器。*/
     pf_.fileName = seed_.profileBasename_ + "-p" + stringify(rank_) + "-" + stringify(nTime_) + TXT_FILE_SUFFIX;
     pf_.file = new std::ofstream(pf_.fileName.c_str(),std::ios::trunc);
 
     pf_.file->setf(std::ios::scientific);
     pf_.file->precision(4);
 
-    /* Perform a loop over the points of the mesh and save the field data into a text file.		*/
+    /*在网格点上执行循环，并将字段数据保存到文本文件中。*/
     FieldVector<Double> r (0.0);
     for (int i = 0; i < N0_; i++ )
       for (int j = 0; j < N1_; j++ )
@@ -1589,7 +1589,7 @@ namespace MITHRA
 	    *pf_.file << std::endl;
 	  }
 
-    /* Close the file.											*/
+    /*关闭文件。*/
     (*pf_.file).close();
   }
 }
