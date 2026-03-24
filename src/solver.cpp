@@ -2117,7 +2117,7 @@ namespace MITHRA
     for ( unsigned int jf = 0; jf < FEL_.size(); jf++)
       {
 	/* 仅当屏幕已启用时进行初始化。 */
-	if (!FEL_[jf].screenProfile_.sampling_) conintue;
+	if (!FEL_[jf].screenProfile_.sampling_) continue;
 
 	if (!(isabsolute(FEL_[jf].screenProfile_.basename_))) FEL_[jf].screenProfile_.basename_ = FEL_[jf].screenProfile_.directory_ + FEL_[jf].screenProfile_.basename_;
 
