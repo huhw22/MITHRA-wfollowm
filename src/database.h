@@ -369,6 +369,77 @@ namespace MITHRA
     std::vector<std::vector<std::vector<Double> > >     fdt;
   };
 
+
+  struct SampleRadiationDetector
+  {
+    /* 当前 detector 面是否处于有效采样区间 */
+    bool                                      active;
+
+    /* 是否已经第一次进入有效采样区间，用于定义 time=0 */
+    bool                                      started;
+
+    /* 是否已经完成探测 */
+    bool finished;
+
+    /* 输出文件：第一版只写 power-line */
+    std::ofstream*                            file;
+
+    /* detector 面在 lab 系的目标位置 */
+    Double                                    zLab;
+
+    /* 当前时刻 detector 面在 box 系中的位置 */
+    Double                                    zBox;
+
+    /* 将 zBox 反算回 lab 系的位置，用于诊断检查 */
+    Double                                    zLabCheck;
+
+    /* 当前输出的 lab 系时间，以及第一次有效采样时刻 */
+    Double                                    tLab0;
+    Double                                    tLab;
+
+    /* 当前拥有 detector 面的 rank */
+    int                                       ownerRank;
+
+    /* detector 使用的单频参数 */
+    Double                                    w;
+
+    /* Fourier 时间窗点数，以及当前环形缓冲写入位置 */
+    unsigned int                              Nf;
+    unsigned int                              m;
+
+    /* 当前 detector 面对应的全局 z 索引 */
+    long int                                  k;
+
+    /* 采样间隔与插值相关参数 */
+    Double                                    dt;
+    Double                                    dx;
+    Double                                    dy;
+    Double                                    dz;
+    Double                                    dzr;
+    Double                                    c;
+
+    /* 功率归一化系数 */
+    Double                                    pc;
+
+    /* 当前时刻整张 detector 面的局部/全局场快照
+    * 每个 xy 点存 4 个分量：Ex, Ey, Bx, By（lab 系） */
+    std::vector<Double>                       planeL;
+    std::vector<Double>                       planeG;
+
+    /* 时间环形缓冲：
+    * [Nf][N1_*N0_][4]
+    * 第三个下标的四个分量依次是 Ex, Ey, Bx, By（lab 系） */
+    std::vector< std::vector< std::vector<Double> > >   fdt;
+
+    /* 单频 Fourier 系数 */
+    std::vector<Complex>                      ep;
+    std::vector<Complex>                      em;
+
+    /* 当前步功率：本地与全局 */
+    Double                                    pL;
+    Double                                    pG;
+  };
+
   
   /*从屏幕上获取束形文件所需的数据结构。*/
   struct SampleScreenProfile

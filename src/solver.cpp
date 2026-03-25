@@ -557,6 +557,10 @@ namespace MITHRA
     /* 将束团转换至实验室参考系，并针对 FEL 模拟对束团进行适配——即：添加散粒噪声、分布镜像宏粒子，并添加束团尾部。*/
     lorentzBoostBunch();
 
+	/* 初始化 lab <-> box 参考系变换：
+	* 约束为 tLab=0,zLab=0 <-> tBox=0,zBox=zRef */
+	boostFrame_.set(gamma_, beta_, c0_, - beta_ * c0_ * dt_);
+
     /* 初始化字段的更新数据。 */
     initializeField();
 
@@ -572,8 +576,13 @@ namespace MITHRA
     /* 初始化更新束所需的数据。 */
     initializeBunchUpdate();
 
+	
+
     /* 如果启用了辐射功率的采样或可视化功能，则初始化计算及保存辐射功率所需的各项数据。*/
     initializePowerSample(); initializePowerVisualize();
+
+	/*如果启用了固定探测面，则初始化探测面计算的各项数据*/
+	initializeDetector();
 
     /* 如果启用了辐射能量采样，则初始化用于计算及保存辐射能量所需的各项数据。*/
     initializeEnergySample();
@@ -1355,6 +1364,10 @@ namespace MITHRA
 	/* 若 FEL 输出的辐射功率监测已启用，且采样周期条件已满足：
 	 * 在指定位置对辐射功率进行采样，并将其保存至文件中。		*/
 	powerSample(); powerVisualize();
+
+	/* 若 FEL 针对探测面的监测已启用，且到达探测面范围
+	 * 针对探测面进行取出，然后把数据保存在文件里 */
+	detectorSample();
 
 	/* 若 FEL 输出的辐射能量监测已启用，且已达到采样节拍，
 	 * 则在指定位置对辐射能量进行采样，并将其保存至文件中。		*/

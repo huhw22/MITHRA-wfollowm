@@ -667,6 +667,56 @@ namespace MITHRA
 	    FEL_.push_back(FEL);
 	  }
 
+	/*解析固定lab系探测面的输入卡*/
+	if (*iter == "radiation-detector")
+	{
+		++iter;
+		if (*iter != "{")
+		{
+			std::cout << "The radiation-detector directory is empty" << std::endl;
+			exit(1);
+		}
+		else ++iter;
+
+		FreeElectronLaser FEL;
+		do
+		{
+			if      (parameterName(*iter) == "sample")
+			FEL.radiationDetector_.sampling_ = boolValue(*iter);
+
+			else if (parameterName(*iter) == "plane-position")
+			FEL.radiationDetector_.zLab_ = doubleValue(*iter);
+
+			else if (parameterName(*iter) == "directory")
+			FEL.radiationDetector_.directory_ = stringValue(*iter);
+
+			else if (parameterName(*iter) == "base-name")
+			FEL.radiationDetector_.basename_ = stringValue(*iter);
+
+			else if (parameterName(*iter) == "write-power-line")
+			FEL.radiationDetector_.writePowerLine_ = boolValue(*iter);
+
+			else if (parameterName(*iter) == "write-field")
+			FEL.radiationDetector_.writeField_ = boolValue(*iter);
+
+			else if (parameterName(*iter) == "normalized-frequency")
+			FEL.radiationDetector_.lambda_ = doubleValue(*iter);
+
+			else
+			{
+			std::cout << parameterName(*iter)
+						<< " is not defined in radiation-detector group."
+						<< std::endl;
+			exit(1);
+			}
+
+			++iter;
+		}
+		while (*iter != "}");
+
+		FEL_.push_back(FEL);
+	}
+
 	/*与电源可视化相关的数据将被解析。*/
 	if (*iter == "power-visualization")
 	  {

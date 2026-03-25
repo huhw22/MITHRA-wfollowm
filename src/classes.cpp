@@ -1310,6 +1310,18 @@ namespace MITHRA
     lambdaRes_		= 0.0;
   }
 
+  /*初始化探测模块初始值*/
+  FreeElectronLaser::RadiationDetector::RadiationDetector()
+  {
+    sampling_ = false;
+    zLab_ = 0.0;
+    directory_ = ".";
+    basename_ = "detector";
+    writePowerLine_ = true;
+    writeField_ = false;
+    lambda_ = 1.0;
+  }
+
   /*初始化用于初始化辐射功率的值。*/
   FreeElectronLaser::RadiationVisualization::RadiationVisualization ()
   {

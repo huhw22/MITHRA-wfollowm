@@ -516,6 +516,26 @@ namespace MITHRA
       RadiationSampling();
     };
 
+    /*lab 系固定探测面的采样配置*/
+    struct RadiationDetector 
+    {
+      bool sampling_;
+      /*lab 系 plane-position*/
+      Double zLab_;                 
+      std::string directory_;
+      std::string basename_;
+
+      /*写功率开关，第一版只有这个*/
+      bool writePowerLine_;         
+      /*写场开关，第一版暂无*/
+      bool writeField_;     
+      
+      /* detector 使用的单频归一化波长，第一版默认取 1.0 */
+      Double lambda_;
+
+      RadiationDetector();
+    };
+
     /*结构，其中包含用于电力或能源可视化的已解析参数。*/
     struct RadiationVisualization
     {
@@ -548,6 +568,9 @@ namespace MITHRA
     /*定义包含能量采样和可视化所需结构的变量。*/
     RadiationSampling 				radiationEnergy_;
     RadiationVisualization 			vtkEnergy_;
+
+    /*定义得到探测面属性的变量*/
+    RadiationDetector radiationDetector_;
     
     /*记录束配置文件的屏幕的解析参数。这将产生束配置文件
     *在实验室框架。*/

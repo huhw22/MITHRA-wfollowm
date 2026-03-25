@@ -12,6 +12,7 @@
 #include "classes.h"
 #include "database.h"
 #include "fieldvector.h"
+#include "boostframe.h"
 
 namespace MITHRA
 {
@@ -109,6 +110,12 @@ namespace MITHRA
 
     /*在给定位置采集辐射能量并保存到文件中。*/
     void 		energySample			();
+    
+    /*初始化在给定lab系探测平面探测的数据*/
+    void initializeDetector();
+
+    /*把探测结果保存到文件中*/
+    void detectorSample();
 
     /*初始化在给定位置存储击中屏幕的粒子所需的数据。*/
     void 		initializeScreenProfile		();
@@ -331,6 +338,9 @@ namespace MITHRA
     *更新。*/
     std::vector<SampleRadiationEnergy>				        re_;
 
+    /*定义一个结构，保存所有lab系探测器值的结构*/
+    std ::vector<SampleRadiationDetector>   rd_;
+
     /*定义一个结构，其中包含存储击中屏幕的粒子所需的参数
     *这些参数在类中定义一次，以避免每次都声明它们
     *更新。*/
@@ -342,6 +352,9 @@ namespace MITHRA
 
     /*光速在给定的长度尺度和时间尺度下的值。*/
     Double								c0_, m0_, e0_;
+
+    /*相对论变换框架*/
+    BoostFrameTransform boostFrame_;
   };
 
 }
