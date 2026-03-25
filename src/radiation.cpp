@@ -351,10 +351,6 @@ namespace MITHRA
   FieldVector<Double>       et, bt;
   Complex                   ew1, bw1, ew2, bw2;
 
-  Double                    tPrimeLike;
-  Double                    zBoxRel;
-  Double                    zCenter;
-
   int                       ownerLocal, ownerGlobal;
   bool                      activeNow;
 
@@ -380,10 +376,6 @@ namespace MITHRA
 	  rd_[jf].zBox      = boostFrame_.boxZFromLabZAndBoxT(rd_[jf].zLab, timeBunch_);
 	  rd_[jf].zLabCheck = boostFrame_.labZFromBoxZT(rd_[jf].zBox, timeBunch_);
 	  rd_[jf].tLab      = boostFrame_.labTFromBoxZT(rd_[jf].zBox, timeBunch_);
-
-      /* 计算 box 中心与相对位置，便于观察 detector 面相对 box 的进出 */
-      zCenter = 0.5 * (zmin_ + zmax_);
-      zBoxRel = rd_[jf].zBox - zCenter;
 
       /* ----------- 1) 先判断当前 detector 面是否在全局有效区间 ----------- */
       if ( rd_[jf].zBox >= zmin_ + mesh_.meshResolution_[2] &&
@@ -438,11 +430,9 @@ namespace MITHRA
 
               (*(rd_[jf].file))
                 << "# time_rel\t"
-                << "time_abs\t"
                 << "z_box_abs\t"
-                << "z_box_rel\t"
                 << "owner_rank\t"
-                << "power\n"
+                << "power"
                 << std::endl;
             }
 
@@ -565,9 +555,7 @@ namespace MITHRA
         {
           (*(rd_[jf].file))
             << rd_[jf].tLab - rd_[jf].tLab0 << "\t"
-            << rd_[jf].tLab                  << "\t"
             << rd_[jf].zBox                  << "\t"
-            << zBoxRel                       << "\t"
             << rd_[jf].ownerRank             << "\t"
             << rd_[jf].pG
             << std::endl;
