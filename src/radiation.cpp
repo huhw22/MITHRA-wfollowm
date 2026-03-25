@@ -431,6 +431,7 @@ namespace MITHRA
               (*(rd_[jf].file))
                 << "# time_rel\t"
                 << "z_box_abs\t"
+				<< "z_lab\t"
                 << "owner_rank\t"
                 << "power"
                 << std::endl;
@@ -440,69 +441,65 @@ namespace MITHRA
                        std::string("::: Detector recording starts.") );
         }
 
-      /* ----------- 4) 判断当前 detector 面属于哪个 rank ----------- */
-      if ( rd_[jf].zBox >= zp_[0] &&
-           rd_[jf].zBox <  zp_[1] - mesh_.meshResolution_[2] )
-        {
-          ownerLocal = rank_;
+      /* ----------- 4) 用全局 z 索引判断当前 detector 面属于哪个 rank ----------- */
 
-          /* 与 powerSample 一样，按 z 方向线性插值 */
-          rd_[jf].dzr = modf( ( rd_[jf].zBox - zmin_ ) / mesh_.meshResolution_[2], &rd_[jf].c );
-          rd_[jf].k   = (long int) rd_[jf].c;
+		/* 先统一算出当前 plane 所在的全局 z 层与插值系数 */
+		rd_[jf].dzr = modf( ( rd_[jf].zBox - zmin_ ) / mesh_.meshResolution_[2], &rd_[jf].c );
+		rd_[jf].k   = (long int) rd_[jf].c;
 
-          /* 只由 owner rank 生成当前整张 detector 面的局部场快照 planeL
-           * 每个 xy 点存四个量：Ex, Ey, Bx, By（lab 系） */
-          for (int i = 2; i < N0_ - 2; i += 1)
-            for (int j = 2; j < N1_ - 2; j += 1)
-              {
-                mi = ( rd_[jf].k - k0_ ) * N1_ * N0_ + i * N1_ + j;
-                ni = i * N1_ + j;
+		long int kLocal = rd_[jf].k - k0_;
 
-                if (!pic_[mi        ]) fieldEvaluate(mi        );
-                if (!pic_[mi+N1N0_  ]) fieldEvaluate(mi+N1N0_  );
+		/* 这里必须保证当前层 k 和下一层 k+1 都在当前 rank 可访问范围内，
+		* 因为后面会访问 mi 和 mi + N1N0_ 两层。
+		*
+		* 如果你代码里本地 z 层数变量不是 np_，请替换成对应名字。
+		*/
+		if (kLocal >= 0 && kLocal + 1 < np_)
+		{
+		ownerLocal = rank_;
 
-                et[0] = ( 1.0 - rd_[jf].dzr ) * en_[mi][0] + rd_[jf].dzr * en_[mi+N1N0_][0];
-                et[1] = ( 1.0 - rd_[jf].dzr ) * en_[mi][1] + rd_[jf].dzr * en_[mi+N1N0_][1];
+		/* 只由 owner rank 生成当前整张 detector 面的局部场快照 planeL
+		* 每个 xy 点存四个量：Ex, Ey, Bx, By（lab 系） */
+		for (int i = 2; i < N0_ - 2; i += 1)
+			for (int j = 2; j < N1_ - 2; j += 1)
+			{
+			mi = kLocal * N1_ * N0_ + i * N1_ + j;
+			ni = i * N1_ + j;
 
-                bt[0] = ( 1.0 - rd_[jf].dzr ) * bn_[mi][0] + rd_[jf].dzr * bn_[mi+N1N0_][0];
-                bt[1] = ( 1.0 - rd_[jf].dzr ) * bn_[mi][1] + rd_[jf].dzr * bn_[mi+N1N0_][1];
+			if (!pic_[mi       ]) fieldEvaluate(mi       );
+			if (!pic_[mi+N1N0_ ]) fieldEvaluate(mi+N1N0_ );
 
-                /* 与 powerSample 完全相同：先变到 lab 系，再存入时间缓冲 */
-                rd_[jf].planeL[4 * ni + 0] = gamma_ * ( et[0] + c0_ * beta_ * bt[1] );
-                rd_[jf].planeL[4 * ni + 1] = gamma_ * ( et[1] - c0_ * beta_ * bt[0] );
-                rd_[jf].planeL[4 * ni + 2] = gamma_ * ( bt[0] - beta_ / c0_ * et[1] );
-                rd_[jf].planeL[4 * ni + 3] = gamma_ * ( bt[1] + beta_ / c0_ * et[0] );
-              }
-        }
+			et[0] = ( 1.0 - rd_[jf].dzr ) * en_[mi][0] + rd_[jf].dzr * en_[mi+N1N0_][0];
+			et[1] = ( 1.0 - rd_[jf].dzr ) * en_[mi][1] + rd_[jf].dzr * en_[mi+N1N0_][1];
+
+			bt[0] = ( 1.0 - rd_[jf].dzr ) * bn_[mi][0] + rd_[jf].dzr * bn_[mi+N1N0_][0];
+			bt[1] = ( 1.0 - rd_[jf].dzr ) * bn_[mi][1] + rd_[jf].dzr * bn_[mi+N1N0_][1];
+
+			rd_[jf].planeL[4 * ni + 0] = gamma_ * ( et[0] + c0_ * beta_ * bt[1] );
+			rd_[jf].planeL[4 * ni + 1] = gamma_ * ( et[1] - c0_ * beta_ * bt[0] );
+			rd_[jf].planeL[4 * ni + 2] = gamma_ * ( bt[0] - beta_ / c0_ * et[1] );
+			rd_[jf].planeL[4 * ni + 3] = gamma_ * ( bt[1] + beta_ / c0_ * et[0] );
+			}
+		}
 
       /* ----------- 5) 先把 owner rank 算出来，再聚合整张 detector 面 ----------- */
       MPI_Allreduce(&ownerLocal, &ownerGlobal, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
       rd_[jf].ownerRank = ownerGlobal;
 
-      /* 如果当前没有任何 rank 持有这个面，则认为本步无效并结束 */
-      if (rd_[jf].ownerRank < 0)
-        {
-          rd_[jf].active = false;
+      /* 如果当前没有任何 rank 持有这个面，说明发生了分块边界空窗。
+		* 这种情况不应结束整个 detector 记录，只跳过这一帧。 */
+		if (rd_[jf].ownerRank < 0)
+		{
 
-          if (rd_[jf].started && !rd_[jf].finished)
-            {
-              if (rank_ == 0 && rd_[jf].file != NULL)
-                {
-                  rd_[jf].file->flush();
-                  rd_[jf].file->close();
-                  delete rd_[jf].file;
-                  rd_[jf].file = NULL;
-                }
+		/* 这里只做调试提示，不结束记录 */
+		if (rank_ == 0)
+		{
+			printmessage(std::string(__FILE__), __LINE__,
+						std::string("Warning: detector plane has no owner at this step; skip one frame.") );
+		}
 
-              rd_[jf].finished = true;
-
-              printmessage(std::string(__FILE__), __LINE__,
-                           std::string("::: Detector recording ends.") );
-            }
-
-          continue;
-        }
-
+		continue;
+		}
       MPI_Allreduce(&rd_[jf].planeL[0], &rd_[jf].planeG[0],
                     int(rd_[jf].planeL.size()), MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
@@ -556,6 +553,7 @@ namespace MITHRA
           (*(rd_[jf].file))
             << rd_[jf].tLab - rd_[jf].tLab0 << "\t"
             << rd_[jf].zBox                  << "\t"
+			<< rd_[jf].zLabCheck			<< "\t"
             << rd_[jf].ownerRank             << "\t"
             << rd_[jf].pG
             << std::endl;

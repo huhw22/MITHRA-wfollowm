@@ -1560,9 +1560,20 @@ namespace MITHRA
 
     /* 添加来自不同处理器、且位于域横向范围之外的电荷点数量。 */
     MPI_Reduce(&ubp.nt, &ub_.nt,1,MPI_INT,MPI_SUM,0,MPI_COMM_WORLD);
-    if ( rank_ == 0 && ub_.nt > 0 )
-      printmessage(std::string(__FILE__), __LINE__, std::string("Warning: " + stringify(ub_.nt) +
-								" particles have transverse dimensions that are larger than the computational domain size.") );
+	if ( rank_ == 0 )
+	{
+		static int last_reported_nt = 0;
+
+	if ( ub_.nt > last_reported_nt )
+	{
+		printmessage(std::string(__FILE__), __LINE__,
+					std::string("Warning: " + stringify(ub_.nt) +
+					" particles have transverse dimensions that are larger than the computational domain size "
+					"(+" + stringify(ub_.nt - last_reported_nt) + " newly added).") );
+
+		last_reported_nt = ub_.nt;
+	}
+	}
   }
 
   /******************************************************************************************************
