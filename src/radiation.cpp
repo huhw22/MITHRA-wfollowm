@@ -431,7 +431,6 @@ namespace MITHRA
               (*(rd_[jf].file))
                 << "# time_rel\t"
                 << "z_box_abs\t"
-				<< "z_lab\t"
                 << "owner_rank\t"
                 << "power"
                 << std::endl;
@@ -553,7 +552,6 @@ namespace MITHRA
           (*(rd_[jf].file))
             << rd_[jf].tLab - rd_[jf].tLab0 << "\t"
             << rd_[jf].zBox                  << "\t"
-			<< rd_[jf].zLabCheck			<< "\t"
             << rd_[jf].ownerRank             << "\t"
             << rd_[jf].pG
             << std::endl;

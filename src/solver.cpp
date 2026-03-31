@@ -560,6 +560,9 @@ namespace MITHRA
 	/* 初始化 lab <-> box 参考系变换：
 	* 约束为 tLab=0,zLab=0 <-> tBox=0,zBox=zRef */
 	boostFrame_.set(gamma_, beta_, c0_, - beta_ * c0_ * dt_);
+	printmessage(std::string(__FILE__), __LINE__,
+                       std::string("::: Set boostFrame:  gamma :"+ stringify(gamma_ ) + " beta: " 
+					+ stringify(beta_) + " c0: " + stringify(c0_) + " zRef: " + stringify(- beta_ * c0_ * dt_)) );
 
     /* 初始化字段的更新数据。 */
     initializeField();
