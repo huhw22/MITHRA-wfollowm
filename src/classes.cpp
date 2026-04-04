@@ -977,6 +977,8 @@ namespace MITHRA
     rb_			= 0.0;
     length_		= 0;
     dist_		= 0.0;
+    bd_ = 0.0;
+    ld_ = 0.0;
     beta_		= 0.0;
     gamma_		= 1.0;
     dt_			= 0.0;
@@ -1000,6 +1002,7 @@ namespace MITHRA
   {
     if      ( undulatorType.compare("static")   == 0 )   return( STATIC  );
     else if ( undulatorType.compare("optical")  == 0 )   return( OPTICAL );
+    else if ( undulatorType.compare("dipole") == 0 ) return( DIPOLE );
     else { std::cout << undulatorType << " is an unknown sampling type." << std::endl; exit(1); }
   }
 

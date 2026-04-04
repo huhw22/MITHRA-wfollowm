@@ -501,6 +501,39 @@ namespace MITHRA
 	      }
 	  }
 
+	else if (*iter == "dipole-magnet") {
+		++iter;
+		if (*iter != "{") {
+			std::cout << "The dipole-magnet directory is empty" << std::endl;
+			exit(1);
+		} else ++iter;
+
+		Undulator undulator;
+		undulator.type_ = DIPOLE;
+
+		do {
+			if (parameterName(*iter) == "field")
+				undulator.bd_ = doubleValue(*iter);
+			else if (parameterName(*iter) == "length")
+				undulator.ld_ = doubleValue(*iter);
+			else if (parameterName(*iter) == "polarization-angle")
+				undulator.theta_ = PI / 180.0 * doubleValue(*iter);
+			else if (parameterName(*iter) == "distance-to-bunch-head")
+				undulator.dist_ = doubleValue(*iter);
+			else if (parameterName(*iter) == "offset")
+				undulator.rb_ = doubleValue(*iter);
+			else {
+				std::cout << parameterName(*iter)
+						<< " is not defined in the dipole-magnet group."
+						<< std::endl;
+				exit(1);
+			}
+			++iter;
+		} while (*iter != "}");
+
+		undulator_.push_back(undulator);
+	}
+
 	/*要解析与光波动器有关的数据。*/
 	else if (*iter == "optical-undulator")
 	  {

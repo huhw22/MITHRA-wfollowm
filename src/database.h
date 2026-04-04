@@ -255,7 +255,11 @@ namespace MITHRA
     int					i, j, k, n;
     long int                            m;
     bool                                b1x, b1y, b1z;
-    int					nt;
+    int nOutX;         // x 方向出横向域
+    int nOutY;         // y 方向出横向域
+    int nOutXY;        // x 或 y 任一方向出横向域
+    int nCrossZSlab;   // 跨出当前 MPI z 子域
+    int nOutBoxAny;    // 任一出 box 事件总数
     std::vector<Charge>                 qSB, qSF, qRB, qRF;
     bool				dq;
 
@@ -291,7 +295,11 @@ namespace MITHRA
     Double				ct, st;
     int                                 nL, i;
     Charge                              Q;
-    int					nt;
+    int nOutX;         // x 方向出横向域
+    int nOutY;         // y 方向出横向域
+    int nOutXY;        // x 或 y 任一方向出横向域
+    int nCrossZSlab;   // 跨出当前 MPI z 子域
+    int nOutBoxAny;    // 任一出 box 事件总数
   };
 
   /*采样群所需的数据结构。*/

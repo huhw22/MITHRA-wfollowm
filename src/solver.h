@@ -187,6 +187,9 @@ namespace MITHRA
     /*计算静态波动器的场。*/
     void 	staticUndulator			(UpdateBunchParallel& ubp, typename std::vector<Undulator>::iterator& iter);
 
+    /*计算二级铁的场*/
+    void staticDipole (UpdateBunchParallel& ubp, typename std::vector<Undulator>::iterator& iter);
+
     /*计算平面波的场。*/
     template<class T>
     void 	planeWave			(UpdateBunchParallel& ubp, T& s);
@@ -218,6 +221,9 @@ namespace MITHRA
     /*计算固定高斯光束的场。*/
     template<class T>
     void 	standingSuperGaussianBeam	(UpdateBunchParallel& ubp, T& s);
+
+    Double particleLabZ(const Charge& q) const;
+    void   updateSoftKill(Charge& q);
 
 
     /****************************************************************************************************
@@ -288,6 +294,10 @@ namespace MITHRA
     Double								gamma_;
     Double								beta_;
     Double								dt_;
+
+    Double softKillStartLab_;   // lab 系开始衰减的位置
+    Double softKillEndLab_;     // lab 系完全为 0 的位置
+    bool   softKillEnable_;
 
     /*用于通信收费的MPI数据类型。*/
     MPI_Datatype 							MPI_CHARGE;

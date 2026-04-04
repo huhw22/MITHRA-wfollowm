@@ -34,7 +34,7 @@ namespace MITHRA
   enum FieldType		{Ex, Ey, Ez, Bx, By, Bz, Ax, Ay, Az, F};
 
   /*定义代码支持的波动器的类型。*/
-  enum UndulatorType		{STATIC, OPTICAL};
+  enum UndulatorType		{STATIC, OPTICAL, DIPOLE};
 
   /*定义用于FEL相互作用的求解器的类型。*/
   enum SolverType		{FD, NSFD};
@@ -138,6 +138,9 @@ namespace MITHRA
     *可以用来更好地促进束的运动框架。我们需要考虑它是两倍的，
     *因为这个标志需要在群集更新期间进行通信。*/
     Double			e;
+
+    Double w;   // 软删除权重，1->0
+    Double wm;  // 上一步权重
 
     Charge();
 

@@ -14,64 +14,96 @@ namespace MITHRA
   void Solver::staticUndulator(UpdateBunchParallel& ubp, typename std::vector<Undulator>::iterator& iter)
   {
     if ( ubp.lz >= 0.0 && ubp.lz <= iter->length_ * iter->lu_ )
-      {
-	ubp.d1     = ub_.b0 * cosh(ub_.ku * ubp.ly) * sin(ub_.ku * ubp.lz) * gamma_;
-	ubp.bt[0] += ubp.d1 * ub_.ct;
-	ubp.bt[1] += ubp.d1 * ub_.st;
-	ubp.bt[2] += ub_.b0 * sinh(ub_.ku * ubp.ly) * cos(ub_.ku * ubp.lz);
+    {
+      ubp.d1     = ub_.b0 * cosh(ub_.ku * ubp.ly) * sin(ub_.ku * ubp.lz) * gamma_;
+      ubp.bt[0] += ubp.d1 * ub_.ct;
+      ubp.bt[1] += ubp.d1 * ub_.st;
+      ubp.bt[2] += ub_.b0 * sinh(ub_.ku * ubp.ly) * cos(ub_.ku * ubp.lz);
 
-	ubp.d1    *= c0_ * beta_;
-	ubp.et[1] +=   ubp.d1 * ub_.ct;
-	ubp.et[0] += - ubp.d1 * ub_.st;
-	ubp.et[2] += 0.0;
-      }
+      ubp.d1    *= c0_ * beta_;
+      ubp.et[1] +=   ubp.d1 * ub_.ct;
+      ubp.et[0] += - ubp.d1 * ub_.st;
+      ubp.et[2] += 0.0;
+    }
     else if ( ubp.lz < 0.0 )
+    {
+	    ubp.sz = exp( - pow( ub_.ku * ubp.lz , 2 ) / 2.0 );
+
+      if ( iter != undulator_.begin() )
       {
-	ubp.sz = exp( - pow( ub_.ku * ubp.lz , 2 ) / 2.0 );
-
-	if ( iter != undulator_.begin() )
-	  {
-	    ubp.i  = iter - undulator_.begin() - 1;
-	    ubp.r0 = undulator_[ubp.i].rb_ + undulator_[ubp.i].length_ * undulator_[ubp.i].lu_ - iter->rb_;
-	    if ( ubp.lz < ubp.r0 || ubp.r0 == 0.0 ) ubp.sz = 0.0;
-	    else
-	      ubp.sz *= 0.35875 + 0.48829 * cos( PI * ubp.lz / ubp.r0 ) + 0.14128 * cos( 2.0 * PI * ubp.lz / ubp.r0 ) + 0.01168 * cos( 3.0 * PI * ubp.lz / ubp.r0 );
-	  }
-
-	ubp.d1     = ub_.b0 * cosh(ub_.ku * ubp.ly ) * ubp.sz * ub_.ku * ubp.lz * gamma_;
-	ubp.bt[0] += ubp.d1 * ub_.ct;
-	ubp.bt[1] += ubp.d1 * ub_.st;
-	ubp.bt[2] += ub_.b0 * sinh(ub_.ku * ubp.ly) * ubp.sz;
-
-	ubp.d1    *= c0_ * beta_;
-	ubp.et[1] +=   ubp.d1 * ub_.ct;
-	ubp.et[0] += - ubp.d1 * ub_.st;
-	ubp.et[2] += 0.0;
+        ubp.i  = iter - undulator_.begin() - 1;
+        ubp.r0 = undulator_[ubp.i].rb_ + undulator_[ubp.i].length_ * undulator_[ubp.i].lu_ - iter->rb_;
+        if ( ubp.lz < ubp.r0 || ubp.r0 == 0.0 ) ubp.sz = 0.0;
+        else
+          ubp.sz *= 0.35875 + 0.48829 * cos( PI * ubp.lz / ubp.r0 ) + 0.14128 * cos( 2.0 * PI * ubp.lz / ubp.r0 ) + 0.01168 * cos( 3.0 * PI * ubp.lz / ubp.r0 );
       }
+
+      ubp.d1     = ub_.b0 * cosh(ub_.ku * ubp.ly ) * ubp.sz * ub_.ku * ubp.lz * gamma_;
+      ubp.bt[0] += ubp.d1 * ub_.ct;
+      ubp.bt[1] += ubp.d1 * ub_.st;
+      ubp.bt[2] += ub_.b0 * sinh(ub_.ku * ubp.ly) * ubp.sz;
+
+      ubp.d1    *= c0_ * beta_;
+      ubp.et[1] +=   ubp.d1 * ub_.ct;
+      ubp.et[0] += - ubp.d1 * ub_.st;
+      ubp.et[2] += 0.0;
+    }
     else if ( ubp.lz > iter->length_ * iter->lu_ )
+    {
+      ubp.t0 = ubp.lz - iter->length_ * iter->lu_;
+
+      ubp.sz = exp( - pow( ub_.ku *  ubp.t0 , 2 ) / 2.0 );
+
+      if ( iter+1 != undulator_.end() )
       {
-	ubp.t0 = ubp.lz - iter->length_ * iter->lu_;
+        ubp.i  = iter - undulator_.begin() + 1;
+        ubp.r0 = undulator_[ubp.i].rb_ - iter->rb_ - iter->length_ * iter->lu_;
+        if ( ubp.t0 > ubp.r0 || ubp.r0 == 0.0 ) ubp.sz = 0.0;
+        else
+          ubp.sz *= 0.35875 + 0.48829 * cos( PI * ubp.t0 / ubp.r0 ) + 0.14128 * cos( 2.0 * PI * ubp.t0 / ubp.r0 ) + 0.01168 * cos( 3.0 * PI * ubp.t0 / ubp.r0 );
+      }
 
-	ubp.sz = exp( - pow( ub_.ku *  ubp.t0 , 2 ) / 2.0 );
+      ubp.d1     = ub_.b0 * cosh(ub_.ku * ubp.ly ) * ubp.sz * ub_.ku * ubp.t0 * gamma_;
+      ubp.bt[0] += ubp.d1 * ub_.ct;
+      ubp.bt[1] += ubp.d1 * ub_.st;
+      ubp.bt[2] += ub_.b0 * sinh(ub_.ku * ubp.ly ) * ubp.sz;
 
-	if ( iter+1 != undulator_.end() )
-	  {
-	    ubp.i  = iter - undulator_.begin() + 1;
-	    ubp.r0 = undulator_[ubp.i].rb_ - iter->rb_ - iter->length_ * iter->lu_;
-	    if ( ubp.t0 > ubp.r0 || ubp.r0 == 0.0 ) ubp.sz = 0.0;
-	    else
-	      ubp.sz *= 0.35875 + 0.48829 * cos( PI * ubp.t0 / ubp.r0 ) + 0.14128 * cos( 2.0 * PI * ubp.t0 / ubp.r0 ) + 0.01168 * cos( 3.0 * PI * ubp.t0 / ubp.r0 );
-	  }
+      ubp.d1    *= c0_ * beta_;
+      ubp.et[1] +=   ubp.d1 * ub_.ct;
+      ubp.et[0] += - ubp.d1 * ub_.st;
+      ubp.et[2] += 0.0;
+    }
+  }
 
-	ubp.d1     = ub_.b0 * cosh(ub_.ku * ubp.ly ) * ubp.sz * ub_.ku * ubp.t0 * gamma_;
-	ubp.bt[0] += ubp.d1 * ub_.ct;
-	ubp.bt[1] += ubp.d1 * ub_.st;
-	ubp.bt[2] += ub_.b0 * sinh(ub_.ku * ubp.ly ) * ubp.sz;
+  
+  void Solver::staticDipole(UpdateBunchParallel& ubp,
+                          typename std::vector<Undulator>::iterator& iter)
+  {
+      static bool reported = false;
 
-	ubp.d1    *= c0_ * beta_;
-	ubp.et[1] +=   ubp.d1 * ub_.ct;
-	ubp.et[0] += - ubp.d1 * ub_.st;
-	ubp.et[2] += 0.0;
+      if ( ubp.lz >= 0.0 && ubp.lz <= iter->ld_ ) {
+
+          if ( !reported ) {
+              reported = true;
+              std::cerr
+                  << "[rank " << rank_ << "] "
+                  << "First particle entered dipole"
+                  << "  timeBunch=" << timeBunch_
+                  << "  rb=" << iter->rb_
+                  << "  ld=" << iter->ld_
+                  << "  lz=" << ubp.lz
+                  << std::endl;
+          }
+
+          ubp.d1 = ub_.b0 * gamma_;
+          ubp.bt[0] += ubp.d1 * ub_.ct;
+          ubp.bt[1] += ubp.d1 * ub_.st;
+          ubp.bt[2] += 0.0;
+
+          ubp.d1 *= c0_ * beta_;
+          ubp.et[1] +=  ubp.d1 * ub_.ct;
+          ubp.et[0] += -ubp.d1 * ub_.st;
+          ubp.et[2] += 0.0;
       }
   }
 

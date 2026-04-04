@@ -52,7 +52,7 @@ namespace MITHRA
     rankF_ = ( rank_ == size_ - 1 ) ? 0 : rank_ + 1;
 
     /*初始化收费的MPI数据类型。*/
-    MPI_Type_contiguous(11, MPI_DOUBLE, &MPI_CHARGE);
+    MPI_Type_contiguous(13, MPI_DOUBLE, &MPI_CHARGE);
     MPI_Type_commit(&MPI_CHARGE);
 
     /*根据给定的长度尺度和时间尺度初始化光速值。*/
@@ -84,18 +84,26 @@ namespace MITHRA
     seed_.zR_[1] 		 = PI * seed_.radius_[1] * seed_.radius_[1] / seed_.l_;
 
     for (std::vector<Undulator>::iterator iter = undulator_.begin(); iter != undulator_.end(); iter++)
-      {
-	iter->c0_ 	       	 = c0_;
-	iter->signal_.t0_     	/= c0_;
-	iter->signal_.f0_ 	*= c0_;
-	iter->signal_.s_ 	/= c0_;
+    {
+		if (iter->type_ == DIPOLE) {
+			printmessage(
+				std::string(__FILE__), __LINE__,
+				std::string("Dipole after sort/shift: rb=") + stringify(iter->rb_) +
+				std::string(", ld=") + stringify(iter->ld_) +
+				std::string(", bd=") + stringify(iter->bd_)
+			);
+		}
+		iter->c0_ 	       	 = c0_;
+		iter->signal_.t0_     	/= c0_;
+		iter->signal_.f0_ 	*= c0_;
+		iter->signal_.s_ 	/= c0_;
 
-	iter->l_ 		 = c0_ / iter->signal_.f0_;
-	iter->zR_.resize(2,0.0);
+		iter->l_ 		 = c0_ / iter->signal_.f0_;
+		iter->zR_.resize(2,0.0);
 
-	iter->zR_[0] 		 = PI * iter->radius_[0] * iter->radius_[0] / iter->l_;
-	iter->zR_[1] 		 = PI * iter->radius_[1] * iter->radius_[1] / iter->l_;
-      }
+		iter->zR_[0] 		 = PI * iter->radius_[0] * iter->radius_[0] / iter->l_;
+		iter->zR_[1] 		 = PI * iter->radius_[1] * iter->radius_[1] / iter->l_;
+    }
 
     for (std::vector<ExtField>::iterator iter = extField_.begin(); iter != extField_.end(); iter++)
       {
@@ -211,6 +219,14 @@ namespace MITHRA
 	*计算计算域内的字段。*/
     seed_.beta_    	= beta_;
     seed_.gamma_   	= gamma_;
+
+	softKillEnable_ = true;
+
+	softKillStartLab_ =
+		undulator_.back().rb_ + undulator_.back().length_ * undulator_.back().lu_;
+
+	softKillEndLab_ =
+		softKillStartLab_ + 10.0 * undulator_.back().lu_;   // demo 先给 10 个周期
   }
 
   /******************************************************************************************************
@@ -433,12 +449,14 @@ namespace MITHRA
 	else
 	  {
 	    sendCV.push_back(it->q);
-	    sendCV.push_back(it->rnp[0]);
-	    sendCV.push_back(it->rnp[1]);
-	    sendCV.push_back(it->rnp[2]);
-	    sendCV.push_back(it->gb[0]);
-	    sendCV.push_back(it->gb[1]);
-	    sendCV.push_back(it->gb[2]);
+		sendCV.push_back(it->rnp[0]);
+		sendCV.push_back(it->rnp[1]);
+		sendCV.push_back(it->rnp[2]);
+		sendCV.push_back(it->gb[0]);
+		sendCV.push_back(it->gb[1]);
+		sendCV.push_back(it->gb[2]);
+		sendCV.push_back(it->w);
+		sendCV.push_back(it->wm);
 	    it = chargeVector.erase(it);
 	  }
       }
@@ -466,17 +484,19 @@ namespace MITHRA
 	  {
 	    if ( particleInProcessor(recvCV[i+3]) )
 	      {
-		charge.q 	= recvCV[i++];
-		charge.rnp[0] 	= recvCV[i++];
-		charge.rnp[1] 	= recvCV[i++];
-		charge.rnp[2] 	= recvCV[i++];
-		charge.gb[0] 	= recvCV[i++];
-		charge.gb[1] 	= recvCV[i++];
-		charge.gb[2] 	= recvCV[i++];
+		charge.q      = recvCV[i++];
+		charge.rnp[0] = recvCV[i++];
+		charge.rnp[1] = recvCV[i++];
+		charge.rnp[2] = recvCV[i++];
+		charge.gb[0]  = recvCV[i++];
+		charge.gb[1]  = recvCV[i++];
+		charge.gb[2]  = recvCV[i++];
+		charge.w      = recvCV[i++];
+		charge.wm     = recvCV[i++];
 		chargeVector.push_back(charge);
 	      }
 	    else
-	      i += 7;
+	      i += 9;
 	  }
       }
   }
@@ -1424,8 +1444,14 @@ namespace MITHRA
     int                         msgtag1 = 1, msgtag2 = 2;
 
     /* 将位于束团横向域之外的粒子计数设为零。 */
-    ubp.nt = 0;
+	ubp.nOutX = 0;
+	ubp.nOutY = 0;
+    ubp.nOutXY = 0;
+	ubp.nCrossZSlab = 0;
+	ubp.nOutBoxAny = 0;
 
+
+	
     /* 遍历束团中的电荷点，提取各点处的种子场实数值，
      * 与波荡器场进行叠加，并最终在场内对粒子进行加速。	*/
 
@@ -1434,6 +1460,8 @@ namespace MITHRA
 	/* 如果粒子不属于当前处理器，则继续粒子的循环 */
 	ubp.zr = pmod( iter->rnp[2] - zmin_ , mesh_.meshLength_[2] ) + zmin_;
 	if ( ! ( ( ubp.zr >= zp_[0] ) && ( ubp.zr < zp_[1] ) ) ) continue;
+
+	iter->wm = iter->w;
 
 	/* 获取布尔标志，用于判断粒子是否位于计算域内。 */
 	ubp.b1x = ( iter->rnp[0] < xmax_ - ub_.dx && iter->rnp[0] > xmin_ + ub_.dx );
@@ -1455,48 +1483,59 @@ namespace MITHRA
 	  {
 
 	    if ( ubp.b1x && ubp.b1y && ubp.b1z )
-	      {
-		ubp.dxr = modf( ( iter->rnp[0] - xmin_ ) / ub_.dx , &ubp.d1 ); ubp.i = (int) ubp.d1;
-		ubp.dyr = modf( ( iter->rnp[1] - ymin_ ) / ub_.dy , &ubp.d1 ); ubp.j = (int) ubp.d1;
-		ubp.dzr = modf( ( iter->rnp[2] - zmin_ ) / ub_.dz , &ubp.d1 ); ubp.k = (int) ubp.d1;
+	    {
+			ubp.dxr = modf( ( iter->rnp[0] - xmin_ ) / ub_.dx , &ubp.d1 ); ubp.i = (int) ubp.d1;
+			ubp.dyr = modf( ( iter->rnp[1] - ymin_ ) / ub_.dy , &ubp.d1 ); ubp.j = (int) ubp.d1;
+			ubp.dzr = modf( ( iter->rnp[2] - zmin_ ) / ub_.dz , &ubp.d1 ); ubp.k = (int) ubp.d1;
 
-		/* 获取单元格的索引。 */
-		ubp.m   = ( ubp.k - k0_) * N1N0_ + ubp.i * N1_ + ubp.j;
+			/* 获取单元格的索引。 */
+			ubp.m   = ( ubp.k - k0_) * N1N0_ + ubp.i * N1_ + ubp.j;
 
-		if (!pic_[ubp.m            ])     fieldEvaluate(ubp.m            );
-		if (!pic_[ubp.m+N1_        ])     fieldEvaluate(ubp.m+N1_        );
-		if (!pic_[ubp.m+1          ])     fieldEvaluate(ubp.m+1          );
-		if (!pic_[ubp.m+N1_+1      ])     fieldEvaluate(ubp.m+N1_+1      );
-		if (!pic_[ubp.m+N1N0_      ])     fieldEvaluate(ubp.m+N1N0_      );
-		if (!pic_[ubp.m+N1N0_+N1_  ])     fieldEvaluate(ubp.m+N1N0_+N1_  );
-		if (!pic_[ubp.m+N1N0_+1    ])     fieldEvaluate(ubp.m+N1N0_+1    );
-		if (!pic_[ubp.m+N1N0_+N1_+1])     fieldEvaluate(ubp.m+N1N0_+N1_+1);
+			if (!pic_[ubp.m            ])     fieldEvaluate(ubp.m            );
+			if (!pic_[ubp.m+N1_        ])     fieldEvaluate(ubp.m+N1_        );
+			if (!pic_[ubp.m+1          ])     fieldEvaluate(ubp.m+1          );
+			if (!pic_[ubp.m+N1_+1      ])     fieldEvaluate(ubp.m+N1_+1      );
+			if (!pic_[ubp.m+N1N0_      ])     fieldEvaluate(ubp.m+N1N0_      );
+			if (!pic_[ubp.m+N1N0_+N1_  ])     fieldEvaluate(ubp.m+N1N0_+N1_  );
+			if (!pic_[ubp.m+N1N0_+1    ])     fieldEvaluate(ubp.m+N1N0_+1    );
+			if (!pic_[ubp.m+N1N0_+N1_+1])     fieldEvaluate(ubp.m+N1N0_+N1_+1);
 
-		/* 计算并插值电场，以求得束团点处的数值。 */
-		ubp.et.pmv( ( 1.0 - ubp.dxr ) * ( 1.0 - ubp.dyr ) * ( 1.0 - ubp.dzr) , en_[ubp.m		]);
-		ubp.et.pmv(         ubp.dxr   * ( 1.0 - ubp.dyr ) * ( 1.0 - ubp.dzr) , en_[ubp.m+N1_	  	]);
-		ubp.et.pmv( ( 1.0 - ubp.dxr ) *         ubp.dyr   * ( 1.0 - ubp.dzr) , en_[ubp.m+1	  	]);
-		ubp.et.pmv(         ubp.dxr   *         ubp.dyr   * ( 1.0 - ubp.dzr) , en_[ubp.m+N1_+1	  	]);
-		ubp.et.pmv( ( 1.0 - ubp.dxr ) * ( 1.0 - ubp.dyr ) *         ubp.dzr  , en_[ubp.m+N1N0_	  	]);
-		ubp.et.pmv(         ubp.dxr   * ( 1.0 - ubp.dyr ) *         ubp.dzr  , en_[ubp.m+N1N0_+N1_  	]);
-		ubp.et.pmv( ( 1.0 - ubp.dxr ) *         ubp.dyr   *         ubp.dzr  , en_[ubp.m+N1N0_+1	]);
-		ubp.et.pmv(         ubp.dxr   *         ubp.dyr   *         ubp.dzr  , en_[ubp.m+N1N0_+N1_+1	]);
+			/* 计算并插值电场，以求得束团点处的数值。 */
+			ubp.et.pmv( ( 1.0 - ubp.dxr ) * ( 1.0 - ubp.dyr ) * ( 1.0 - ubp.dzr) , en_[ubp.m		]);
+			ubp.et.pmv(         ubp.dxr   * ( 1.0 - ubp.dyr ) * ( 1.0 - ubp.dzr) , en_[ubp.m+N1_	  	]);
+			ubp.et.pmv( ( 1.0 - ubp.dxr ) *         ubp.dyr   * ( 1.0 - ubp.dzr) , en_[ubp.m+1	  	]);
+			ubp.et.pmv(         ubp.dxr   *         ubp.dyr   * ( 1.0 - ubp.dzr) , en_[ubp.m+N1_+1	  	]);
+			ubp.et.pmv( ( 1.0 - ubp.dxr ) * ( 1.0 - ubp.dyr ) *         ubp.dzr  , en_[ubp.m+N1N0_	  	]);
+			ubp.et.pmv(         ubp.dxr   * ( 1.0 - ubp.dyr ) *         ubp.dzr  , en_[ubp.m+N1N0_+N1_  	]);
+			ubp.et.pmv( ( 1.0 - ubp.dxr ) *         ubp.dyr   *         ubp.dzr  , en_[ubp.m+N1N0_+1	]);
+			ubp.et.pmv(         ubp.dxr   *         ubp.dyr   *         ubp.dzr  , en_[ubp.m+N1N0_+N1_+1	]);
 
-		/* 计算并插值磁场，以求得束团点处的数值。*/
-		ubp.bt.pmv( ( 1.0 - ubp.dxr ) * ( 1.0 - ubp.dyr ) * ( 1.0 - ubp.dzr) , bn_[ubp.m		]);
-		ubp.bt.pmv(         ubp.dxr   * ( 1.0 - ubp.dyr ) * ( 1.0 - ubp.dzr) , bn_[ubp.m+N1_		]);
-		ubp.bt.pmv( ( 1.0 - ubp.dxr ) *         ubp.dyr   * ( 1.0 - ubp.dzr) , bn_[ubp.m+1		]);
-		ubp.bt.pmv(         ubp.dxr   *         ubp.dyr   * ( 1.0 - ubp.dzr) , bn_[ubp.m+N1_+1		]);
-		ubp.bt.pmv( ( 1.0 - ubp.dxr ) * ( 1.0 - ubp.dyr ) *         ubp.dzr  , bn_[ubp.m+N1N0_		]);
-		ubp.bt.pmv(         ubp.dxr   * ( 1.0 - ubp.dyr ) *         ubp.dzr  , bn_[ubp.m+N1N0_+N1_	]);
-		ubp.bt.pmv( ( 1.0 - ubp.dxr ) *         ubp.dyr   *         ubp.dzr  , bn_[ubp.m+N1N0_+1	]);
-		ubp.bt.pmv(         ubp.dxr   *         ubp.dyr   *         ubp.dzr  , bn_[ubp.m+N1N0_+N1_+1	]);
-	      }
-	    else if ( !(ubp.b1x) && !(ubp.b1y) && ubp.b1z )
-	      {
-		/* 将位于计算域横向尺寸范围之外的粒子数量加一。 */
-		ubp.nt++;
-	      }
+			/* 计算并插值磁场，以求得束团点处的数值。*/
+			ubp.bt.pmv( ( 1.0 - ubp.dxr ) * ( 1.0 - ubp.dyr ) * ( 1.0 - ubp.dzr) , bn_[ubp.m		]);
+			ubp.bt.pmv(         ubp.dxr   * ( 1.0 - ubp.dyr ) * ( 1.0 - ubp.dzr) , bn_[ubp.m+N1_		]);
+			ubp.bt.pmv( ( 1.0 - ubp.dxr ) *         ubp.dyr   * ( 1.0 - ubp.dzr) , bn_[ubp.m+1		]);
+			ubp.bt.pmv(         ubp.dxr   *         ubp.dyr   * ( 1.0 - ubp.dzr) , bn_[ubp.m+N1_+1		]);
+			ubp.bt.pmv( ( 1.0 - ubp.dxr ) * ( 1.0 - ubp.dyr ) *         ubp.dzr  , bn_[ubp.m+N1N0_		]);
+			ubp.bt.pmv(         ubp.dxr   * ( 1.0 - ubp.dyr ) *         ubp.dzr  , bn_[ubp.m+N1N0_+N1_	]);
+			ubp.bt.pmv( ( 1.0 - ubp.dxr ) *         ubp.dyr   *         ubp.dzr  , bn_[ubp.m+N1N0_+1	]);
+			ubp.bt.pmv(         ubp.dxr   *         ubp.dyr   *         ubp.dzr  , bn_[ubp.m+N1N0_+N1_+1	]);
+	    }
+		bool crossedZSlab = (ubp.zr < zp_[0]) || (ubp.zr >= zp_[1]);
+		if ( !ubp.b1x && ubp.b1z ) {
+			ubp.nOutX++;
+		}
+		if ( !ubp.b1y && ubp.b1z ) {
+			ubp.nOutY++;
+		}
+	    if ( (!ubp.b1x || !ubp.b1y) && ubp.b1z ) {
+			ubp.nOutXY++;
+		}
+		if ( crossedZSlab ) {
+			ubp.nCrossZSlab++;
+		}
+		if ( ( (!ubp.b1x || !ubp.b1y) && ubp.b1z ) || crossedZSlab ) {
+			ubp.nOutBoxAny++;
+		}
 	  }
 	else if ( undulator_.size() > 0 )
 	  {
@@ -1534,6 +1573,19 @@ namespace MITHRA
 	/* 确定粒子的最终位置。 */
 	iter->rnp += ubp.dr;
 
+	// 用更新后的位置计算 lab 系 z
+	Double lz_soft = gamma_ * ( iter->rnp[2] + beta_ * c0_ * ( timeBunch_ + dt_ ) );
+
+	if ( lz_soft <= softKillStartLab_ ) {
+		iter->w = 1.0;
+	}
+	else if ( lz_soft >= softKillEndLab_ ) {
+		iter->w = 0.0;
+	}
+	else {
+		iter->w = ( softKillEndLab_ - lz_soft ) / ( softKillEndLab_ - softKillStartLab_ );
+	}
+
 	/* 计算用于处理器关联的相对坐标。 */
 	ubp.zr += ubp.dr[2];
 
@@ -1562,20 +1614,49 @@ namespace MITHRA
     std::copy( ubp.qRB.begin(), ubp.qRB.end(), std::back_inserter(chargeVectorn_) );
 
     /* 添加来自不同处理器、且位于域横向范围之外的电荷点数量。 */
-    MPI_Reduce(&ubp.nt, &ub_.nt,1,MPI_INT,MPI_SUM,0,MPI_COMM_WORLD);
-	if ( rank_ == 0 )
-	{
-		static int last_reported_nt = 0;
+	MPI_Reduce(&ubp.nOutX,      &ub_.nOutX,      1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+	MPI_Reduce(&ubp.nOutY,      &ub_.nOutY,      1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&ubp.nOutXY,      &ub_.nOutXY,      1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+	MPI_Reduce(&ubp.nCrossZSlab, &ub_.nCrossZSlab, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+	MPI_Reduce(&ubp.nOutBoxAny,  &ub_.nOutBoxAny,  1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
-	if ( ub_.nt > last_reported_nt )
-	{
-		printmessage(std::string(__FILE__), __LINE__,
-					std::string("Warning: " + stringify(ub_.nt) +
-					" particles have transverse dimensions that are larger than the computational domain size "
-					"(+" + stringify(ub_.nt - last_reported_nt) + " newly added).") );
+	static int last_reported_nOutXY = 0;
 
-		last_reported_nt = ub_.nt;
-	}
+	if ( rank_ == 0 ) {
+		// if ( ub_.nOutX > 0 ) {
+		// 	printmessage(std::string(__FILE__), __LINE__,
+		// 		std::string("Warning: ") + stringify(ub_.nOutX) +
+		// 		std::string(" particles are outside the transverse X domain."));
+		// }
+
+		// if ( ub_.nOutY > 0 ) {
+		// 	printmessage(std::string(__FILE__), __LINE__,
+		// 		std::string("Warning: ") + stringify(ub_.nOutY) +
+		// 		std::string(" particles are outside the transverse Y domain."));
+		// }
+
+		if ( ub_.nOutXY > last_reported_nOutXY ) {
+			printmessage(
+				std::string(__FILE__), __LINE__,
+				std::string("Warning: ") + stringify(ub_.nOutXY) +
+				std::string(" particles are outside the transverse computational domain "
+							"(+") + stringify(ub_.nOutXY - last_reported_nOutXY) +
+				std::string(" newly added).")
+			);
+			last_reported_nOutXY = ub_.nOutXY;
+		}
+
+		// if ( ub_.nCrossZSlab > 0 ) {
+		// 	printmessage(std::string(__FILE__), __LINE__,
+		// 		std::string("Note: ") + stringify(ub_.nCrossZSlab) +
+		// 		std::string(" particles crossed the current z-slab boundary and were transferred between MPI ranks."));
+		// }
+
+		// if ( ub_.nOutBoxAny > 0 ) {
+		// 	printmessage(std::string(__FILE__), __LINE__,
+		// 		std::string("Summary: ") + stringify(ub_.nOutBoxAny) +
+		// 		std::string(" particle out-of-box events were detected in this step."));
+		// }
 	}
   }
 
@@ -1801,84 +1882,95 @@ namespace MITHRA
   {
     /* 对于用户指定的每一个外部场，将其添加到波荡器场中。 */
     for (std::vector<Undulator>::iterator iter = undulator_.begin(); iter != undulator_.end(); iter++)
-      {
+    {
 
-	/* 计算波荡器磁场。 */
-	ub_.b0	= (iter->lu_ != 0.0 ) ? EM * c0_ * 2 * PI / iter->lu_ * iter->k_ / EC : 0.0;
+		/* 计算波荡器磁场。 */
+		ub_.b0	= (iter->lu_ != 0.0 ) ? EM * c0_ * 2 * PI / iter->lu_ * iter->k_ / EC : 0.0;
 
-	/* 计算波荡器波数。 */
-	ub_.ku 	= (iter->lu_ != 0.0 ) ? 2 * PI / iter->lu_ : 0.0;
+		/* 计算波荡器波数。 */
+		ub_.ku 	= (iter->lu_ != 0.0 ) ? 2 * PI / iter->lu_ : 0.0;
 
-	/* 计算波荡器角度的正弦和余弦函数。 */
-	ub_.ct	= cos( iter->theta_ );
-	ub_.st	= sin( iter->theta_ );
+		/* 计算波荡器角度的正弦和余弦函数。 */
+		ub_.ct	= cos( iter->theta_ );
+		ub_.st	= sin( iter->theta_ );
 
-	if ( iter->type_ == STATIC )
-	  {
-	    /* 首先，确定相对于波荡器起点的相对位置。下方的方程
-	     * 假定在 t=0 时刻，粒子束团位于距离第一个
-	     * 波荡器 gamma*rb_ 的位置处。										*/
-	    ubp.lz = gamma_ * ( r[2] + beta_ * c0_ * ( timeBunch_ + dt_ ) ) - iter->rb_;
-	    ubp.ly = r[0] * ub_.ct + r[1] * ub_.st;
+		if ( iter->type_ == STATIC )
+		{
+			/* 首先，确定相对于波荡器起点的相对位置。下方的方程
+			* 假定在 t=0 时刻，粒子束团位于距离第一个
+			* 波荡器 gamma*rb_ 的位置处。										*/
+			ubp.lz = gamma_ * ( r[2] + beta_ * c0_ * ( timeBunch_ + dt_ ) ) - iter->rb_;
+			ubp.ly = r[0] * ub_.ct + r[1] * ub_.st;
 
-	    /* 现在，根据获取的位置计算波荡器场。 */
-	    this->staticUndulator(ubp, iter);
-	  }
-	else if ( iter->type_ == OPTICAL )
-	  {
-	    /* 将坐标从束团静止系转换至实验室系。 */
-	    ubp.rl[0] = r[0]; ubp.rl[1] = r[1];
-	    ubp.rl[2] = gamma_ * ( r[2] + beta_ * c0_ * ( timeBunch_ + dt_ ) );
-	    ubp.t0    = gamma_ * ( timeBunch_ + dt_  + beta_ / c0_ * r[2] );
+			/* 现在，根据获取的位置计算波荡器场。 */
+			this->staticUndulator(ubp, iter);
+		}
+		else if ( iter->type_ == DIPOLE ) {
+			ub_.b0 = iter->bd_;
+			ub_.ku = 0.0;  // dipole 不需要波数，但先显式清零
+			ub_.ct = cos( iter->theta_ );
+			ub_.st = sin( iter->theta_ );
 
-	    /* 沿传播方向计算至参考位置的距离。 */
-	    ubp.rv = ubp.rl; ubp.rv -= iter->position_;
-	    ubp.z  = ubp.rv * iter->direction_ ;
+			ubp.lz = gamma_ * ( r[2] + beta_ * c0_ * ( timeBunch_ + dt_ ) ) - iter->rb_;
+			ubp.ly = r[0] * ub_.ct + r[1] * ub_.st;
 
-	    /* 计算传播延迟，并将其从时间中减去。 */
-	    ubp.tl = ubp.t0 - ubp.z / c0_;
+			this->staticDipole(ubp, iter);
+		}
+		else if ( iter->type_ == OPTICAL )
+		{
+			/* 将坐标从束团静止系转换至实验室系。 */
+			ubp.rl[0] = r[0]; ubp.rl[1] = r[1];
+			ubp.rl[2] = gamma_ * ( r[2] + beta_ * c0_ * ( timeBunch_ + dt_ ) );
+			ubp.t0    = gamma_ * ( timeBunch_ + dt_  + beta_ / c0_ * r[2] );
 
-	    /* 重置脉冲的载波包络相位。 */
-	    ubp.p0 = 0.0;
+			/* 沿传播方向计算至参考位置的距离。 */
+			ubp.rv = ubp.rl; ubp.rv -= iter->position_;
+			ubp.z  = ubp.rv * iter->direction_ ;
 
-	    /* 现在，根据给定的特定种子，对电场矢量进行操作。 */
-	    switch ( iter->seedType_ )
-	    {
-	      case PLANEWAVE:
-		this->planeWave(ubp, *iter);			break;
+			/* 计算传播延迟，并将其从时间中减去。 */
+			ubp.tl = ubp.t0 - ubp.z / c0_;
 
-	      case PLANEWAVETRUNCATED:
-		this->planeWaveTruncated(ubp, *iter);		break;
+			/* 重置脉冲的载波包络相位。 */
+			ubp.p0 = 0.0;
 
-	      case GAUSSIANBEAM:
-		this->gaussianBeam(ubp, *iter);			break;
+			/* 现在，根据给定的特定种子，对电场矢量进行操作。 */
+			switch ( iter->seedType_ )
+			{
+			case PLANEWAVE:
+			this->planeWave(ubp, *iter);			break;
 
-	      case SUPERGAUSSIANBEAM:
-		this->superGaussianBeam(ubp, *iter);		break;
+			case PLANEWAVETRUNCATED:
+			this->planeWaveTruncated(ubp, *iter);		break;
 
-	      case STANDINGPLANEWAVE:
-		this->standingPlaneWave(ubp, *iter);		break;
+			case GAUSSIANBEAM:
+			this->gaussianBeam(ubp, *iter);			break;
 
-	      case STANDINGPLANEWAVETRUNCATED:
-		this->standingPlaneWaveTruncated(ubp, *iter);	break;
+			case SUPERGAUSSIANBEAM:
+			this->superGaussianBeam(ubp, *iter);		break;
 
-	      case STANDINGGAUSSIANBEAM:
-		this->standingGaussianBeam(ubp, *iter);		break;
+			case STANDINGPLANEWAVE:
+			this->standingPlaneWave(ubp, *iter);		break;
 
-	      case STANDINGSUPERGAUSSIANBEAM:
-		this->standingSuperGaussianBeam(ubp, *iter);	break;
-	    }
+			case STANDINGPLANEWAVETRUNCATED:
+			this->standingPlaneWaveTruncated(ubp, *iter);	break;
 
-	    /* 现在，将计算所得的磁矢量势变换至束团静止系。 */
-	    ubp.bt[0] += gamma_ * ( ubp.bT[0] + beta_ / c0_ * ubp.eT[1] );
-	    ubp.bt[1] += gamma_ * ( ubp.bT[1] - beta_ / c0_ * ubp.eT[0] );
-	    ubp.bt[2] += ubp.bT[2];
+			case STANDINGGAUSSIANBEAM:
+			this->standingGaussianBeam(ubp, *iter);		break;
 
-	    ubp.et[0] += gamma_ * ( ubp.eT[0] - beta_ * c0_ * ubp.bT[1] );
-	    ubp.et[1] += gamma_ * ( ubp.eT[1] + beta_ * c0_ * ubp.bT[0] );
-	    ubp.et[2] += ubp.eT[2];
-	  }
-      }
+			case STANDINGSUPERGAUSSIANBEAM:
+			this->standingSuperGaussianBeam(ubp, *iter);	break;
+			}
+
+			/* 现在，将计算所得的磁矢量势变换至束团静止系。 */
+			ubp.bt[0] += gamma_ * ( ubp.bT[0] + beta_ / c0_ * ubp.eT[1] );
+			ubp.bt[1] += gamma_ * ( ubp.bT[1] - beta_ / c0_ * ubp.eT[0] );
+			ubp.bt[2] += ubp.bT[2];
+
+			ubp.et[0] += gamma_ * ( ubp.eT[0] - beta_ * c0_ * ubp.bT[1] );
+			ubp.et[1] += gamma_ * ( ubp.eT[1] + beta_ * c0_ * ubp.bT[0] );
+			ubp.et[2] += ubp.eT[2];
+		}
+    }
   }
 
   /******************************************************************************************************
@@ -2210,6 +2302,8 @@ namespace MITHRA
 	    Double lzScreen = FEL_[jf].screenProfile_.pos_[i];
 	    for (auto iter = chargeVectorn_.begin(); iter != chargeVectorn_.end(); iter++)
 	      {
+			// 已经软删除到接近 0 的粒子，不再写 screen profile
+			if (iter->w <= 1.0e-6) continue;
 		/* 仅考虑属于当前处理器域的粒子。 */
 		if ( particleInProcessor(iter->rnp[2]) )
 		  {

@@ -341,8 +341,14 @@ namespace MITHRA
     /*波动器的起始位置。*/
     Double				rb_;
 
-    /*波动的长度。*/
+    /*波荡器的长度。*/
     unsigned int			length_;
+
+    /*二级铁磁场强度*/
+    Double bd_;
+
+    /*二级铁z方向物理长度*/
+    Double ld_;
 
     /*束头和波动器之间的初始距离开始。*/
     Double				dist_;

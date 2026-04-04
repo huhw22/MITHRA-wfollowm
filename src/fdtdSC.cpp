@@ -67,7 +67,8 @@ namespace MITHRA
 	if ( ! (bp || bm) ) continue;
 
 	/*得到粒子的电荷。*/
-	uc_.q = it->q;
+	uc_.q = it->q * 0.5 * (it->wm + it->w);
+	if (std::abs(uc_.q) < 1.0e-20) continue;
 
 	/*得到下一个时间步长的宏观粒子的指数。*/
 	uc_.ip  = (int) floor( ( uc_.rp[0] - xmin_ ) / uc_.dx );
