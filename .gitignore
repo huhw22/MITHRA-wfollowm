@@ -2,3 +2,4 @@ include/
 lib/
 obj/
 prj/MITHRA
+test/

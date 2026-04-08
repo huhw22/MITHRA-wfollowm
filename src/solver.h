@@ -254,8 +254,8 @@ namespace MITHRA
     std::vector<bool>                                                   pic_;
 
     /*计算网格中节点在三个不同时间点的矢量势。*/
-    std::vector<FieldVector<float> > 					en_;
-    std::vector<FieldVector<float> > 					bn_;
+    std::vector<FieldVector<Double> > 					en_;
+    std::vector<FieldVector<Double> > 					bn_;
 
     /*每个方向上的节点数。*/
     int									N0_, N1_, N2_, N1N0_;

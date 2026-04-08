@@ -668,8 +668,8 @@ namespace MITHRA
     anp1_ = new std::vector<FieldVector<Double> > (N1N0_*np_, ZERO_VECTOR);
     an_   = new std::vector<FieldVector<Double> > (N1N0_*np_, ZERO_VECTOR);
     anm1_ = new std::vector<FieldVector<Double> > (N1N0_*np_, ZERO_VECTOR);
-    en_  .resize(N1N0_*np_, ZERO_VECTOR_FLOAT);
-    bn_  .resize(N1N0_*np_, ZERO_VECTOR_FLOAT);
+    en_  .resize(N1N0_*np_, ZERO_VECTOR);
+    bn_  .resize(N1N0_*np_, ZERO_VECTOR);
     pic_ .resize(N1N0_*np_, false);
 
     if ( mesh_.spaceCharge_ )
@@ -1451,6 +1451,14 @@ namespace MITHRA
 	ubp.nOutBoxAny = 0;
 
 
+	long long nSoftLocal = 0;     // 0 < w < 1
+	long long nZeroLocal = 0;     // w 很接近 0
+	Double    lzMaxLocal = -1.0e300;
+	Double    lzMinLocal =  1.0e300;
+	Double    wMinLocal  =  1.0;
+	Double    wMaxLocal  =  0.0;
+
+
 	
     /* 遍历束团中的电荷点，提取各点处的种子场实数值，
      * 与波荡器场进行叠加，并最终在场内对粒子进行加速。	*/
@@ -1461,7 +1469,6 @@ namespace MITHRA
 	ubp.zr = pmod( iter->rnp[2] - zmin_ , mesh_.meshLength_[2] ) + zmin_;
 	if ( ! ( ( ubp.zr >= zp_[0] ) && ( ubp.zr < zp_[1] ) ) ) continue;
 
-	iter->wm = iter->w;
 
 	/* 获取布尔标志，用于判断粒子是否位于计算域内。 */
 	ubp.b1x = ( iter->rnp[0] < xmax_ - ub_.dx && iter->rnp[0] > xmin_ + ub_.dx );
@@ -1570,21 +1577,33 @@ namespace MITHRA
 	/* 确定粒子的运动。 */
 	ubp.dr.mv( ub_.dtb / sqrt (1.0 + iter->gb.norm2()) , iter->gb );
 
+	iter->wm = iter->w;
+
 	/* 确定粒子的最终位置。 */
 	iter->rnp += ubp.dr;
 
-	// 用更新后的位置计算 lab 系 z
 	Double lz_soft = gamma_ * ( iter->rnp[2] + beta_ * c0_ * ( timeBunch_ + dt_ ) );
 
-	if ( lz_soft <= softKillStartLab_ ) {
+	if (!softKillEnable_) {
 		iter->w = 1.0;
 	}
-	else if ( lz_soft >= softKillEndLab_ ) {
-		iter->w = 0.0;
-	}
 	else {
-		iter->w = ( softKillEndLab_ - lz_soft ) / ( softKillEndLab_ - softKillStartLab_ );
+	
+		if ( lz_soft <= softKillStartLab_ ) iter->w = 1.0;
+		else if ( lz_soft >= softKillEndLab_ ) iter->w = 0.0;
+		else iter->w = ( softKillEndLab_ - lz_soft ) / ( softKillEndLab_ - softKillStartLab_ );
 	}
+
+	/* ===== 这里开始加统计 ===== */
+	// lzMinLocal = std::min(lzMinLocal, lz_soft);
+	// lzMaxLocal = std::max(lzMaxLocal, lz_soft);
+
+	// wMinLocal  = std::min(wMinLocal , iter->w);
+	// wMaxLocal  = std::max(wMaxLocal , iter->w);
+
+	// if (iter->w < 1.0 && iter->w > 1.0e-12) ++nSoftLocal;
+	// if (iter->w <= 1.0e-12) ++nZeroLocal;
+	/* ===== 这里结束 ===== */
 
 	/* 计算用于处理器关联的相对坐标。 */
 	ubp.zr += ubp.dr[2];
@@ -1620,6 +1639,36 @@ namespace MITHRA
 	MPI_Reduce(&ubp.nCrossZSlab, &ub_.nCrossZSlab, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 	MPI_Reduce(&ubp.nOutBoxAny,  &ub_.nOutBoxAny,  1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
+	// long long nSoftGlobal = 0;
+	// long long nZeroGlobal = 0;
+
+	// Double lzMinGlobal = 0.0;
+	// Double lzMaxGlobal = 0.0;
+	// Double wMinGlobal  = 0.0;
+	// Double wMaxGlobal  = 0.0;
+
+	// MPI_Allreduce(&nSoftLocal, &nSoftGlobal, 1, MPI_LONG_LONG_INT, MPI_SUM, MPI_COMM_WORLD);
+	// MPI_Allreduce(&nZeroLocal, &nZeroGlobal, 1, MPI_LONG_LONG_INT, MPI_SUM, MPI_COMM_WORLD);
+
+	// MPI_Allreduce(&lzMinLocal, &lzMinGlobal, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+	// MPI_Allreduce(&lzMaxLocal, &lzMaxGlobal, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+	// MPI_Allreduce(&wMinLocal,  &wMinGlobal,  1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+	// MPI_Allreduce(&wMaxLocal,  &wMaxGlobal,  1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+	// if (rank_ == 0 && (nTime_ % 50 == 0))
+	// {
+	// 	printmessage(std::string(__FILE__), __LINE__,
+	// 		std::string("[softkill bunchUpdate] start=") + stringify(softKillStartLab_) +
+	// 		" end="   + stringify(softKillEndLab_) +
+	// 		" lzMin=" + stringify(lzMinGlobal) +
+	// 		" lzMax=" + stringify(lzMaxGlobal) +
+	// 		" wMin="  + stringify(wMinGlobal) +
+	// 		" wMax="  + stringify(wMaxGlobal) +
+	// 		" nSoft=" + stringify(nSoftGlobal) +
+	// 		" nZero=" + stringify(nZeroGlobal));
+	// }
+
 	static int last_reported_nOutXY = 0;
 
 	if ( rank_ == 0 ) {
@@ -1635,16 +1684,16 @@ namespace MITHRA
 		// 		std::string(" particles are outside the transverse Y domain."));
 		// }
 
-		if ( ub_.nOutXY > last_reported_nOutXY ) {
-			printmessage(
-				std::string(__FILE__), __LINE__,
-				std::string("Warning: ") + stringify(ub_.nOutXY) +
-				std::string(" particles are outside the transverse computational domain "
-							"(+") + stringify(ub_.nOutXY - last_reported_nOutXY) +
-				std::string(" newly added).")
-			);
-			last_reported_nOutXY = ub_.nOutXY;
-		}
+		// if ( ub_.nOutXY > last_reported_nOutXY ) {
+		// 	printmessage(
+		// 		std::string(__FILE__), __LINE__,
+		// 		std::string("Warning: ") + stringify(ub_.nOutXY) +
+		// 		std::string(" particles are outside the transverse computational domain "
+		// 					"(+") + stringify(ub_.nOutXY - last_reported_nOutXY) +
+		// 		std::string(" newly added).")
+		// 	);
+		// 	last_reported_nOutXY = ub_.nOutXY;
+		// }
 
 		// if ( ub_.nCrossZSlab > 0 ) {
 		// 	printmessage(std::string(__FILE__), __LINE__,

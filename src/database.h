@@ -11,6 +11,7 @@
 
 #include "fieldvector.h"
 #include "stdinclude.h"
+#include "detector_field_writer.h"
 
 namespace MITHRA
 {
@@ -207,7 +208,7 @@ namespace MITHRA
     Double				*anp1, *an, *anm1;
     Double				*fnp1, *fn, *fnm1;
     Double				*jn,   *rn;
-    float				*en,   *bn;
+    Double				*en,   *bn;
 
     unsigned int			N0m1, N1m1, npm1;
   };
@@ -408,44 +409,27 @@ namespace MITHRA
     /* 当前拥有 detector 面的 rank */
     int                                       ownerRank;
 
-    /* detector 使用的单频参数 */
-    Double                                    w;
-
-    /* Fourier 时间窗点数，以及当前环形缓冲写入位置 */
-    unsigned int                              Nf;
-    unsigned int                              m;
-
     /* 当前 detector 面对应的全局 z 索引 */
     long int                                  k;
 
     /* 采样间隔与插值相关参数 */
-    Double                                    dt;
-    Double                                    dx;
-    Double                                    dy;
-    Double                                    dz;
     Double                                    dzr;
     Double                                    c;
-
-    /* 功率归一化系数 */
-    Double                                    pc;
-
-    /* 当前时刻整张 detector 面的局部/全局场快照
-    * 每个 xy 点存 4 个分量：Ex, Ey, Bx, By（lab 系） */
-    std::vector<Double>                       planeL;
-    std::vector<Double>                       planeG;
-
-    /* 时间环形缓冲：
-    * [Nf][N1_*N0_][4]
-    * 第三个下标的四个分量依次是 Ex, Ey, Bx, By（lab 系） */
-    std::vector< std::vector< std::vector<Double> > >   fdt;
-
-    /* 单频 Fourier 系数 */
-    std::vector<Complex>                      ep;
-    std::vector<Complex>                      em;
 
     /* 当前步功率：本地与全局 */
     Double                                    pL;
     Double                                    pG;
+
+    /*全场输出*/
+    DetectorFieldWriter fieldWriter;
+    std::vector<double> xCoord;
+    std::vector<double> yCoord;
+    std::vector<double>  exFrame, eyFrame, ezFrame, bxFrame, byFrame, bzFrame;
+
+    int                 fieldNx;
+    int                 fieldNy;
+    std::string         fieldFileName;
+    bool                fieldUseFloat32;
   };
 
   

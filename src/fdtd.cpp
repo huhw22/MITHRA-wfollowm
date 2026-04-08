@@ -43,6 +43,11 @@ namespace MITHRA
     bool                              bp, bm;
     std::list<Charge>::iterator       it = chargeVectorn_.begin();
 
+	long long nUsedLocal = 0;         // 本步真正参与沉积的粒子数
+	long long nSuppressedLocal = 0;   // qeff 比原始 q 明显变小的粒子数
+	Double qAbsLocal = 0.0;           // sum |q|
+	Double qEffAbsLocal = 0.0;        // sum |qeff|
+
     /*现在，应该在电荷上执行一个循环，并且应该更新电流。*/
     for (it = chargeVectorn_.begin(); it != chargeVectorn_.end(); it++)
       {
@@ -65,7 +70,15 @@ namespace MITHRA
 
 	/*得到粒子的电荷。*/
 	uc_.q = it->q * 0.5 * (it->wm + it->w);
-	if (std::abs(uc_.q) < 1.0e-20) continue;
+	++nUsedLocal;
+	qAbsLocal    += std::abs(it->q);
+	qEffAbsLocal += std::abs(uc_.q);
+
+	if (std::abs(uc_.q) < 0.999999 * std::abs(it->q))
+		++nSuppressedLocal;
+
+	if (std::abs(uc_.q) < 1.0e-20)
+		continue;
 
 	/*得到下一个时间步长的宏观粒子的指数。*/
 	uc_.ip  = (int) floor( ( uc_.rp[0] - xmin_ ) / uc_.dx );
@@ -182,7 +195,26 @@ namespace MITHRA
 	    (*(jn+uc_.m+N1N0_+1)    )[2] += uc_.q * 0.5 * uc_.x1 * uc_.y2 * uc_.jcm[2];
 	    (*(jn+uc_.m+N1N0_+N1_+1))[2] += uc_.q * 0.5 * uc_.x2 * uc_.y2 * uc_.jcm[2];
 	  }
-      }
+    }
+	// long long nUsedGlobal = 0;
+	// long long nSuppressedGlobal = 0;
+	// Double qAbsGlobal = 0.0;
+	// Double qEffAbsGlobal = 0.0;
+
+	// MPI_Allreduce(&nUsedLocal, &nUsedGlobal, 1, MPI_LONG_LONG_INT, MPI_SUM, MPI_COMM_WORLD);
+	// MPI_Allreduce(&nSuppressedLocal, &nSuppressedGlobal, 1, MPI_LONG_LONG_INT, MPI_SUM, MPI_COMM_WORLD);
+	// MPI_Allreduce(&qAbsLocal, &qAbsGlobal, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+	// MPI_Allreduce(&qEffAbsLocal, &qEffAbsGlobal, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+	// if (rank_ == 0 && (nTime_ % 50 == 0))
+	// {
+	// 	printmessage(std::string(__FILE__), __LINE__,
+	// 		std::string("[softkill fdtd currentUpdate] nUsed=") + stringify(nUsedGlobal) +
+	// 		" nSuppressed=" + stringify(nSuppressedGlobal) +
+	// 		" sum|q|=" + stringify(qAbsGlobal) +
+	// 		" sum|qeff|=" + stringify(qEffAbsGlobal) +
+	// 		" ratio=" + stringify(qEffAbsGlobal / (qAbsGlobal + 1.0e-300)));
+	// }
   }
 
   /******************************************************************************************************
@@ -777,26 +809,26 @@ namespace MITHRA
     /*在整个处理器中通信计算字段。*/
     if (rank_ != size_ - 1)
       {
-	MPI_Send(uf_.en+3*(np_-2)*N1N0_, 	3*N1N0_,MPI_FLOAT,rank_+1,msgtag5,MPI_COMM_WORLD);
-	MPI_Send(uf_.bn+3*(np_-2)*N1N0_,	3*N1N0_,MPI_FLOAT,rank_+1,msgtag6,MPI_COMM_WORLD);
+	MPI_Send(uf_.en+3*(np_-2)*N1N0_, 	3*N1N0_,MPI_DOUBLE,rank_+1,msgtag5,MPI_COMM_WORLD);
+	MPI_Send(uf_.bn+3*(np_-2)*N1N0_,	3*N1N0_,MPI_DOUBLE,rank_+1,msgtag6,MPI_COMM_WORLD);
       }
 
     if (rank_ != 0)
       {
-	MPI_Recv(uf_.en,			3*N1N0_,MPI_FLOAT,rank_-1,msgtag5,MPI_COMM_WORLD,&status);
-	MPI_Recv(uf_.bn,		  	3*N1N0_,MPI_FLOAT,rank_-1,msgtag6,MPI_COMM_WORLD,&status);
+	MPI_Recv(uf_.en,			3*N1N0_,MPI_DOUBLE,rank_-1,msgtag5,MPI_COMM_WORLD,&status);
+	MPI_Recv(uf_.bn,		  	3*N1N0_,MPI_DOUBLE,rank_-1,msgtag6,MPI_COMM_WORLD,&status);
       }
 
     if (rank_ != 0)
       {
-	MPI_Send(uf_.en+3*N1N0_,	 	3*N1N0_,MPI_FLOAT,rank_-1,msgtag7,MPI_COMM_WORLD);
-	MPI_Send(uf_.bn+3*N1N0_,		3*N1N0_,MPI_FLOAT,rank_-1,msgtag8,MPI_COMM_WORLD);
+	MPI_Send(uf_.en+3*N1N0_,	 	3*N1N0_,MPI_DOUBLE,rank_-1,msgtag7,MPI_COMM_WORLD);
+	MPI_Send(uf_.bn+3*N1N0_,		3*N1N0_,MPI_DOUBLE,rank_-1,msgtag8,MPI_COMM_WORLD);
       }
 
     if (rank_ != size_ - 1)
       {
-	MPI_Recv(uf_.en+3*(np_-1)*N1N0_,	3*N1N0_,MPI_FLOAT,rank_+1,msgtag7,MPI_COMM_WORLD,&status);
-	MPI_Recv(uf_.bn+3*(np_-1)*N1N0_,	3*N1N0_,MPI_FLOAT,rank_+1,msgtag8,MPI_COMM_WORLD,&status);
+	MPI_Recv(uf_.en+3*(np_-1)*N1N0_,	3*N1N0_,MPI_DOUBLE,rank_+1,msgtag7,MPI_COMM_WORLD,&status);
+	MPI_Recv(uf_.bn+3*(np_-1)*N1N0_,	3*N1N0_,MPI_DOUBLE,rank_+1,msgtag8,MPI_COMM_WORLD,&status);
       }
   }
 

@@ -232,349 +232,404 @@ namespace MITHRA
   }
 
 
-  void Solver::initializeDetector ()
-  {
-	printmessage(std::string(__FILE__), __LINE__,
-				std::string("::: Initializing the data for FEL radiation detector sampling.") );
-
-	rd_.clear();
-	rd_.resize(FEL_.size());
-
-	for (unsigned int jf = 0; jf < FEL_.size(); jf++)
-	{
-	  /* 先把运行态清掉 */
-	  rd_[jf].active     = false;
-	  rd_[jf].started    = false;
-	  rd_[jf].finished   = false;
-	  rd_[jf].file       = NULL;
-
-	  rd_[jf].zLab       = FEL_[jf].radiationDetector_.zLab_;
-	  rd_[jf].zBox       = 0.0;
-	  rd_[jf].zLabCheck  = 0.0;
-
-	  rd_[jf].tLab0      = 0.0;
-	  rd_[jf].tLab       = 0.0;
-
-	  rd_[jf].ownerRank  = -1;
-
-	  rd_[jf].w          = 0.0;
-	  rd_[jf].Nf         = 0;
-	  rd_[jf].m          = 0;
-
-	  rd_[jf].k          = -1;
-
-	  rd_[jf].dt         = 0.0;
-	  rd_[jf].dx         = 0.0;
-	  rd_[jf].dy         = 0.0;
-	  rd_[jf].dz         = 0.0;
-	  rd_[jf].dzr        = 0.0;
-	  rd_[jf].c          = 0.0;
-
-	  rd_[jf].pc         = 0.0;
-
-	  rd_[jf].pL         = 0.0;
-	  rd_[jf].pG         = 0.0;
-
-	  rd_[jf].planeL.clear();
-	  rd_[jf].planeG.clear();
-	  rd_[jf].fdt.clear();
-	  rd_[jf].ep.clear();
-	  rd_[jf].em.clear();
-
-	  /* 没开 detector 就跳过 */
-	  if (!FEL_[jf].radiationDetector_.sampling_) continue;
-
-	  /* 第一版只处理 power-line */
-	  if (!FEL_[jf].radiationDetector_.writePowerLine_) continue;
-
-	  /* -------- 以下完全仿照 initializePowerSample 的频域初始化逻辑 -------- */
-
-	  /* 单频 detector 的等效周期 */
-	  Double dt = undulator_[0].lu_ /
-				FEL_[jf].radiationDetector_.lambda_ /
-				( gamma_ * c0_ );
-
-	  /* 和 radiation-power 完全同一规则：用三个辐射周期决定时间窗长度 */
-	  rd_[jf].Nf = unsigned( 3.0 * dt / mesh_.timeStep_ );
-
-	  /* 单频角频率 */
-	  rd_[jf].w  = 2.0 * PI / dt;
-
-	  /* 时间/空间步长 */
-	  rd_[jf].dt = mesh_.timeStep_;
-	  rd_[jf].dx = mesh_.meshResolution_[0];
-	  rd_[jf].dy = mesh_.meshResolution_[1];
-	  rd_[jf].dz = mesh_.meshResolution_[2];
-
-	  /* 功率归一化系数：直接照抄 radiation-power 的 pc 定义 */
-	  rd_[jf].pc = 2.0 * rd_[jf].dx * rd_[jf].dy
-				/ ( m0_ * rd_[jf].Nf * rd_[jf].Nf )
-				* pow(mesh_.lengthScale_, 2)
-				/ pow(mesh_.timeScale_, 3);
-
-	  /* 当前整张 detector 面的局部/全局场快照
-	  * 每个 xy 点存 4 个量：Ex, Ey, Bx, By（lab 系） */
-	  rd_[jf].planeL.resize(N1_ * N0_ * 4, 0.0);
-	  rd_[jf].planeG.resize(N1_ * N0_ * 4, 0.0);
-
-	  /* 时间环形缓冲：
-	  * [Nf][N1_*N0_][4] */
-	  rd_[jf].fdt.resize(
-		rd_[jf].Nf,
-		std::vector< std::vector<Double> >(N1_ * N0_, std::vector<Double>(4, 0.0))
-	  );
-
-	  /* 单频 Fourier 系数：
-	  * detector 这里只有一个频点，所以 ep/em 只是一维 */
-	  rd_[jf].ep.resize(rd_[jf].Nf, Complex(0.0, 0.0));
-	  rd_[jf].em.resize(rd_[jf].Nf, Complex(0.0, 0.0));
-
-	  for (unsigned int j = 0; j < rd_[jf].Nf; j++)
-	  {
-		rd_[jf].ep[j] = cos( rd_[jf].w * j * mesh_.timeStep_ )
-						+ I * sin( rd_[jf].w * j * mesh_.timeStep_ );
-
-		rd_[jf].em[j] = cos( rd_[jf].w * j * mesh_.timeStep_ )
-						- I * sin( rd_[jf].w * j * mesh_.timeStep_ );
-	  }
-	}
-
-	printmessage(std::string(__FILE__), __LINE__,
-				std::string(" The data for sampling FEL radiation detector is initialized. :::") );
-  }
-
-
-  void Solver::detectorSample ()
+ void Solver::initializeDetector ()
 {
-  /* 临时变量 */
-  long int                  mi, ni;
-  FieldVector<Double>       et, bt;
-  Complex                   ew1, bw1, ew2, bw2;
+  printmessage(std::string(__FILE__), __LINE__,
+               std::string("::: Initializing the data for FEL radiation detector sampling.") );
 
-  int                       ownerLocal, ownerGlobal;
-  bool                      activeNow;
+  rd_.clear();
+  rd_.resize(FEL_.size());
 
   for (unsigned int jf = 0; jf < FEL_.size(); jf++)
+  {
+    /* ---------- 运行态清零 ---------- */
+    rd_[jf].active    = false;
+    rd_[jf].started   = false;
+    rd_[jf].finished  = false;
+    rd_[jf].file      = NULL;
+
+    rd_[jf].zLab      = FEL_[jf].radiationDetector_.zLab_;
+    rd_[jf].zBox      = 0.0;
+    rd_[jf].zLabCheck = 0.0;
+
+    rd_[jf].tLab0     = 0.0;
+    rd_[jf].tLab      = 0.0;
+
+    rd_[jf].ownerRank = -1;
+
+    /* detectorSample() 仍会用到的几何/插值状态 */
+    rd_[jf].k         = -1;
+    rd_[jf].dzr       = 0.0;
+    rd_[jf].c         = 0.0;
+
+    /* 当前步的局部/全局积分量 */
+    rd_[jf].pL        = 0.0;
+    rd_[jf].pG        = 0.0;
+
+    /* ---------- field writer 相关状态清零 ---------- */
+    rd_[jf].fieldWriter.close();
+
+    rd_[jf].xCoord.clear();
+    rd_[jf].yCoord.clear();
+
+    rd_[jf].exFrame.clear();
+    rd_[jf].eyFrame.clear();
+    rd_[jf].ezFrame.clear();
+    rd_[jf].bxFrame.clear();
+    rd_[jf].byFrame.clear();
+    rd_[jf].bzFrame.clear();
+
+    rd_[jf].fieldNx = 0;
+    rd_[jf].fieldNy = 0;
+    rd_[jf].fieldFileName = "";
+    rd_[jf].fieldUseFloat32 = false;
+
+    /* ---------- 没开 detector 就跳过 ---------- */
+    if (!FEL_[jf].radiationDetector_.sampling_) continue;
+
+    const bool needPower = FEL_[jf].radiationDetector_.writePowerLine_;
+    const bool needField = FEL_[jf].radiationDetector_.writeField_;
+
+    /* power / field 都没开，就不必继续 */
+    if (!needPower && !needField) continue;
+
+    /* =========================================================
+     * 一、field 输出初始化准备（只准备，不 open 文件）
+     * ========================================================= */
+    if (needField)
     {
-      if (!FEL_[jf].radiationDetector_.sampling_) continue;
-      if (!FEL_[jf].radiationDetector_.writePowerLine_) continue;
+      /* 只输出内部区域：
+       * i = 2 ... N0_-3, j = 2 ... N1_-3
+       * 因此尺寸分别是 N0_-4, N1_-4
+       */
+      rd_[jf].fieldNx = N0_ - 4;
+      rd_[jf].fieldNy = N1_ - 4;
 
-      /* 每一步先清当前瞬时状态 */
-      rd_[jf].active     = false;
-      rd_[jf].ownerRank  = -1;
-      rd_[jf].pL         = 0.0;
-      rd_[jf].pG         = 0.0;
+      rd_[jf].xCoord.resize(rd_[jf].fieldNx);
+      rd_[jf].yCoord.resize(rd_[jf].fieldNy);
 
-      std::fill(rd_[jf].planeL.begin(), rd_[jf].planeL.end(), 0.0);
-      std::fill(rd_[jf].planeG.begin(), rd_[jf].planeG.end(), 0.0);
+      for (int i = 2; i < N0_ - 2; i += 1)
+        rd_[jf].xCoord[i - 2] = xmin_ + i * mesh_.meshResolution_[0];
 
-      ownerLocal  = -1;
-      ownerGlobal = -1;
-      activeNow   = false;
+      for (int j = 2; j < N1_ - 2; j += 1)
+        rd_[jf].yCoord[j - 2] = ymin_ + j * mesh_.meshResolution_[1];
 
-      /* 与 powerSample 保持同一位置映射时刻定义 */
-	  rd_[jf].zBox      = boostFrame_.boxZFromLabZAndBoxT(rd_[jf].zLab, timeBunch_);
-	  rd_[jf].zLabCheck = boostFrame_.labZFromBoxZT(rd_[jf].zBox, timeBunch_);
-	  rd_[jf].tLab      = boostFrame_.labTFromBoxZT(rd_[jf].zBox, timeBunch_);
+      /* 6 个分量的整面场帧缓存
+       * row-major: idx = ix * fieldNy + iy
+       */
+      rd_[jf].exFrame.resize(rd_[jf].fieldNx * rd_[jf].fieldNy, 0.0);
+      rd_[jf].eyFrame.resize(rd_[jf].fieldNx * rd_[jf].fieldNy, 0.0);
+      rd_[jf].ezFrame.resize(rd_[jf].fieldNx * rd_[jf].fieldNy, 0.0);
+      rd_[jf].bxFrame.resize(rd_[jf].fieldNx * rd_[jf].fieldNy, 0.0);
+      rd_[jf].byFrame.resize(rd_[jf].fieldNx * rd_[jf].fieldNy, 0.0);
+      rd_[jf].bzFrame.resize(rd_[jf].fieldNx * rd_[jf].fieldNy, 0.0);
 
-      /* ----------- 1) 先判断当前 detector 面是否在全局有效区间 ----------- */
-      if ( rd_[jf].zBox >= zmin_ + mesh_.meshResolution_[2] &&
-           rd_[jf].zBox <= zmax_ - 2.0 * mesh_.meshResolution_[2] )
-        activeNow = true;
+      /* HDF5 文件名 */
+      std::string baseFilename = "";
+      if (!(isabsolute(FEL_[jf].radiationDetector_.basename_)))
+        baseFilename = FEL_[jf].radiationDetector_.directory_;
 
-      /* ----------- 2) 如果已经开始过，但这一步已经不在有效区，则结束记录 ----------- */
-      if (!activeNow && rd_[jf].started && !rd_[jf].finished)
+      rd_[jf].fieldFileName = baseFilename
+                            + FEL_[jf].radiationDetector_.basename_
+                            + "-field.h5";
+
+      /* 第一版固定写 float32 */
+      rd_[jf].fieldUseFloat32 = false;
+    }
+  }
+
+  printmessage(std::string(__FILE__), __LINE__,
+               std::string(" The data for sampling FEL radiation detector is initialized. :::") );
+}
+
+void Solver::detectorSample ()
+{
+  long int            mi;
+  FieldVector<Double> et, bt;
+
+  int  ownerLocal, ownerGlobal;
+  bool activeNow;
+
+  for (unsigned int jf = 0; jf < FEL_.size(); jf++)
+  {
+    if (!FEL_[jf].radiationDetector_.sampling_) continue;
+
+    const bool needPower = FEL_[jf].radiationDetector_.writePowerLine_;
+    const bool needField = FEL_[jf].radiationDetector_.writeField_;
+
+    if (!needPower && !needField) continue;
+
+    /* 每一步先清当前瞬时状态 */
+    rd_[jf].active    = false;
+    rd_[jf].ownerRank = -1;
+    rd_[jf].pL        = 0.0;
+    rd_[jf].pG        = 0.0;
+
+    if (needField)
+    {
+      std::fill(rd_[jf].exFrame.begin(), rd_[jf].exFrame.end(), 0.0);
+      std::fill(rd_[jf].eyFrame.begin(), rd_[jf].eyFrame.end(), 0.0);
+      std::fill(rd_[jf].ezFrame.begin(), rd_[jf].ezFrame.end(), 0.0);
+      std::fill(rd_[jf].bxFrame.begin(), rd_[jf].bxFrame.end(), 0.0);
+      std::fill(rd_[jf].byFrame.begin(), rd_[jf].byFrame.end(), 0.0);
+      std::fill(rd_[jf].bzFrame.begin(), rd_[jf].bzFrame.end(), 0.0);
+    }
+
+    ownerLocal  = -1;
+    ownerGlobal = -1;
+    activeNow   = false;
+
+    /* 固定 lab 屏，在当前 box 时间下反解到 box 系位置 */
+    rd_[jf].zBox      = boostFrame_.boxZFromLabZAndBoxT(rd_[jf].zLab, timeBunch_);
+    rd_[jf].zLabCheck = boostFrame_.labZFromBoxZT(rd_[jf].zBox, timeBunch_);
+    rd_[jf].tLab      = boostFrame_.labTFromBoxZT(rd_[jf].zBox, timeBunch_);
+
+    /* 先判断当前 detector 面是否在全局有效区间 */
+    if ( rd_[jf].zBox >= zmin_ + mesh_.meshResolution_[2] &&
+         rd_[jf].zBox <= zmax_ - 2.0 * mesh_.meshResolution_[2] )
+    {
+      activeNow = true;
+    }
+
+    /* 如果已经开始过，但这一步已经不在有效区，则结束记录 */
+    if (!activeNow && rd_[jf].started && !rd_[jf].finished)
+    {
+      if (rank_ == 0)
+      {
+        if (needPower && rd_[jf].file != NULL)
         {
-          if (rank_ == 0 && rd_[jf].file != NULL)
-            {
-              rd_[jf].file->flush();
-              rd_[jf].file->close();
-              delete rd_[jf].file;
-              rd_[jf].file = NULL;
-            }
-
-          rd_[jf].finished = true;
-
-          printmessage(std::string(__FILE__), __LINE__,
-                       std::string("::: Detector recording ends.") );
+          rd_[jf].file->flush();
+          rd_[jf].file->close();
+          delete rd_[jf].file;
+          rd_[jf].file = NULL;
         }
 
-      /* 当前无效，或者已经结束，后面都不再处理 */
-      if (!activeNow || rd_[jf].finished)
-        continue;
-
-      rd_[jf].active = true;
-
-      /* ----------- 3) 第一次进入有效区：打开文件并打印提示 ----------- */
-      if (!rd_[jf].started)
+        if (needField)
         {
-          rd_[jf].tLab0    = rd_[jf].tLab;
-          rd_[jf].started  = true;
-          rd_[jf].finished = false;
-
-          if (rank_ == 0)
-            {
-              std::string baseFilename = "";
-              if (!(isabsolute(FEL_[jf].radiationDetector_.basename_)))
-                baseFilename = FEL_[jf].radiationDetector_.directory_;
-
-              baseFilename += FEL_[jf].radiationDetector_.basename_
-                           + "-power-line" + TXT_FILE_SUFFIX;
-
-              createDirectory(baseFilename, rank_);
-
-              rd_[jf].file = new std::ofstream(baseFilename.c_str(), std::ios::trunc);
-              (*(rd_[jf].file)).setf(std::ios::scientific);
-              (*(rd_[jf].file)).precision(15);
-              (*(rd_[jf].file)).width(40);
-
-              (*(rd_[jf].file))
-                << "# time_rel\t"
-                << "z_box_abs\t"
-                << "owner_rank\t"
-                << "power"
-                << std::endl;
-            }
-
-          printmessage(std::string(__FILE__), __LINE__,
-                       std::string("::: Detector recording starts.") );
+          rd_[jf].fieldWriter.close();
         }
+      }
 
-      /* ----------- 4) 用全局 z 索引判断当前 detector 面属于哪个 rank ----------- */
+      rd_[jf].finished = true;
 
-		/* 先统一算出当前 plane 所在的全局 z 层与插值系数 */
-		rd_[jf].dzr = modf( ( rd_[jf].zBox - zmin_ ) / mesh_.meshResolution_[2], &rd_[jf].c );
-		rd_[jf].k   = (long int) rd_[jf].c;
+      printmessage(std::string(__FILE__), __LINE__,
+                   std::string("::: Detector recording ends.") );
+    }
 
-		long int kLocal = rd_[jf].k - k0_;
+    if (!activeNow || rd_[jf].finished) continue;
 
-		/* 这里必须保证当前层 k 和下一层 k+1 都在当前 rank 可访问范围内，
-		* 因为后面会访问 mi 和 mi + N1N0_ 两层。
-		*
-		* 如果你代码里本地 z 层数变量不是 np_，请替换成对应名字。
-		*/
-		if (kLocal >= 0 && kLocal + 1 < np_)
-		{
-		ownerLocal = rank_;
+    rd_[jf].active = true;
 
-		/* 只由 owner rank 生成当前整张 detector 面的局部场快照 planeL
-		* 每个 xy 点存四个量：Ex, Ey, Bx, By（lab 系） */
-		for (int i = 2; i < N0_ - 2; i += 1)
-			for (int j = 2; j < N1_ - 2; j += 1)
-			{
-			mi = kLocal * N1_ * N0_ + i * N1_ + j;
-			ni = i * N1_ + j;
+    /* 第一次进入有效区：打开文件并打印提示 */
+    if (!rd_[jf].started)
+    {
+      rd_[jf].tLab0    = rd_[jf].tLab;
+      rd_[jf].started  = true;
+      rd_[jf].finished = false;
 
-			if (!pic_[mi       ]) fieldEvaluate(mi       );
-			if (!pic_[mi+N1N0_ ]) fieldEvaluate(mi+N1N0_ );
-
-			et[0] = ( 1.0 - rd_[jf].dzr ) * en_[mi][0] + rd_[jf].dzr * en_[mi+N1N0_][0];
-			et[1] = ( 1.0 - rd_[jf].dzr ) * en_[mi][1] + rd_[jf].dzr * en_[mi+N1N0_][1];
-
-			bt[0] = ( 1.0 - rd_[jf].dzr ) * bn_[mi][0] + rd_[jf].dzr * bn_[mi+N1N0_][0];
-			bt[1] = ( 1.0 - rd_[jf].dzr ) * bn_[mi][1] + rd_[jf].dzr * bn_[mi+N1N0_][1];
-
-			rd_[jf].planeL[4 * ni + 0] = gamma_ * ( et[0] + c0_ * beta_ * bt[1] );
-			rd_[jf].planeL[4 * ni + 1] = gamma_ * ( et[1] - c0_ * beta_ * bt[0] );
-			rd_[jf].planeL[4 * ni + 2] = gamma_ * ( bt[0] - beta_ / c0_ * et[1] );
-			rd_[jf].planeL[4 * ni + 3] = gamma_ * ( bt[1] + beta_ / c0_ * et[0] );
-			}
-		}
-
-      /* ----------- 5) 先把 owner rank 算出来，再聚合整张 detector 面 ----------- */
-      MPI_Allreduce(&ownerLocal, &ownerGlobal, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
-      rd_[jf].ownerRank = ownerGlobal;
-
-      /* 如果当前没有任何 rank 持有这个面，说明发生了分块边界空窗。
-		* 这种情况不应结束整个 detector 记录，只跳过这一帧。 */
-		if (rd_[jf].ownerRank < 0)
-		{
-
-		/* 这里只做调试提示，不结束记录 */
-		if (rank_ == 0)
-		{
-			printmessage(std::string(__FILE__), __LINE__,
-						std::string("Warning: detector plane has no owner at this step; skip one frame.") );
-		}
-
-		continue;
-		}
-      MPI_Allreduce(&rd_[jf].planeL[0], &rd_[jf].planeG[0],
-                    int(rd_[jf].planeL.size()), MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-
-      /* ----------- 6) 与 powerSample 一样，把当前 plane 写入时间环形缓冲 ----------- */
-      rd_[jf].m = nTime_ % rd_[jf].Nf;
-
-      for (int i = 0; i < N0_; i += 1)
-        for (int j = 0; j < N1_; j += 1)
-          {
-            ni = i * N1_ + j;
-
-            rd_[jf].fdt[rd_[jf].m][ni][0] = rd_[jf].planeG[4 * ni + 0];
-            rd_[jf].fdt[rd_[jf].m][ni][1] = rd_[jf].planeG[4 * ni + 1];
-            rd_[jf].fdt[rd_[jf].m][ni][2] = rd_[jf].planeG[4 * ni + 2];
-            rd_[jf].fdt[rd_[jf].m][ni][3] = rd_[jf].planeG[4 * ni + 3];
-          }
-
-      /* ----------- 7) 与 powerSample 完全相同的 Fourier 功率计算 ----------- */
-      if (rank_ == rd_[jf].ownerRank)
+      if (rank_ == 0)
+      {
+        if (needPower)
         {
-          rd_[jf].pL = 0.0;
+          std::string baseFilename = "";
+          if (!(isabsolute(FEL_[jf].radiationDetector_.basename_)))
+            baseFilename = FEL_[jf].radiationDetector_.directory_;
 
-          for (int i = 2; i < N0_ - 2; i += 1)
-            for (int j = 2; j < N1_ - 2; j += 1)
-              {
-                ni = i * N1_ + j;
+          baseFilename += FEL_[jf].radiationDetector_.basename_
+                       + "-power-line" + TXT_FILE_SUFFIX;
 
-                ew1 = Complex(0.0, 0.0);
-                bw1 = Complex(0.0, 0.0);
-                ew2 = Complex(0.0, 0.0);
-                bw2 = Complex(0.0, 0.0);
+          createDirectory(baseFilename, rank_);
 
-                for (unsigned int m = 0; m < rd_[jf].Nf; m += 1)
-                  {
-                    ew1 += rd_[jf].fdt[m][ni][0] * rd_[jf].ep[m];
-                    bw1 += rd_[jf].fdt[m][ni][3] * rd_[jf].em[m];
-                    ew2 += rd_[jf].fdt[m][ni][1] * rd_[jf].ep[m];
-                    bw2 += rd_[jf].fdt[m][ni][2] * rd_[jf].em[m];
-                  }
+          rd_[jf].file = new std::ofstream(baseFilename.c_str(), std::ios::trunc);
+          (*(rd_[jf].file)).setf(std::ios::scientific);
+          (*(rd_[jf].file)).precision(15);
+          (*(rd_[jf].file)).width(40);
 
-                rd_[jf].pL += rd_[jf].pc
-                            * ( std::real( ew1 * bw1 ) - std::real( ew2 * bw2 ) );
-              }
-        }
-
-      MPI_Allreduce(&rd_[jf].pL, &rd_[jf].pG, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-
-      /* ----------- 8) 只由 rank 0 写 power-line ----------- */
-      if (rank_ == 0 && rd_[jf].file != NULL)
-        {
           (*(rd_[jf].file))
-            << rd_[jf].tLab - rd_[jf].tLab0 << "\t"
-            << rd_[jf].zBox                  << "\t"
-            << rd_[jf].ownerRank             << "\t"
-            << rd_[jf].pG
+            << "# time_rel\t"
+            << "z_box_abs\t"
+            << "owner_rank\t"
+            << "power"
             << std::endl;
         }
 
-      /* ----------- 9) 如果下一步就到仿真终点，则做最终收尾 ----------- */
-      if ( time_ + mesh_.timeStep_ >= mesh_.totalTime_ &&
-           rd_[jf].started && !rd_[jf].finished )
+        if (needField)
         {
-          if (rank_ == 0 && rd_[jf].file != NULL)
-            {
-              rd_[jf].file->flush();
-              rd_[jf].file->close();
-              delete rd_[jf].file;
-              rd_[jf].file = NULL;
-            }
-
-          rd_[jf].finished = true;
-
-          printmessage(std::string(__FILE__), __LINE__,
-                       std::string("::: Detector recording ends at simulation stop.") );
+          createDirectory(rd_[jf].fieldFileName, rank_);
+          rd_[jf].fieldWriter.open(rd_[jf].fieldFileName,
+                                   rd_[jf].fieldNx, rd_[jf].fieldNy,
+                                   rd_[jf].xCoord, rd_[jf].yCoord,
+                                   rd_[jf].zLab,
+                                   rd_[jf].fieldUseFloat32);
         }
+      }
+
+      printmessage(std::string(__FILE__), __LINE__,
+                   std::string("::: Detector recording starts.") );
     }
+
+    /* 用全局 z 索引判断当前 detector 面属于哪个 rank */
+    rd_[jf].dzr = modf( ( rd_[jf].zBox - zmin_ ) / mesh_.meshResolution_[2], &rd_[jf].c );
+    rd_[jf].k   = (long int) rd_[jf].c;
+
+    long int kLocal = rd_[jf].k - k0_;
+
+    /* 直接对瞬时 S_z = (E x B)_z / mu0 做平面积分
+     * 单位换算沿用原始 powerSample 的思路，但不再带 Fourier 的 2/Nf^2 因子。
+     */
+    const Double powerScale =
+        mesh_.meshResolution_[0] * mesh_.meshResolution_[1]
+      * std::pow(mesh_.lengthScale_, 2)
+      / ( m0_ * std::pow(mesh_.timeScale_, 3) );
+
+    /* 必须保证当前层 k 和下一层 k+1 都在当前 rank 可访问范围内 */
+    if (kLocal >= 0 && kLocal + 1 < np_)
+    {
+      ownerLocal = rank_;
+
+      /* 由 owner rank 生成当前整张 detector 面的局部场快照，并累加瞬时坡印廷通量 */
+      for (int i = 2; i < N0_ - 2; i += 1)
+      {
+        for (int j = 2; j < N1_ - 2; j += 1)
+        {
+          mi = kLocal * N1_ * N0_ + i * N1_ + j;
+
+          if (!pic_[mi])        fieldEvaluate(mi);
+          if (!pic_[mi+N1N0_])  fieldEvaluate(mi+N1N0_);
+
+          et[0] = (1.0 - rd_[jf].dzr) * en_[mi][0] + rd_[jf].dzr * en_[mi+N1N0_][0];
+          et[1] = (1.0 - rd_[jf].dzr) * en_[mi][1] + rd_[jf].dzr * en_[mi+N1N0_][1];
+          et[2] = (1.0 - rd_[jf].dzr) * en_[mi][2] + rd_[jf].dzr * en_[mi+N1N0_][2];
+
+          bt[0] = (1.0 - rd_[jf].dzr) * bn_[mi][0] + rd_[jf].dzr * bn_[mi+N1N0_][0];
+          bt[1] = (1.0 - rd_[jf].dzr) * bn_[mi][1] + rd_[jf].dzr * bn_[mi+N1N0_][1];
+          bt[2] = (1.0 - rd_[jf].dzr) * bn_[mi][2] + rd_[jf].dzr * bn_[mi+N1N0_][2];
+
+          /* 转到 lab 系 */
+          Double ExL = gamma_ * ( et[0] + c0_ * beta_ * bt[1] );
+          Double EyL = gamma_ * ( et[1] - c0_ * beta_ * bt[0] );
+          Double EzL = et[2];
+
+          Double BxL = gamma_ * ( bt[0] - beta_ / c0_ * et[1] );
+          Double ByL = gamma_ * ( bt[1] + beta_ / c0_ * et[0] );
+          Double BzL = bt[2];
+
+          /* 瞬时 S_z 面积分：S_z = (Ex By - Ey Bx) / mu0 */
+          if (needPower)
+          {
+            rd_[jf].pL += powerScale * ( ExL * ByL - EyL * BxL );
+          }
+
+          /* field 输出 */
+          if (needField)
+          {
+            long int fi   = i - 2;
+            long int fj   = j - 2;
+            long int fidx = fi * rd_[jf].fieldNy + fj;
+
+            rd_[jf].exFrame[fidx] = ExL;
+            rd_[jf].eyFrame[fidx] = EyL;
+            rd_[jf].ezFrame[fidx] = EzL;
+            rd_[jf].bxFrame[fidx] = BxL;
+            rd_[jf].byFrame[fidx] = ByL;
+            rd_[jf].bzFrame[fidx] = BzL;
+          }
+        }
+      }
+    }
+
+    /* 算出 owner rank */
+    MPI_Allreduce(&ownerLocal, &ownerGlobal, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+    rd_[jf].ownerRank = ownerGlobal;
+
+    /* 当前没有任何 rank 持有这个面：跳过这一帧 */
+    if (rd_[jf].ownerRank < 0)
+    {
+      if (rank_ == 0)
+      {
+        printmessage(std::string(__FILE__), __LINE__,
+                     std::string("Warning: detector plane has no owner at this step; skip one frame."));
+      }
+      continue;
+    }
+
+    /* 聚合 power 标量 */
+    if (needPower)
+    {
+      MPI_Allreduce(&rd_[jf].pL, &rd_[jf].pG, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    }
+
+    /* 聚合整张 field 面 */
+    if (needField)
+    {
+      MPI_Allreduce(MPI_IN_PLACE, rd_[jf].exFrame.data(),
+                    int(rd_[jf].exFrame.size()), MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+      MPI_Allreduce(MPI_IN_PLACE, rd_[jf].eyFrame.data(),
+                    int(rd_[jf].eyFrame.size()), MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+      MPI_Allreduce(MPI_IN_PLACE, rd_[jf].ezFrame.data(),
+                    int(rd_[jf].ezFrame.size()), MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+      MPI_Allreduce(MPI_IN_PLACE, rd_[jf].bxFrame.data(),
+                    int(rd_[jf].bxFrame.size()), MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+      MPI_Allreduce(MPI_IN_PLACE, rd_[jf].byFrame.data(),
+                    int(rd_[jf].byFrame.size()), MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+      MPI_Allreduce(MPI_IN_PLACE, rd_[jf].bzFrame.data(),
+                    int(rd_[jf].bzFrame.size()), MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    }
+
+    /* root 写输出 */
+    if (rank_ == 0)
+    {
+      if (needPower && rd_[jf].file != NULL)
+      {
+        (*(rd_[jf].file))
+          << (rd_[jf].tLab - rd_[jf].tLab0) << "\t"
+          << rd_[jf].zBox                   << "\t"
+          << rd_[jf].ownerRank              << "\t"
+          << rd_[jf].pG
+          << std::endl;
+      }
+
+      if (needField)
+      {
+        rd_[jf].fieldWriter.append(
+          rd_[jf].tLab,
+          rd_[jf].zBox,
+          rd_[jf].exFrame.data(),
+          rd_[jf].eyFrame.data(),
+          rd_[jf].ezFrame.data(),
+          rd_[jf].bxFrame.data(),
+          rd_[jf].byFrame.data(),
+          rd_[jf].bzFrame.data()
+        );
+      }
+    }
+
+    /* 如果下一步就到仿真终点，则做最终收尾 */
+    if ( time_ + mesh_.timeStep_ >= mesh_.totalTime_ &&
+         rd_[jf].started && !rd_[jf].finished )
+    {
+      if (rank_ == 0)
+      {
+        if (needPower && rd_[jf].file != NULL)
+        {
+          rd_[jf].file->flush();
+          rd_[jf].file->close();
+          delete rd_[jf].file;
+          rd_[jf].file = NULL;
+        }
+
+        if (needField)
+        {
+          rd_[jf].fieldWriter.close();
+        }
+      }
+
+      rd_[jf].finished = true;
+
+      printmessage(std::string(__FILE__), __LINE__,
+                   std::string("::: Detector recording ends at simulation stop.") );
+    }
+  }
 }
   /******************************************************************************************************
   *初始化在给定位置显示辐射功率所需的数据。
