@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <list>
 #include <sys/time.h>
+#include <cmath>   
 
 #include "solver.h"
 #include "beam.cc"
@@ -573,6 +574,12 @@ namespace MITHRA
 
     /* 初始化问题的空间和时间网格。 */
     initializeMesh();
+
+	/*初始化CPML边界吸收框架*/
+	cpmlXY_.enabled = true;
+	cpmlXY_.nx = 16;
+	cpmlXY_.ny = 16;
+	initializeCPMLXY();
 
     /* 将束团转换至实验室参考系，并针对 FEL 模拟对束团进行适配——即：添加散粒噪声、分布镜像宏粒子，并添加束团尾部。*/
     lorentzBoostBunch();
@@ -2451,5 +2458,253 @@ namespace MITHRA
 
     return (v);
   }
+
+  	bool Solver::inXPML(unsigned int i) const
+	{
+		return cpmlXY_.enabled &&
+			(i < cpmlXY_.nx || i >= N0_ - cpmlXY_.nx);
+	}
+
+	bool Solver::inYPML(unsigned int j) const
+	{
+		return cpmlXY_.enabled &&
+			(j < cpmlXY_.ny || j >= N1_ - cpmlXY_.ny);
+	}
+
+	bool Solver::inPhysicalXY(unsigned int i, unsigned int j) const
+	{
+		return !inXPML(i) && !inYPML(j);
+	}
+
+	void Solver::shiftCPMLXY()
+	{
+		if (!cpmlXY_.enabled) return;
+
+		cpmlXY_.psiXn_.swap(cpmlXY_.psiXnp1_);
+		cpmlXY_.psiYn_.swap(cpmlXY_.psiYnp1_);
+
+		if (mesh_.spaceCharge_)
+		{
+			cpmlXY_.psiPhiXn_.swap(cpmlXY_.psiPhiXnp1_);
+			cpmlXY_.psiPhiYn_.swap(cpmlXY_.psiPhiYnp1_);
+		}
+	}
+
+	void Solver::initializeCPMLXY()
+	{
+		/* 如果没开 CPML，就把相关数组清空并返回 */
+		if (!cpmlXY_.enabled)
+		{
+			cpmlXY_.sigmaX.clear(); cpmlXY_.kappaX.clear(); cpmlXY_.alphaX.clear();
+			cpmlXY_.bx.clear();     cpmlXY_.cx.clear();
+			cpmlXY_.sigmaY.clear(); cpmlXY_.kappaY.clear(); cpmlXY_.alphaY.clear();
+			cpmlXY_.by.clear();     cpmlXY_.cy.clear();
+			cpmlXY_.psiXn_.clear();  cpmlXY_.psiYn_.clear();
+			return;
+		}
+
+		/* 基本检查：这一步必须在 initializeMesh() 之后调用 */
+		if (N0_ == 0 || N1_ == 0 || np_ == 0)
+		{
+			printmessage(std::string(__FILE__), __LINE__,
+						std::string("CPMLXY error: mesh is not initialized yet.") );
+			exit(1);
+		}
+
+		if (cpmlXY_.nx == 0 || cpmlXY_.ny == 0)
+		{
+			printmessage(std::string(__FILE__), __LINE__,
+						std::string("CPMLXY error: nx or ny is zero.") );
+			exit(1);
+		}
+
+		/* 至少给物理区留一点空间 */
+		if (2 * cpmlXY_.nx >= N0_ || 2 * cpmlXY_.ny >= N1_)
+		{
+			printmessage(std::string(__FILE__), __LINE__,
+						std::string("CPMLXY error: PML thickness is too large for current mesh size.") );
+			exit(1);
+		}
+
+		const Double dx = mesh_.meshResolution_[0];
+		const Double dy = mesh_.meshResolution_[1];
+		const Double dt = mesh_.timeStep_;
+
+		const Double m    = static_cast<Double>(cpmlXY_.m);
+		const Double Rerr = cpmlXY_.Rerr;
+
+		if (Rerr <= 0.0 || Rerr >= 1.0)
+		{
+			printmessage(std::string(__FILE__), __LINE__,
+						std::string("CPMLXY error: Rerr must satisfy 0 < Rerr < 1.") );
+			exit(1);
+		}
+
+		/* 分配并初始化 1D profile */
+		cpmlXY_.sigmaX.assign(N0_, 0.0);
+		cpmlXY_.kappaX.assign(N0_, 1.0);
+		cpmlXY_.alphaX.assign(N0_, 0.0);
+		cpmlXY_.bx.assign(N0_, 1.0);
+		cpmlXY_.cx.assign(N0_, 0.0);
+
+		cpmlXY_.sigmaY.assign(N1_, 0.0);
+		cpmlXY_.kappaY.assign(N1_, 1.0);
+		cpmlXY_.alphaY.assign(N1_, 0.0);
+		cpmlXY_.by.assign(N1_, 1.0);
+		cpmlXY_.cy.assign(N1_, 0.0);
+
+		/* sigma_max */
+		const Double sxmax =
+			- (m + 1.0) * std::log(Rerr) / (2.0 * cpmlXY_.nx * dx);
+
+		const Double symax =
+			- (m + 1.0) * std::log(Rerr) / (2.0 * cpmlXY_.ny * dy);
+
+		/* ---------------- x 方向 profile ---------------- */
+		for (unsigned int i = 0; i < N0_; ++i)
+		{
+			Double xi = 0.0;
+
+			/* 左侧 PML */
+			if (i < cpmlXY_.nx)
+			{
+				xi = static_cast<Double>(cpmlXY_.nx - i) / static_cast<Double>(cpmlXY_.nx);
+			}
+			/* 右侧 PML */
+			else if (i >= N0_ - cpmlXY_.nx)
+			{
+				xi = static_cast<Double>(i - (N0_ - cpmlXY_.nx - 1)) / static_cast<Double>(cpmlXY_.nx);
+			}
+			else
+			{
+				xi = 0.0;
+			}
+
+			if (xi > 1.0) xi = 1.0;
+			if (xi < 0.0) xi = 0.0;
+
+			if (xi > 0.0)
+			{
+				const Double pm = std::pow(xi, m);
+
+				cpmlXY_.sigmaX[i] = sxmax * pm;
+				cpmlXY_.kappaX[i] = 1.0 + (cpmlXY_.kappaMaxX - 1.0) * pm;
+				cpmlXY_.alphaX[i] = cpmlXY_.alphaMaxX * (1.0 - xi);
+			}
+		}
+
+		/* ---------------- y 方向 profile ---------------- */
+		for (unsigned int j = 0; j < N1_; ++j)
+		{
+			Double xi = 0.0;
+
+			/* 下侧 PML */
+			if (j < cpmlXY_.ny)
+			{
+				xi = static_cast<Double>(cpmlXY_.ny - j) / static_cast<Double>(cpmlXY_.ny);
+			}
+			/* 上侧 PML */
+			else if (j >= N1_ - cpmlXY_.ny)
+			{
+				xi = static_cast<Double>(j - (N1_ - cpmlXY_.ny - 1)) / static_cast<Double>(cpmlXY_.ny);
+			}
+			else
+			{
+				xi = 0.0;
+			}
+
+			if (xi > 1.0) xi = 1.0;
+			if (xi < 0.0) xi = 0.0;
+
+			if (xi > 0.0)
+			{
+				const Double pm = std::pow(xi, m);
+
+				cpmlXY_.sigmaY[j] = symax * pm;
+				cpmlXY_.kappaY[j] = 1.0 + (cpmlXY_.kappaMaxY - 1.0) * pm;
+				cpmlXY_.alphaY[j] = cpmlXY_.alphaMaxY * (1.0 - xi);
+			}
+		}
+
+		/* ---------------- x 方向递推系数 bx, cx ---------------- */
+		for (unsigned int i = 0; i < N0_; ++i)
+		{
+			const Double s = cpmlXY_.sigmaX[i];
+			const Double k = cpmlXY_.kappaX[i];
+			const Double a = cpmlXY_.alphaX[i];
+
+			cpmlXY_.bx[i] = std::exp(-(s / k + a) * dt);
+
+			if (std::abs(s) < 1.0e-30)
+			{
+				cpmlXY_.cx[i] = 0.0;
+			}
+			else
+			{
+				const Double denom = k * (s + k * a);
+				if (std::abs(denom) < 1.0e-30)
+					cpmlXY_.cx[i] = 0.0;
+				else
+					cpmlXY_.cx[i] = s * (cpmlXY_.bx[i] - 1.0) / denom;
+			}
+		}
+
+		/* ---------------- y 方向递推系数 by, cy ---------------- */
+		for (unsigned int j = 0; j < N1_; ++j)
+		{
+			const Double s = cpmlXY_.sigmaY[j];
+			const Double k = cpmlXY_.kappaY[j];
+			const Double a = cpmlXY_.alphaY[j];
+
+			cpmlXY_.by[j] = std::exp(-(s / k + a) * dt);
+
+			if (std::abs(s) < 1.0e-30)
+			{
+				cpmlXY_.cy[j] = 0.0;
+			}
+			else
+			{
+				const Double denom = k * (s + k * a);
+				if (std::abs(denom) < 1.0e-30)
+					cpmlXY_.cy[j] = 0.0;
+				else
+					cpmlXY_.cy[j] = s * (cpmlXY_.by[j] - 1.0) / denom;
+			}
+		}
+
+		/* ---------------- 分配记忆变量 ---------------- */
+		const long int nCell = static_cast<long int>(N1N0_) * np_;
+
+		FieldVector<Double> zero;
+		zero = 0.0;
+
+		cpmlXY_.psiXn_.assign(nCell, zero);
+		cpmlXY_.psiXnp1_.assign(nCell, zero);
+
+		cpmlXY_.psiYn_.assign(nCell, zero);
+		cpmlXY_.psiYnp1_.assign(nCell, zero);
+		if (mesh_.spaceCharge_)
+		{
+			cpmlXY_.psiPhiXn_.assign(nCell, 0.0);
+			cpmlXY_.psiPhiXnp1_.assign(nCell, 0.0);
+
+			cpmlXY_.psiPhiYn_.assign(nCell, 0.0);
+			cpmlXY_.psiPhiYnp1_.assign(nCell, 0.0);
+		}
+		else
+		{
+			cpmlXY_.psiPhiXn_.clear();
+			cpmlXY_.psiPhiXnp1_.clear();
+
+			cpmlXY_.psiPhiYn_.clear();
+			cpmlXY_.psiPhiYnp1_.clear();
+		}
+
+		printmessage(std::string(__FILE__), __LINE__,
+					std::string("CPMLXY initialized: nx=") + stringify(cpmlXY_.nx) +
+					std::string(", ny=") + stringify(cpmlXY_.ny) +
+					std::string(", sxmax=") + stringify(sxmax) +
+					std::string(", symax=") + stringify(symax) );
+	}
 
 }

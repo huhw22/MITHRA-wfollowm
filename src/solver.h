@@ -225,6 +225,15 @@ namespace MITHRA
     Double particleLabZ(const Charge& q) const;
     void   updateSoftKill(Charge& q);
 
+    /*计算CPML吸收的框架*/
+    void initializeCPMLXY();
+
+    bool inXPML(unsigned int i) const;
+    bool inYPML(unsigned int j) const;
+    bool inPhysicalXY(unsigned int i, unsigned int j) const;
+
+    void shiftCPMLXY();
+
 
     /****************************************************************************************************
     * FdTd代码中所需参数的列表。
@@ -365,6 +374,9 @@ namespace MITHRA
 
     /*相对论变换框架*/
     BoostFrameTransform boostFrame_;
+
+    /*CPML吸收框架*/
+    CPMLXY cpmlXY_;
   };
 
 }

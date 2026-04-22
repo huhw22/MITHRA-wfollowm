@@ -305,34 +305,94 @@ namespace MITHRA
 	for (unsigned i = 1; i < uf_.N0m1; i++)
 	  for (unsigned j = 1; j < uf_.N1m1; j++)
 	    for (unsigned k = 1; k < uf_.npm1; k++)
-	      {
-		l = 3 * ( N1N0_ * k + N1_ * i + j );
+	    {
+			m = N1N0_ * k + N1_ * i + j;
+			l = 3 * m;
 
-		uf_.af.advanceMagneticPotentialNSFD(
-		    uf_.anp1+l,    uf_.anm1+l,    uf_.an+l,
-		    uf_.an  +l+L0, uf_.an  +l+L2, uf_.an+l+L3,
-		    uf_.an  +l-L0, uf_.an  +l-L3, uf_.an+l-L2,
-		    uf_.an  +l+3 , uf_.an  +l+L4, uf_.an+l+L5,
-		    uf_.an  +l-3 , uf_.an  +l-L5, uf_.an+l-L4,
-		    uf_.an  +l+L1, uf_.an  +l-L1, uf_.jn+l);
-	      }
+			const bool useCPML = cpmlXY_.enabled && !inPhysicalXY(i, j);
+
+			if (useCPML)
+			{
+				uf_.af.advanceMagneticPotentialNSFD_CPMLXY(
+					uf_.anp1+l,    uf_.anm1+l,    uf_.an+l,
+					uf_.an  +l+L0, uf_.an  +l+L2, uf_.an+l+L3,
+					uf_.an  +l-L0, uf_.an  +l-L3, uf_.an+l-L2,
+					uf_.an  +l+3 , uf_.an  +l+L4, uf_.an+l+L5,
+					uf_.an  +l-3 , uf_.an  +l-L5, uf_.an+l-L4,
+					uf_.an  +l+L1, uf_.an  +l-L1, uf_.jn+l,
+
+					&cpmlXY_.psiXnp1_[m][0],
+					&cpmlXY_.psiXn_[m][0],
+					&cpmlXY_.psiXn_[m + N1_][0],
+					&cpmlXY_.psiXn_[m - N1_][0],
+
+					&cpmlXY_.psiYnp1_[m][0],
+					&cpmlXY_.psiYn_[m][0],
+					&cpmlXY_.psiYn_[m + 1][0],
+					&cpmlXY_.psiYn_[m - 1][0],
+
+					cpmlXY_.bx[i], cpmlXY_.cx[i], cpmlXY_.kappaX[i],
+					cpmlXY_.by[j], cpmlXY_.cy[j], cpmlXY_.kappaY[j],
+					uf_.dx, uf_.dy);
+			}
+			else
+			{
+				uf_.af.advanceMagneticPotentialNSFD(
+					uf_.anp1+l,    uf_.anm1+l,    uf_.an+l,
+					uf_.an  +l+L0, uf_.an  +l+L2, uf_.an+l+L3,
+					uf_.an  +l-L0, uf_.an  +l-L3, uf_.an+l-L2,
+					uf_.an  +l+3 , uf_.an  +l+L4, uf_.an+l+L5,
+					uf_.an  +l-3 , uf_.an  +l-L5, uf_.an+l-L4,
+					uf_.an  +l+L1, uf_.an  +l-L1, uf_.jn+l);
+			}
+	    }
       }
     else if ( mesh_.solver_ == FD )
       {
 	for (unsigned i = 1; i < uf_.N0m1; i++)
 	  for (unsigned j = 1; j < uf_.N1m1; j++)
 	    for (unsigned k = 1; k < uf_.npm1; k++)
-	      {
-		l = 3 * ( N1N0_ * k + N1_ * i + j );
+	    {
+			m = N1N0_ * k + N1_ * i + j;
+			l = 3 * m;
 
-		uf_.af.advanceMagneticPotentialFD(
-		    uf_.anp1+l,    uf_.anm1+l,    uf_.an+l,
-		    uf_.an  +l+L0, uf_.an  +l+L2, uf_.an+l+L3,
-		    uf_.an  +l-L0, uf_.an  +l-L3, uf_.an+l-L2,
-		    uf_.an  +l+3 , uf_.an  +l+L4, uf_.an+l+L5,
-		    uf_.an  +l-3 , uf_.an  +l-L5, uf_.an+l-L4,
-		    uf_.an  +l+L1, uf_.an  +l-L1, uf_.jn+l);
-	      }
+			const bool useCPML = cpmlXY_.enabled && !inPhysicalXY(i, j);
+
+			if (useCPML)
+			{
+				uf_.af.advanceMagneticPotentialFD_CPMLXY(
+					uf_.anp1+l,    uf_.anm1+l,    uf_.an+l,
+					uf_.an  +l+L0, uf_.an  +l+L2, uf_.an+l+L3,
+					uf_.an  +l-L0, uf_.an  +l-L3, uf_.an+l-L2,
+					uf_.an  +l+3 , uf_.an  +l+L4, uf_.an+l+L5,
+					uf_.an  +l-3 , uf_.an  +l-L5, uf_.an+l-L4,
+					uf_.an  +l+L1, uf_.an  +l-L1, uf_.jn+l,
+
+					&cpmlXY_.psiXnp1_[m][0],
+					&cpmlXY_.psiXn_[m][0],
+					&cpmlXY_.psiXn_[m + N1_][0],
+					&cpmlXY_.psiXn_[m - N1_][0],
+
+					&cpmlXY_.psiYnp1_[m][0],
+					&cpmlXY_.psiYn_[m][0],
+					&cpmlXY_.psiYn_[m + 1][0],
+					&cpmlXY_.psiYn_[m - 1][0],
+
+					cpmlXY_.bx[i], cpmlXY_.cx[i], cpmlXY_.kappaX[i],
+					cpmlXY_.by[j], cpmlXY_.cy[j], cpmlXY_.kappaY[j],
+					uf_.dx, uf_.dy);
+			}
+			else
+			{
+				uf_.af.advanceMagneticPotentialFD(
+					uf_.anp1+l,    uf_.anm1+l,    uf_.an+l,
+					uf_.an  +l+L0, uf_.an  +l+L2, uf_.an+l+L3,
+					uf_.an  +l-L0, uf_.an  +l-L3, uf_.an+l-L2,
+					uf_.an  +l+3 , uf_.an  +l+L4, uf_.an+l+L5,
+					uf_.an  +l-3 , uf_.an  +l-L5, uf_.an+l-L4,
+					uf_.an  +l+L1, uf_.an  +l-L1, uf_.jn+l);
+			}
+	    }
       }
 
     /*如果种子的振幅超过一定的极限，则将种子注入计算域
@@ -830,6 +890,9 @@ namespace MITHRA
 	MPI_Recv(uf_.en+3*(np_-1)*N1N0_,	3*N1N0_,MPI_DOUBLE,rank_+1,msgtag7,MPI_COMM_WORLD,&status);
 	MPI_Recv(uf_.bn+3*(np_-1)*N1N0_,	3*N1N0_,MPI_DOUBLE,rank_+1,msgtag8,MPI_COMM_WORLD,&status);
       }
+
+	/* 整个场步完成后，再把 CPML 记忆变量从 n+1 滚到 n */
+	if (cpmlXY_.enabled) shiftCPMLXY();
   }
 
   /******************************************************************************************************

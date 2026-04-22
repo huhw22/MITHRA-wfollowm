@@ -321,24 +321,75 @@ namespace MITHRA
 	  for (unsigned j = 1; j < uf_.N1m1; j++)
 	    for (unsigned k = 1; k < uf_.npm1; k++)
 	      {
-		m = N1N0_ * k + N1_ * i + j;
-		l = 3 * m;
+			m = N1N0_ * k + N1_ * i + j;
+			l = 3 * m;
 
-		uf_.af.advanceMagneticPotentialNSFD(
-		    uf_.anp1+l,    uf_.anm1+l,    uf_.an+l,
-		    uf_.an  +l+L0, uf_.an  +l+L2, uf_.an+l+L3,
-		    uf_.an  +l-L0, uf_.an  +l-L3, uf_.an+l-L2,
-		    uf_.an  +l+3 , uf_.an  +l+L4, uf_.an+l+L5,
-		    uf_.an  +l-3 , uf_.an  +l-L5, uf_.an+l-L4,
-		    uf_.an  +l+L1, uf_.an  +l-L1, uf_.jn+l);
+			const bool useCPML = cpmlXY_.enabled && !inPhysicalXY(i, j);
 
-		uf_.af.advanceScalarPotentialNSFD(
-		    uf_.fnp1+m,    uf_.fnm1+m,    uf_.fn+m,
-		    uf_.fn  +m+M0, uf_.fn  +m+M2, uf_.fn+m+M3,
-		    uf_.fn  +m-M0, uf_.fn  +m-M3, uf_.fn+m-M2,
-		    uf_.fn  +m+1 , uf_.fn  +m+M4, uf_.fn+m+M5,
-		    uf_.fn  +m-1 , uf_.fn  +m-M5, uf_.fn+m-M4,
-		    uf_.fn  +m+M1, uf_.fn  +m-M1, uf_.rn+m);
+			if (useCPML)
+			{
+				uf_.af.advanceMagneticPotentialNSFD_CPMLXY(
+					uf_.anp1+l,    uf_.anm1+l,    uf_.an+l,
+					uf_.an  +l+L0, uf_.an  +l+L2, uf_.an+l+L3,
+					uf_.an  +l-L0, uf_.an  +l-L3, uf_.an+l-L2,
+					uf_.an  +l+3 , uf_.an  +l+L4, uf_.an+l+L5,
+					uf_.an  +l-3 , uf_.an  +l-L5, uf_.an+l-L4,
+					uf_.an  +l+L1, uf_.an  +l-L1, uf_.jn+l,
+
+					&cpmlXY_.psiXnp1_[m][0],
+					&cpmlXY_.psiXn_[m][0],
+					&cpmlXY_.psiXn_[m + N1_][0],
+					&cpmlXY_.psiXn_[m - N1_][0],
+
+					&cpmlXY_.psiYnp1_[m][0],
+					&cpmlXY_.psiYn_[m][0],
+					&cpmlXY_.psiYn_[m + 1][0],
+					&cpmlXY_.psiYn_[m - 1][0],
+
+					cpmlXY_.bx[i], cpmlXY_.cx[i], cpmlXY_.kappaX[i],
+					cpmlXY_.by[j], cpmlXY_.cy[j], cpmlXY_.kappaY[j],
+					uf_.dx, uf_.dy);
+
+				uf_.af.advanceScalarPotentialNSFD_CPMLXY(
+					uf_.fnp1+m,    uf_.fnm1+m,    uf_.fn+m,
+					uf_.fn  +m+M0, uf_.fn  +m+M2, uf_.fn+m+M3,
+					uf_.fn  +m-M0, uf_.fn  +m-M3, uf_.fn+m-M2,
+					uf_.fn  +m+1 , uf_.fn  +m+M4, uf_.fn+m+M5,
+					uf_.fn  +m-1 , uf_.fn  +m-M5, uf_.fn+m-M4,
+					uf_.fn  +m+M1, uf_.fn  +m-M1, uf_.rn+m,
+
+					&cpmlXY_.psiPhiXnp1_[m],
+					&cpmlXY_.psiPhiXn_[m],
+					&cpmlXY_.psiPhiXn_[m + N1_],
+					&cpmlXY_.psiPhiXn_[m - N1_],
+
+					&cpmlXY_.psiPhiYnp1_[m],
+					&cpmlXY_.psiPhiYn_[m],
+					&cpmlXY_.psiPhiYn_[m + 1],
+					&cpmlXY_.psiPhiYn_[m - 1],
+
+					cpmlXY_.bx[i], cpmlXY_.cx[i], cpmlXY_.kappaX[i],
+					cpmlXY_.by[j], cpmlXY_.cy[j], cpmlXY_.kappaY[j],
+					uf_.dx, uf_.dy);
+			}
+			else
+			{
+				uf_.af.advanceMagneticPotentialNSFD(
+					uf_.anp1+l,    uf_.anm1+l,    uf_.an+l,
+					uf_.an  +l+L0, uf_.an  +l+L2, uf_.an+l+L3,
+					uf_.an  +l-L0, uf_.an  +l-L3, uf_.an+l-L2,
+					uf_.an  +l+3 , uf_.an  +l+L4, uf_.an+l+L5,
+					uf_.an  +l-3 , uf_.an  +l-L5, uf_.an+l-L4,
+					uf_.an  +l+L1, uf_.an  +l-L1, uf_.jn+l);
+
+				uf_.af.advanceScalarPotentialNSFD(
+					uf_.fnp1+m,    uf_.fnm1+m,    uf_.fn+m,
+					uf_.fn  +m+M0, uf_.fn  +m+M2, uf_.fn+m+M3,
+					uf_.fn  +m-M0, uf_.fn  +m-M3, uf_.fn+m-M2,
+					uf_.fn  +m+1 , uf_.fn  +m+M4, uf_.fn+m+M5,
+					uf_.fn  +m-1 , uf_.fn  +m-M5, uf_.fn+m-M4,
+					uf_.fn  +m+M1, uf_.fn  +m-M1, uf_.rn+m);
+			}
 	      }
       }
     else if ( mesh_.solver_ == FD )
@@ -347,24 +398,75 @@ namespace MITHRA
 	  for (unsigned j = 1; j < uf_.N1m1; j++)
 	    for (unsigned k = 1; k < uf_.npm1; k++)
 	      {
-		m = N1N0_ * k + N1_ * i + j;
-		l = 3 * m;
+			m = N1N0_ * k + N1_ * i + j;
+			l = 3 * m;
 
-		uf_.af.advanceMagneticPotentialFD(
-		    uf_.anp1+l,    uf_.anm1+l,    uf_.an+l,
-		    uf_.an  +l+L0, uf_.an  +l+L2, uf_.an+l+L3,
-		    uf_.an  +l-L0, uf_.an  +l-L3, uf_.an+l-L2,
-		    uf_.an  +l+3 , uf_.an  +l+L4, uf_.an+l+L5,
-		    uf_.an  +l-3 , uf_.an  +l-L5, uf_.an+l-L4,
-		    uf_.an  +l+L1, uf_.an  +l-L1, uf_.jn+l);
+			const bool useCPML = cpmlXY_.enabled && !inPhysicalXY(i, j);
 
-		uf_.af.advanceScalarPotentialFD(
-		    uf_.fnp1+m,    uf_.fnm1+m,    uf_.fn+m,
-		    uf_.fn  +m+M0, uf_.fn  +m+M2, uf_.fn+m+M3,
-		    uf_.fn  +m-M0, uf_.fn  +m-M3, uf_.fn+m-M2,
-		    uf_.fn  +m+1 , uf_.fn  +m+M4, uf_.fn+m+M5,
-		    uf_.fn  +m-1 , uf_.fn  +m-M5, uf_.fn+m-M4,
-		    uf_.fn  +m+M1, uf_.fn  +m-M1, uf_.rn+m);
+			if (useCPML)
+			{
+				uf_.af.advanceMagneticPotentialFD_CPMLXY(
+					uf_.anp1+l,    uf_.anm1+l,    uf_.an+l,
+					uf_.an  +l+L0, uf_.an  +l+L2, uf_.an+l+L3,
+					uf_.an  +l-L0, uf_.an  +l-L3, uf_.an+l-L2,
+					uf_.an  +l+3 , uf_.an  +l+L4, uf_.an+l+L5,
+					uf_.an  +l-3 , uf_.an  +l-L5, uf_.an+l-L4,
+					uf_.an  +l+L1, uf_.an  +l-L1, uf_.jn+l,
+
+					&cpmlXY_.psiXnp1_[m][0],
+					&cpmlXY_.psiXn_[m][0],
+					&cpmlXY_.psiXn_[m + N1_][0],
+					&cpmlXY_.psiXn_[m - N1_][0],
+
+					&cpmlXY_.psiYnp1_[m][0],
+					&cpmlXY_.psiYn_[m][0],
+					&cpmlXY_.psiYn_[m + 1][0],
+					&cpmlXY_.psiYn_[m - 1][0],
+
+					cpmlXY_.bx[i], cpmlXY_.cx[i], cpmlXY_.kappaX[i],
+					cpmlXY_.by[j], cpmlXY_.cy[j], cpmlXY_.kappaY[j],
+					uf_.dx, uf_.dy);
+
+				uf_.af.advanceScalarPotentialFD_CPMLXY(
+					uf_.fnp1+m,    uf_.fnm1+m,    uf_.fn+m,
+					uf_.fn  +m+M0, uf_.fn  +m+M2, uf_.fn+m+M3,
+					uf_.fn  +m-M0, uf_.fn  +m-M3, uf_.fn+m-M2,
+					uf_.fn  +m+1 , uf_.fn  +m+M4, uf_.fn+m+M5,
+					uf_.fn  +m-1 , uf_.fn  +m-M5, uf_.fn+m-M4,
+					uf_.fn  +m+M1, uf_.fn  +m-M1, uf_.rn+m,
+
+					&cpmlXY_.psiPhiXnp1_[m],
+					&cpmlXY_.psiPhiXn_[m],
+					&cpmlXY_.psiPhiXn_[m + N1_],
+					&cpmlXY_.psiPhiXn_[m - N1_],
+
+					&cpmlXY_.psiPhiYnp1_[m],
+					&cpmlXY_.psiPhiYn_[m],
+					&cpmlXY_.psiPhiYn_[m + 1],
+					&cpmlXY_.psiPhiYn_[m - 1],
+
+					cpmlXY_.bx[i], cpmlXY_.cx[i], cpmlXY_.kappaX[i],
+					cpmlXY_.by[j], cpmlXY_.cy[j], cpmlXY_.kappaY[j],
+					uf_.dx, uf_.dy);
+			}
+			else
+			{
+				uf_.af.advanceMagneticPotentialFD(
+					uf_.anp1+l,    uf_.anm1+l,    uf_.an+l,
+					uf_.an  +l+L0, uf_.an  +l+L2, uf_.an+l+L3,
+					uf_.an  +l-L0, uf_.an  +l-L3, uf_.an+l-L2,
+					uf_.an  +l+3 , uf_.an  +l+L4, uf_.an+l+L5,
+					uf_.an  +l-3 , uf_.an  +l-L5, uf_.an+l-L4,
+					uf_.an  +l+L1, uf_.an  +l-L1, uf_.jn+l);
+
+				uf_.af.advanceScalarPotentialFD(
+					uf_.fnp1+m,    uf_.fnm1+m,    uf_.fn+m,
+					uf_.fn  +m+M0, uf_.fn  +m+M2, uf_.fn+m+M3,
+					uf_.fn  +m-M0, uf_.fn  +m-M3, uf_.fn+m-M2,
+					uf_.fn  +m+1 , uf_.fn  +m+M4, uf_.fn+m+M5,
+					uf_.fn  +m-1 , uf_.fn  +m-M5, uf_.fn+m-M4,
+					uf_.fn  +m+M1, uf_.fn  +m-M1, uf_.rn+m);
+			}
 	      }
       }
 
@@ -1085,6 +1187,9 @@ namespace MITHRA
 	MPI_Recv(uf_.en+3*(np_-1)*N1N0_,	3*N1N0_,MPI_DOUBLE,rank_+1,msgtag7,MPI_COMM_WORLD,&status);
 	MPI_Recv(uf_.bn+3*(np_-1)*N1N0_,	3*N1N0_,MPI_DOUBLE,rank_+1,msgtag8,MPI_COMM_WORLD,&status);
       }
+
+	/* 整个场步完成后，再把 CPML 记忆变量从 n+1 滚到 n */
+	if (cpmlXY_.enabled) shiftCPMLXY();
   }
 
   /******************************************************************************************************
