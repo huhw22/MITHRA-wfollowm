@@ -579,6 +579,8 @@ namespace MITHRA
 	cpmlXY_.enabled = true;
 	cpmlXY_.nx = 16;
 	cpmlXY_.ny = 16;
+	cpmlXY_.nz = 32;
+	cpmlXY_.m = 1.0;
 	initializeCPMLXY();
 
     /* 将束团转换至实验室参考系，并针对 FEL 模拟对束团进行适配——即：添加散粒噪声、分布镜像宏粒子，并添加束团尾部。*/
@@ -2478,107 +2480,110 @@ namespace MITHRA
 
 	void Solver::shiftCPMLXY()
 	{
-		if (!cpmlXY_.enabled) return;
+			// if (!cpmlXY_.enabled) return;
 
-		cpmlXY_.psiXn_.swap(cpmlXY_.psiXnp1_);
-		cpmlXY_.psiYn_.swap(cpmlXY_.psiYnp1_);
+			// cpmlXY_.psiXn_.swap(cpmlXY_.psiXnp1_);
+			// cpmlXY_.psiYn_.swap(cpmlXY_.psiYnp1_);
 
-		if (mesh_.spaceCharge_)
-		{
-			cpmlXY_.psiPhiXn_.swap(cpmlXY_.psiPhiXnp1_);
-			cpmlXY_.psiPhiYn_.swap(cpmlXY_.psiPhiYnp1_);
-		}
+			// if (mesh_.spaceCharge_)
+			// {
+			// 	cpmlXY_.psiPhiXn_.swap(cpmlXY_.psiPhiXnp1_);
+			// 	cpmlXY_.psiPhiYn_.swap(cpmlXY_.psiPhiYnp1_);
+			// }
 	}
 
 	void Solver::initializeCPMLXY()
 	{
-		/* 如果没开 CPML，就把相关数组清空并返回 */
+		auto clearAllCPMLXY = [&]()
+		{
+			cpmlXY_.sigmaX.clear();
+			cpmlXY_.sigmaY.clear();
+			cpmlXY_.sigmaZ.clear();
+			cpmlXY_.phiMemoryEnabled = false;
+		};
+
+		/* 如果没开吸收层，就全部清空并返回 */
 		if (!cpmlXY_.enabled)
 		{
-			cpmlXY_.sigmaX.clear(); cpmlXY_.kappaX.clear(); cpmlXY_.alphaX.clear();
-			cpmlXY_.bx.clear();     cpmlXY_.cx.clear();
-			cpmlXY_.sigmaY.clear(); cpmlXY_.kappaY.clear(); cpmlXY_.alphaY.clear();
-			cpmlXY_.by.clear();     cpmlXY_.cy.clear();
-			cpmlXY_.psiXn_.clear();  cpmlXY_.psiYn_.clear();
+			clearAllCPMLXY();
 			return;
 		}
 
-		/* 基本检查：这一步必须在 initializeMesh() 之后调用 */
+		/* 这一步必须在 initializeMesh() 之后调用 */
 		if (N0_ == 0 || N1_ == 0 || np_ == 0)
 		{
 			printmessage(std::string(__FILE__), __LINE__,
-						std::string("CPMLXY error: mesh is not initialized yet.") );
+						std::string("CPMLXY error: mesh is not initialized yet."));
 			exit(1);
 		}
 
-		if (cpmlXY_.nx == 0 || cpmlXY_.ny == 0)
+		if (cpmlXY_.nx == 0 || cpmlXY_.ny == 0 || cpmlXY_.nz == 0)
 		{
 			printmessage(std::string(__FILE__), __LINE__,
-						std::string("CPMLXY error: nx or ny is zero.") );
+						std::string("CPMLXY error: nx, ny or nz is zero."));
 			exit(1);
 		}
 
-		/* 至少给物理区留一点空间 */
 		if (2 * cpmlXY_.nx >= N0_ || 2 * cpmlXY_.ny >= N1_)
 		{
 			printmessage(std::string(__FILE__), __LINE__,
-						std::string("CPMLXY error: PML thickness is too large for current mesh size.") );
+						std::string("CPMLXY error: x/y layer thickness is too large for current mesh size."));
 			exit(1);
 		}
 
-		const Double dx = mesh_.meshResolution_[0];
-		const Double dy = mesh_.meshResolution_[1];
-		const Double dt = mesh_.timeStep_;
+		/* z 方向只在全局前后端加阻尼，所以这里只检查本地 slab 至少能容纳一些 z 层 */
+		if (cpmlXY_.nz >= np_)
+		{
+			printmessage(std::string(__FILE__), __LINE__,
+						std::string("CPMLXY error: nz is too large for local z-slab size."));
+			exit(1);
+		}
 
+		const Double dx   = mesh_.meshResolution_[0];
+		const Double dy   = mesh_.meshResolution_[1];
+		const Double dz   = mesh_.meshResolution_[2];
+		const Double dt   = mesh_.timeStep_;
 		const Double m    = static_cast<Double>(cpmlXY_.m);
 		const Double Rerr = cpmlXY_.Rerr;
 
 		if (Rerr <= 0.0 || Rerr >= 1.0)
 		{
 			printmessage(std::string(__FILE__), __LINE__,
-						std::string("CPMLXY error: Rerr must satisfy 0 < Rerr < 1.") );
+						std::string("CPMLXY error: Rerr must satisfy 0 < Rerr < 1."));
 			exit(1);
 		}
 
-		/* 分配并初始化 1D profile */
+		/* 先保留这个标志，后面做 SC 时还能继续用 */
+		cpmlXY_.phiMemoryEnabled = mesh_.spaceCharge_;
+
+		/* 只分配真正需要的阻尼 profile */
 		cpmlXY_.sigmaX.assign(N0_, 0.0);
-		cpmlXY_.kappaX.assign(N0_, 1.0);
-		cpmlXY_.alphaX.assign(N0_, 0.0);
-		cpmlXY_.bx.assign(N0_, 1.0);
-		cpmlXY_.cx.assign(N0_, 0.0);
-
 		cpmlXY_.sigmaY.assign(N1_, 0.0);
-		cpmlXY_.kappaY.assign(N1_, 1.0);
-		cpmlXY_.alphaY.assign(N1_, 0.0);
-		cpmlXY_.by.assign(N1_, 1.0);
-		cpmlXY_.cy.assign(N1_, 0.0);
+		cpmlXY_.sigmaZ.assign(np_, 0.0);
 
-		/* sigma_max */
 		const Double sxmax =
 			- (m + 1.0) * std::log(Rerr) / (2.0 * cpmlXY_.nx * dx);
 
 		const Double symax =
 			- (m + 1.0) * std::log(Rerr) / (2.0 * cpmlXY_.ny * dy);
 
-		/* ---------------- x 方向 profile ---------------- */
+		const Double szmax =
+			- (m + 1.0) * std::log(Rerr) / (2.0 * cpmlXY_.nz * dz);
+
+		/* 先保留你现在的增强方式 */
+		const Double etaScaleX = 20.0;
+		const Double etaScaleY = 20.0;
+		const Double etaScaleZ = 20.0;
+
+		/* ---------- x profile ---------- */
 		for (unsigned int i = 0; i < N0_; ++i)
 		{
 			Double xi = 0.0;
 
-			/* 左侧 PML */
 			if (i < cpmlXY_.nx)
-			{
 				xi = static_cast<Double>(cpmlXY_.nx - i) / static_cast<Double>(cpmlXY_.nx);
-			}
-			/* 右侧 PML */
 			else if (i >= N0_ - cpmlXY_.nx)
-			{
 				xi = static_cast<Double>(i - (N0_ - cpmlXY_.nx - 1)) / static_cast<Double>(cpmlXY_.nx);
-			}
-			else
-			{
-				xi = 0.0;
-			}
 
 			if (xi > 1.0) xi = 1.0;
 			if (xi < 0.0) xi = 0.0;
@@ -2586,32 +2591,19 @@ namespace MITHRA
 			if (xi > 0.0)
 			{
 				const Double pm = std::pow(xi, m);
-
-				cpmlXY_.sigmaX[i] = sxmax * pm;
-				cpmlXY_.kappaX[i] = 1.0 + (cpmlXY_.kappaMaxX - 1.0) * pm;
-				cpmlXY_.alphaX[i] = cpmlXY_.alphaMaxX * (1.0 - xi);
+				cpmlXY_.sigmaX[i] = etaScaleX * sxmax * pm;
 			}
 		}
 
-		/* ---------------- y 方向 profile ---------------- */
+		/* ---------- y profile ---------- */
 		for (unsigned int j = 0; j < N1_; ++j)
 		{
 			Double xi = 0.0;
 
-			/* 下侧 PML */
 			if (j < cpmlXY_.ny)
-			{
 				xi = static_cast<Double>(cpmlXY_.ny - j) / static_cast<Double>(cpmlXY_.ny);
-			}
-			/* 上侧 PML */
 			else if (j >= N1_ - cpmlXY_.ny)
-			{
 				xi = static_cast<Double>(j - (N1_ - cpmlXY_.ny - 1)) / static_cast<Double>(cpmlXY_.ny);
-			}
-			else
-			{
-				xi = 0.0;
-			}
 
 			if (xi > 1.0) xi = 1.0;
 			if (xi < 0.0) xi = 0.0;
@@ -2619,92 +2611,79 @@ namespace MITHRA
 			if (xi > 0.0)
 			{
 				const Double pm = std::pow(xi, m);
-
-				cpmlXY_.sigmaY[j] = symax * pm;
-				cpmlXY_.kappaY[j] = 1.0 + (cpmlXY_.kappaMaxY - 1.0) * pm;
-				cpmlXY_.alphaY[j] = cpmlXY_.alphaMaxY * (1.0 - xi);
+				cpmlXY_.sigmaY[j] = etaScaleY * symax * pm;
 			}
 		}
 
-		/* ---------------- x 方向递推系数 bx, cx ---------------- */
+		/* ---------- z profile ----------
+		只在全局前后端 rank 上加阻尼：
+		- rank_ == 0            : 前端若干层
+		- rank_ == size_ - 1    : 后端若干层
+		中间 rank 保持 sigmaZ = 0
+		*/
+		if (rank_ == 0)
+		{
+			const unsigned int nzFront = std::min(cpmlXY_.nz, static_cast<unsigned>(np_));
+			for (unsigned int k = 0; k < nzFront; ++k)
+			{
+				Double xi = static_cast<Double>(cpmlXY_.nz - k) / static_cast<Double>(cpmlXY_.nz);
+				if (xi > 1.0) xi = 1.0;
+				if (xi < 0.0) xi = 0.0;
+
+				const Double pm = std::pow(xi, m);
+				cpmlXY_.sigmaZ[k] = etaScaleZ * szmax * pm;
+			}
+		}
+
+		if (rank_ == size_ - 1)
+		{
+			const unsigned int kBegin = (np_ > cpmlXY_.nz) ? (np_ - cpmlXY_.nz) : 0;
+			for (unsigned int k = kBegin; k < static_cast<unsigned>(np_); ++k)
+			{
+				Double xi = static_cast<Double>(k - (np_ - cpmlXY_.nz - 1)) / static_cast<Double>(cpmlXY_.nz);
+				if (xi > 1.0) xi = 1.0;
+				if (xi < 0.0) xi = 0.0;
+
+				const Double pm = std::pow(xi, m);
+				const Double sigmaVal = etaScaleZ * szmax * pm;
+
+				/* 如果 size_ == 1，前后端可能重叠，取较大值即可 */
+				if (sigmaVal > cpmlXY_.sigmaZ[k]) cpmlXY_.sigmaZ[k] = sigmaVal;
+			}
+		}
+
+		Double maxSigmaX = 0.0;
+		Double maxSigmaY = 0.0;
+		Double maxSigmaZ = 0.0;
+
 		for (unsigned int i = 0; i < N0_; ++i)
-		{
-			const Double s = cpmlXY_.sigmaX[i];
-			const Double k = cpmlXY_.kappaX[i];
-			const Double a = cpmlXY_.alphaX[i];
+			if (cpmlXY_.sigmaX[i] > maxSigmaX) maxSigmaX = cpmlXY_.sigmaX[i];
 
-			cpmlXY_.bx[i] = std::exp(-(s / k + a) * dt);
-
-			if (std::abs(s) < 1.0e-30)
-			{
-				cpmlXY_.cx[i] = 0.0;
-			}
-			else
-			{
-				const Double denom = k * (s + k * a);
-				if (std::abs(denom) < 1.0e-30)
-					cpmlXY_.cx[i] = 0.0;
-				else
-					cpmlXY_.cx[i] = s * (cpmlXY_.bx[i] - 1.0) / denom;
-			}
-		}
-
-		/* ---------------- y 方向递推系数 by, cy ---------------- */
 		for (unsigned int j = 0; j < N1_; ++j)
-		{
-			const Double s = cpmlXY_.sigmaY[j];
-			const Double k = cpmlXY_.kappaY[j];
-			const Double a = cpmlXY_.alphaY[j];
+			if (cpmlXY_.sigmaY[j] > maxSigmaY) maxSigmaY = cpmlXY_.sigmaY[j];
 
-			cpmlXY_.by[j] = std::exp(-(s / k + a) * dt);
+		for (unsigned int k = 0; k < static_cast<unsigned>(np_); ++k)
+			if (cpmlXY_.sigmaZ[k] > maxSigmaZ) maxSigmaZ = cpmlXY_.sigmaZ[k];
 
-			if (std::abs(s) < 1.0e-30)
-			{
-				cpmlXY_.cy[j] = 0.0;
-			}
-			else
-			{
-				const Double denom = k * (s + k * a);
-				if (std::abs(denom) < 1.0e-30)
-					cpmlXY_.cy[j] = 0.0;
-				else
-					cpmlXY_.cy[j] = s * (cpmlXY_.by[j] - 1.0) / denom;
-			}
-		}
-
-		/* ---------------- 分配记忆变量 ---------------- */
-		const long int nCell = static_cast<long int>(N1N0_) * np_;
-
-		FieldVector<Double> zero;
-		zero = 0.0;
-
-		cpmlXY_.psiXn_.assign(nCell, zero);
-		cpmlXY_.psiXnp1_.assign(nCell, zero);
-
-		cpmlXY_.psiYn_.assign(nCell, zero);
-		cpmlXY_.psiYnp1_.assign(nCell, zero);
-		if (mesh_.spaceCharge_)
-		{
-			cpmlXY_.psiPhiXn_.assign(nCell, 0.0);
-			cpmlXY_.psiPhiXnp1_.assign(nCell, 0.0);
-
-			cpmlXY_.psiPhiYn_.assign(nCell, 0.0);
-			cpmlXY_.psiPhiYnp1_.assign(nCell, 0.0);
-		}
-		else
-		{
-			cpmlXY_.psiPhiXn_.clear();
-			cpmlXY_.psiPhiXnp1_.clear();
-
-			cpmlXY_.psiPhiYn_.clear();
-			cpmlXY_.psiPhiYnp1_.clear();
-		}
+		const Double maxDampX = 0.5 * maxSigmaX * dt;
+		const Double maxDampY = 0.5 * maxSigmaY * dt;
+		const Double maxDampZ = 0.5 * maxSigmaZ * dt;
 
 		printmessage(std::string(__FILE__), __LINE__,
 					std::string("CPMLXY initialized: nx=") + stringify(cpmlXY_.nx) +
 					std::string(", ny=") + stringify(cpmlXY_.ny) +
-					std::string(", sxmax=") + stringify(sxmax) +
-					std::string(", symax=") + stringify(symax) );
+					std::string(", nz=") + stringify(cpmlXY_.nz) +
+					std::string(", dt=") + stringify(dt) +
+					std::string(", Nx=") + stringify(N0_) +
+					std::string(", Ny=") + stringify(N1_) +
+					std::string(", Nz=") + stringify(N2_) +
+					std::string(", maxSigmaX=") + stringify(maxSigmaX) +
+					std::string(", maxSigmaY=") + stringify(maxSigmaY) +
+					std::string(", maxSigmaZ=") + stringify(maxSigmaZ) +
+					std::string(", maxDampX=0.5*sigmaX*dt=") + stringify(maxDampX) +
+					std::string(", maxDampY=0.5*sigmaY*dt=") + stringify(maxDampY) +
+					std::string(", maxDampZ=0.5*sigmaZ*dt=") + stringify(maxDampZ) +
+					std::string(", phiMemory=") + stringify(cpmlXY_.phiMemoryEnabled));
 	}
 
 }

@@ -141,20 +141,14 @@ namespace MITHRA
         Double dx, Double dy);
 
     /* x/y-CPML: 矢势，非标准有限差分 */
-    void advanceMagneticPotentialNSFD_CPMLXY(
-        Q v0 , P v1 , P v2 ,
-        P v3 , P v31, P v32,
-        P v4 , P v41, P v42,
-        P v5 , P v51, P v52,
-        P v6 , P v61, P v62,
-        P v7 , P v8 , P v9,
-
-        Q psiXnp1, P psiXn_c, P psiXn_p, P psiXn_m,
-        Q psiYnp1, P psiYn_c, P psiYn_p, P psiYn_m,
-
-        Double bx, Double cx, Double kappaX,
-        Double by, Double cy, Double kappaY,
-        Double dx, Double dy);
+    void advanceMagneticPotentialNSFD_CPML(
+      Q v0 , P v1 , P v2 ,
+      P v3 , P v31, P v32,
+      P v4 , P v41, P v42,
+      P v5 , P v51, P v52,
+      P v6 , P v61, P v62,
+      P v7 , P v8 , P v9,
+      Double eta, Double dt);
 
     /* x/y-CPML: 标量势，标准有限差分 */
     void advanceScalarPotentialFD_CPMLXY(
@@ -508,32 +502,18 @@ namespace MITHRA
   struct CPMLXY
   {
       bool enabled = false;
+      bool phiMemoryEnabled = false;
 
-      unsigned int nx = 0;   // x方向PML厚度（格点数）
-      unsigned int ny = 0;   // y方向PML厚度（格点数）
+      unsigned nx = 0;
+      unsigned ny = 0;
+      unsigned nz = 0;
 
-      unsigned int m = 3;    // profile阶数
       Double Rerr = 1.0e-8;
+      Double m = 2.0;
 
-      Double kappaMaxX = 8.0;
-      Double kappaMaxY = 8.0;
-      Double alphaMaxX = 0.05;
-      Double alphaMaxY = 0.05;
-
-      std::vector<Double> sigmaX, kappaX, alphaX, bx, cx;
-      std::vector<Double> sigmaY, kappaY, alphaY, by, cy;
-
-      std::vector<FieldVector<Double>> psiXn_;
-      std::vector<FieldVector<Double>> psiXnp1_;
-
-      std::vector<FieldVector<Double>> psiYn_;
-      std::vector<FieldVector<Double>> psiYnp1_;
-
-      std::vector<Double> psiPhiXn_;
-      std::vector<Double> psiPhiXnp1_;
-
-      std::vector<Double> psiPhiYn_;
-      std::vector<Double> psiPhiYnp1_;
+      std::vector<Double> sigmaX;
+      std::vector<Double> sigmaY;
+      std::vector<Double> sigmaZ;
   };
 }
 

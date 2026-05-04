@@ -157,146 +157,61 @@ namespace MITHRA
 			v6, v61, v62,
 			v7, v8, v9);
 
-		/* 2) 用当前时间层 A^n 更新 x/y 方向的 CPML 记忆变量 */
-		const Double dAdx_x = (*(v3  ) - *(v4  )) / (2.0 * dx);
-		const Double dAdx_y = (*(v3+1) - *(v4+1)) / (2.0 * dx);
-		const Double dAdx_z = (*(v3+2) - *(v4+2)) / (2.0 * dx);
-
-		const Double dAdy_x = (*(v5  ) - *(v6  )) / (2.0 * dy);
-		const Double dAdy_y = (*(v5+1) - *(v6+1)) / (2.0 * dy);
-		const Double dAdy_z = (*(v5+2) - *(v6+2)) / (2.0 * dy);
-
-		// *psiXnp1      = bx * (*psiXn_c)       + cx * dAdx_x;
-		// *(psiXnp1+1)  = bx * (*(psiXn_c+1))   + cx * dAdx_y;
-		// *(psiXnp1+2)  = bx * (*(psiXn_c+2))   + cx * dAdx_z;
-
-		// *psiYnp1      = by * (*psiYn_c)       + cy * dAdy_x;
-		// *(psiYnp1+1)  = by * (*(psiYn_c+1))   + cy * dAdy_y;
-		// *(psiYnp1+2)  = by * (*(psiYn_c+2))   + cy * dAdy_z;
-
-		/* 3) 用旧层 psi 的邻点计算 dpsi/dx, dpsi/dy */
-		// const Double dpsiXdx_x = ((*psiXn_p    ) - (*psiXn_m    )) / (2.0 * dx);
-		// const Double dpsiXdx_y = ((*(psiXn_p+1)) - (*(psiXn_m+1))) / (2.0 * dx);
-		// const Double dpsiXdx_z = ((*(psiXn_p+2)) - (*(psiXn_m+2))) / (2.0 * dx);
-
-		// const Double dpsiYdy_x = ((*psiYn_p    ) - (*psiYn_m    )) / (2.0 * dy);
-		// const Double dpsiYdy_y = ((*(psiYn_p+1)) - (*(psiYn_m+1))) / (2.0 * dy);
-		// const Double dpsiYdy_z = ((*(psiYn_p+2)) - (*(psiYn_m+2))) / (2.0 * dy);
-
-		/* 4) x/y 二阶导数的 kappa 修正 */
-		const Double lapX_x = (*(v3  ) - 2.0 * (*v2    ) + *(v4  ));
-		const Double lapX_y = (*(v3+1) - 2.0 * (*(v2+1)) + *(v4+1));
-		const Double lapX_z = (*(v3+2) - 2.0 * (*(v2+2)) + *(v4+2));
-
-		const Double lapY_x = (*(v5  ) - 2.0 * (*v2    ) + *(v6  ));
-		const Double lapY_y = (*(v5+1) - 2.0 * (*(v2+1)) + *(v6+1));
-		const Double lapY_z = (*(v5+2) - 2.0 * (*(v2+2)) + *(v6+2));
-
-		const Double corrKx = (1.0 / (kappaX * kappaX) - 1.0);
-		const Double corrKy = (1.0 / (kappaY * kappaY) - 1.0);
-
-		*(v0  ) += (*(ufa_ + 1)) * corrKx * lapX_x + (*(ufa_ + 2)) * corrKy * lapY_x;
-		*(v0+1) += (*(ufa_ + 1)) * corrKx * lapX_y + (*(ufa_ + 2)) * corrKy * lapY_y;
-		*(v0+2) += (*(ufa_ + 1)) * corrKx * lapX_z + (*(ufa_ + 2)) * corrKy * lapY_z;
-
-		/* 5) 加上 psi 导数修正项 */
-		// *(v0  ) += (*(ufa_ + 1)) * dx * dpsiXdx_x + (*(ufa_ + 2)) * dy * dpsiYdy_x;
-		// *(v0+1) += (*(ufa_ + 1)) * dx * dpsiXdx_y + (*(ufa_ + 2)) * dy * dpsiYdy_y;
-		// *(v0+2) += (*(ufa_ + 1)) * dx * dpsiXdx_z + (*(ufa_ + 2)) * dy * dpsiYdy_z;
 	}
 
-	void AdvanceField::advanceMagneticPotentialNSFD_CPMLXY(
+	void AdvanceField::advanceMagneticPotentialNSFD_CPML(
 		Q v0 , P v1 , P v2 ,
 		P v3 , P v31, P v32,
 		P v4 , P v41, P v42,
 		P v5 , P v51, P v52,
 		P v6 , P v61, P v62,
 		P v7 , P v8 , P v9,
-
-		Q psiXnp1, P psiXn_c, P psiXn_p, P psiXn_m,
-		Q psiYnp1, P psiYn_c, P psiYn_p, P psiYn_m,
-
-		Double bx, Double cx, Double kappaX,
-		Double by, Double cy, Double kappaY,
-		Double dx, Double dy)
+		Double eta, Double dt)
 	{
-		/* 1) 先按原始 NSFD 磁矢势核推进 */
-		advanceMagneticPotentialNSFD(
-			v0, v1, v2,
-			v3, v31, v32,
-			v4, v41, v42,
-			v5, v51, v52,
-			v6, v61, v62,
-			v7, v8, v9);
+		(void)v9; // sponge region: source is explicitly ignored
 
-		/* 2) 用当前时间层 A^n 更新 x/y 方向的 CPML 记忆变量 */
-		// const Double dAdx_x = (*(v3  ) - *(v4  )) / (2.0 * dx);
-		// const Double dAdx_y = (*(v3+1) - *(v4+1)) / (2.0 * dx);
-		// const Double dAdx_z = (*(v3+2) - *(v4+2)) / (2.0 * dx);
+		const Double coeffT = *ufa_;
+		const Double coeffX = alpha_ * (*(ufa_ + 1));
+		const Double coeffY = alpha_ * (*(ufa_ + 2));
+		const Double coeffZ = *(ufa_ + 3);
 
-		// const Double dAdy_x = (*(v5  ) - *(v6  )) / (2.0 * dy);
-		// const Double dAdy_y = (*(v5+1) - *(v6+1)) / (2.0 * dy);
-		// const Double dAdy_z = (*(v5+2) - *(v6+2)) / (2.0 * dy);
+		const Double damp  = 0.5 * ((eta > 0.0) ? eta : 0.0) * dt;
+		const Double denom = 1.0 + damp;
 
-		// *psiXnp1      = bx * (*psiXn_c)       + cx * dAdx_x;
-		// *(psiXnp1+1)  = bx * (*(psiXn_c+1))   + cx * dAdx_y;
-		// *(psiXnp1+2)  = bx * (*(psiXn_c+2))   + cx * dAdx_z;
+		for (int c = 0; c < 3; ++c)
+		{
+			const Double uc   = *(v2 + c);
+			const Double upre = *(v1 + c);
 
-		// *psiYnp1      = by * (*psiYn_c)       + cy * dAdy_x;
-		// *(psiYnp1+1)  = by * (*(psiYn_c+1))   + cy * dAdy_y;
-		// *(psiYnp1+2)  = by * (*(psiYn_c+2))   + cy * dAdy_z;
+			const Double ux_p = *(v3 + c);
+			const Double ux_m = *(v4 + c);
 
-		/* 3) 用旧层 psi 的邻点计算 dpsi/dx, dpsi/dy */
-		// const Double dpsiXdx_x = ((*psiXn_p    ) - (*psiXn_m    )) / (2.0 * dx);
-		// const Double dpsiXdx_y = ((*(psiXn_p+1)) - (*(psiXn_m+1))) / (2.0 * dx);
-		// const Double dpsiXdx_z = ((*(psiXn_p+2)) - (*(psiXn_m+2))) / (2.0 * dx);
+			const Double uy_p = *(v5 + c);
+			const Double uy_m = *(v6 + c);
 
-		// const Double dpsiYdy_x = ((*psiYn_p    ) - (*psiYn_m    )) / (2.0 * dy);
-		// const Double dpsiYdy_y = ((*(psiYn_p+1)) - (*(psiYn_m+1))) / (2.0 * dy);
-		// const Double dpsiYdy_z = ((*(psiYn_p+2)) - (*(psiYn_m+2))) / (2.0 * dy);
+			const Double uz_p = *(v7 + c);
+			const Double uz_m = *(v8 + c);
 
-		/* 4) NSFD 横向 stencil 的 kappa 修正 */
-		// const Double lapX_x =
-		// 	(*(v3  ) + *(v4  ) + beta_ * (*(v31  ) + *(v32  ) + *(v41  ) + *(v42  ))
-		// 	- 2.0 * (1.0 + 2.0 * beta_) * (*v2));
+			const Double ufree =
+				coeffT * uc - upre
+				+ coeffX * (
+					ux_p + ux_m
+					+ beta_ * (
+						*(v31 + c) + *(v32 + c)
+					+ *(v41 + c) + *(v42 + c)
+					)
+				)
+				+ coeffY * (
+					uy_p + uy_m
+					+ beta_ * (
+						*(v51 + c) + *(v52 + c)
+					+ *(v61 + c) + *(v62 + c)
+					)
+				)
+				+ coeffZ * (uz_p + uz_m);
 
-		// const Double lapX_y =
-		// 	(*(v3+1) + *(v4+1) + beta_ * (*(v31+1) + *(v32+1) + *(v41+1) + *(v42+1))
-		// 	- 2.0 * (1.0 + 2.0 * beta_) * (*(v2+1)));
-
-		// const Double lapX_z =
-		// 	(*(v3+2) + *(v4+2) + beta_ * (*(v31+2) + *(v32+2) + *(v41+2) + *(v42+2))
-		// 	- 2.0 * (1.0 + 2.0 * beta_) * (*(v2+2)));
-
-		// const Double lapY_x =
-		// 	(*(v5  ) + *(v6  ) + beta_ * (*(v51  ) + *(v52  ) + *(v61  ) + *(v62  ))
-		// 	- 2.0 * (1.0 + 2.0 * beta_) * (*v2));
-
-		// const Double lapY_y =
-		// 	(*(v5+1) + *(v6+1) + beta_ * (*(v51+1) + *(v52+1) + *(v61+1) + *(v62+1))
-		// 	- 2.0 * (1.0 + 2.0 * beta_) * (*(v2+1)));
-
-		// const Double lapY_z =
-		// 	(*(v5+2) + *(v6+2) + beta_ * (*(v51+2) + *(v52+2) + *(v61+2) + *(v62+2))
-		// 	- 2.0 * (1.0 + 2.0 * beta_) * (*(v2+2)));
-
-		// const Double corrKx = (1.0 / (kappaX * kappaX) - 1.0);
-		// const Double corrKy = (1.0 / (kappaY * kappaY) - 1.0);
-
-		// *(v0  ) += alpha_ * (*(ufa_ + 1)) * corrKx * lapX_x
-		// 		+ alpha_ * (*(ufa_ + 2)) * corrKy * lapY_x;
-		// *(v0+1) += alpha_ * (*(ufa_ + 1)) * corrKx * lapX_y
-		// 		+ alpha_ * (*(ufa_ + 2)) * corrKy * lapY_y;
-		// *(v0+2) += alpha_ * (*(ufa_ + 1)) * corrKx * lapX_z
-		// 		+ alpha_ * (*(ufa_ + 2)) * corrKy * lapY_z;
-
-		/* 5) 加上 psi 导数修正项 */
-		// *(v0  ) += alpha_ * (*(ufa_ + 1)) * dx * dpsiXdx_x
-		// 		+ alpha_ * (*(ufa_ + 2)) * dy * dpsiYdy_x;
-		// *(v0+1) += alpha_ * (*(ufa_ + 1)) * dx * dpsiXdx_y
-		// 		+ alpha_ * (*(ufa_ + 2)) * dy * dpsiYdy_y;
-		// *(v0+2) += alpha_ * (*(ufa_ + 1)) * dx * dpsiXdx_z
-		// 		+ alpha_ * (*(ufa_ + 2)) * dy * dpsiYdy_z;
+			*(v0 + c) = (ufree + damp * upre) / denom;
+		}
 	}
 
 	void AdvanceField::advanceScalarPotentialFD_CPMLXY(
