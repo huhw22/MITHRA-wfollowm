@@ -420,10 +420,10 @@ namespace MITHRA
 	  }
       }
 
-	const bool useCurlCurlCPMLFD = (mesh_.solver_ == FD);
-	if (useCurlCurlCPMLFD)
+	const bool useScalarCPMLFD =
+		(mesh_.solver_ == FD && spml_.enabled_);
+	if (useScalarCPMLFD)
 	{
-		setOuterAForCurlCurlCPML();
 	}
 	else
 	{
@@ -809,7 +809,7 @@ namespace MITHRA
 	  /*对于左边界（z=zmin），只需将场设置为下一个z平面。*/
 	  if ( rank_ == 0 )
 	    {
-	      	if (useCurlCurlCPMLFD)
+	      	if (useScalarCPMLFD)
 			{
 				en_[m-N1N0_] = FieldVector<Double>(0.0);
 				bn_[m-N1N0_] = FieldVector<Double>(0.0);
@@ -832,7 +832,7 @@ namespace MITHRA
 	  /*对于右边界（z=zmax），只需将字段设置为与之前的z平面相等。*/
 	  if ( rank_ == size_ - 1 )
 	    {
-	          if (useCurlCurlCPMLFD)
+	          if (useScalarCPMLFD)
 				{
 					en_[m+N1N0_] = FieldVector<Double>(0.0);
 					bn_[m+N1N0_] = FieldVector<Double>(0.0);
