@@ -3060,17 +3060,19 @@ namespace MITHRA
 
   void Solver::computeScalarCPMLFirstDerivatives()
   {
-	/*
-	* gx_ = sx * D_x^+_pml A
-	* gy_ = sy * D_y^+_pml A
-	* gz_ = sz * D_z^+_pml A
-	*
-	* 每个 FieldVector 的三个分量分别对应 Ax, Ay, Az。
-	*/
+	std::fill(spml_.gx_.begin(), spml_.gx_.end(), FieldVector<Double>(0.0));
+	std::fill(spml_.gy_.begin(), spml_.gy_.end(), FieldVector<Double>(0.0));
+	std::fill(spml_.gz_.begin(), spml_.gz_.end(), FieldVector<Double>(0.0));
 
+	/*
+	* gx = sx * D_x^+ A
+	*
+	* gx[i] represents the face between i and i+1.
+	* It is needed for D_x^- at cells i and i+1.
+	*/
 	for (int k = 1; k < np_ - 1; ++k)
 	{
-		for (int i = 1; i < N0_ - 1; ++i)
+		for (int i = 0; i < N0_ - 1; ++i)
 		{
 		for (int j = 1; j < N1_ - 1; ++j)
 		{
@@ -3082,19 +3084,56 @@ namespace MITHRA
 				spml_.invDx_
 				* ((*an_)[m + N1_][c] - (*an_)[m][c]);
 
+			spml_.gx_[m][c] =
+				spml_.sx_ * cpmlDxPlusA(i, j, k, c, dxp_A);
+			}
+		}
+		}
+	}
+
+	/*
+	* gy = sy * D_y^+ A
+	*/
+	for (int k = 1; k < np_ - 1; ++k)
+	{
+		for (int i = 1; i < N0_ - 1; ++i)
+		{
+		for (int j = 0; j < N1_ - 1; ++j)
+		{
+			long m = N1N0_ * k + N1_ * i + j;
+
+			for (int c = 0; c < 3; ++c)
+			{
 			Double dyp_A =
 				spml_.invDy_
 				* ((*an_)[m + 1][c] - (*an_)[m][c]);
 
+			spml_.gy_[m][c] =
+				spml_.sy_ * cpmlDyPlusA(i, j, k, c, dyp_A);
+			}
+		}
+		}
+	}
+
+	/*
+	* gz = sz * D_z^+ A
+	*
+	* For intermediate MPI ranks, k=0 and k=np_-1 are ghost layers.
+	* This assumes an_ ghost layers are already valid, as in the original FD update.
+	*/
+	for (int k = 0; k < np_ - 1; ++k)
+	{
+		for (int i = 1; i < N0_ - 1; ++i)
+		{
+		for (int j = 1; j < N1_ - 1; ++j)
+		{
+			long m = N1N0_ * k + N1_ * i + j;
+
+			for (int c = 0; c < 3; ++c)
+			{
 			Double dzp_A =
 				spml_.invDz_
 				* ((*an_)[m + N1N0_][c] - (*an_)[m][c]);
-
-			spml_.gx_[m][c] =
-				spml_.sx_ * cpmlDxPlusA(i, j, k, c, dxp_A);
-
-			spml_.gy_[m][c] =
-				spml_.sy_ * cpmlDyPlusA(i, j, k, c, dyp_A);
 
 			spml_.gz_[m][c] =
 				spml_.sz_ * cpmlDzPlusA(i, j, k, c, dzp_A);
@@ -3102,74 +3141,8 @@ namespace MITHRA
 		}
 		}
 	}
-
-	zeroScalarCPMLGtmpBoundary();
   }
 
-  void Solver::zeroScalarCPMLGtmpBoundary()
-  {
-	/*
-	* j = 0, j = N1_-1
-	*/
-	for (int k = 0; k < np_; ++k)
-	{
-		for (int i = 0; i < N0_; ++i)
-		{
-		long m1 = N1N0_ * k + N1_ * i;
-		long m2 = N1N0_ * k + N1_ * i + (N1_ - 1);
 
-		spml_.gx_[m1] = FieldVector<Double>(0.0);
-		spml_.gy_[m1] = FieldVector<Double>(0.0);
-		spml_.gz_[m1] = FieldVector<Double>(0.0);
-
-		spml_.gx_[m2] = FieldVector<Double>(0.0);
-		spml_.gy_[m2] = FieldVector<Double>(0.0);
-		spml_.gz_[m2] = FieldVector<Double>(0.0);
-		}
-	}
-
-	/*
-	* i = 0, i = N0_-1
-	*/
-	for (int k = 0; k < np_; ++k)
-	{
-		for (int j = 0; j < N1_; ++j)
-		{
-		long m1 = N1N0_ * k + j;
-		long m2 = N1N0_ * k + N1_ * (N0_ - 1) + j;
-
-		spml_.gx_[m1] = FieldVector<Double>(0.0);
-		spml_.gy_[m1] = FieldVector<Double>(0.0);
-		spml_.gz_[m1] = FieldVector<Double>(0.0);
-
-		spml_.gx_[m2] = FieldVector<Double>(0.0);
-		spml_.gy_[m2] = FieldVector<Double>(0.0);
-		spml_.gz_[m2] = FieldVector<Double>(0.0);
-		}
-	}
-
-	/*
-	* k = 0, k = np_-1
-	*
-	* 注意：中间 MPI rank 的 k=0/np_-1 后续会被 exchange 覆盖。
-	* 这里先置零只是为了避免未初始化。
-	*/
-	for (int i = 0; i < N0_; ++i)
-	{
-		for (int j = 0; j < N1_; ++j)
-		{
-		long m1 = N1_ * i + j;
-		long m2 = N1N0_ * (np_ - 1) + N1_ * i + j;
-
-		spml_.gx_[m1] = FieldVector<Double>(0.0);
-		spml_.gy_[m1] = FieldVector<Double>(0.0);
-		spml_.gz_[m1] = FieldVector<Double>(0.0);
-
-		spml_.gx_[m2] = FieldVector<Double>(0.0);
-		spml_.gy_[m2] = FieldVector<Double>(0.0);
-		spml_.gz_[m2] = FieldVector<Double>(0.0);
-		}
-	}
-  }
 
 }
