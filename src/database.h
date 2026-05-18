@@ -515,6 +515,97 @@ namespace MITHRA
       std::vector<Double> sigmaY;
       std::vector<Double> sigmaZ;
   };
+
+  /* curl-curl 形式 A 推进用的 CPML 数据 */
+  struct CurlCurlCPML
+  {
+    bool enabled_;
+
+    /* PML 厚度 */
+    int px_;
+    int py_;
+    int pz_;
+
+    /* 局部网格尺寸 */
+    int nx_;
+    int ny_;
+    int nz_;
+
+    /* 非 PML 区域为 -1 */
+    std::vector<int> xSlot_;
+    std::vector<int> ySlot_;
+    std::vector<int> zSlot_;
+
+    int nxSlot_;
+    int nySlot_;
+    int nzSlot_;
+
+    /* 一维 CPML 系数 */
+    std::vector<Double> kx_, ax_, bx_;
+    std::vector<Double> ky_, ay_, by_;
+    std::vector<Double> kz_, az_, bz_;
+
+    /* x 方向 slab: D_x By, D_x Bz */
+    std::vector<Double> psi_x_By_;
+    std::vector<Double> psi_x_Bz_;
+
+    /* y 方向 slab: D_y Bx, D_y Bz */
+    std::vector<Double> psi_y_Bx_;
+    std::vector<Double> psi_y_Bz_;
+
+    /* z 方向 slab: D_z Bx, D_z By */
+    std::vector<Double> psi_z_Bx_;
+    std::vector<Double> psi_z_By_;
+
+    /* div_phi A 通道：q = D_x A_x + D_y A_y + D_z A_z */
+    std::vector<Double> psi_phi_x_Ax_;
+    std::vector<Double> psi_phi_y_Ay_;
+    std::vector<Double> psi_phi_z_Az_;
+
+    /* grad_A q 通道：D_x q, D_y q, D_z q */
+    std::vector<Double> psi_A_x_q_;
+    std::vector<Double> psi_A_y_q_;
+    std::vector<Double> psi_A_z_q_;
+
+    Double Cx_, Cy_, Cz_;
+    Double sx_, sy_, sz_;
+
+    Double invDx_, invDy_, invDz_;
+
+    Double sxInvDx_, syInvDy_, szInvDz_;
+
+    CurlCurlCPML()
+    {
+      enabled_ = true;
+
+      px_ = 0;
+      py_ = 0;
+      pz_ = 0;
+
+      nx_ = 0;
+      ny_ = 0;
+      nz_ = 0;
+
+      nxSlot_ = 0;
+      nySlot_ = 0;
+      nzSlot_ = 0;
+    }
+
+    long idxX(int sx, int j, int k) const
+    {
+      return ( (long)k * nxSlot_ + sx ) * ny_ + j;
+    }
+
+    long idxY(int i, int sy, int k) const
+    {
+      return ( (long)k * nx_ + i ) * nySlot_ + sy;
+    }
+
+    long idxZ(int i, int j, int sz) const
+    {
+      return ( (long)sz * nx_ + i ) * ny_ + j;
+    }
+  };
 }
 
 #endif

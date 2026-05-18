@@ -350,6 +350,19 @@ void Solver::detectorSample ()
   int  ownerLocal, ownerGlobal;
   bool activeNow;
 
+  const bool useCurlCurlCPMLFD =
+      (mesh_.solver_ == FD && ccpml_.enabled_);
+
+  /*
+   * pmlGuard:
+   *   0 = 只排除严格 PML 区；
+   *   1 = 额外避开 PML 接口一层，更安全。
+   */
+  const int pmlGuard = 1;
+
+  const int n0 = static_cast<int>(N0_);
+  const int n1 = static_cast<int>(N1_);
+
   for (unsigned int jf = 0; jf < FEL_.size(); jf++)
   {
     if (!FEL_[jf].radiationDetector_.sampling_) continue;
@@ -384,11 +397,40 @@ void Solver::detectorSample ()
     rd_[jf].zLabCheck = boostFrame_.labZFromBoxZT(rd_[jf].zBox, timeBunch_);
     rd_[jf].tLab      = boostFrame_.labTFromBoxZT(rd_[jf].zBox, timeBunch_);
 
+    /*
+     * 先计算 detector 面对应的全局 z index。
+     * 后面 activeNow 和 owner rank 都要用。
+     */
+    rd_[jf].dzr = modf(
+        (rd_[jf].zBox - zmin_) / mesh_.meshResolution_[2],
+        &rd_[jf].c
+    );
+
+    rd_[jf].k = (long int) rd_[jf].c;
+
+    long int kLocal = rd_[jf].k - k0_;
+
     /* 先判断当前 detector 面是否在全局有效区间 */
     if ( rd_[jf].zBox >= zmin_ + mesh_.meshResolution_[2] &&
          rd_[jf].zBox <= zmax_ - 2.0 * mesh_.meshResolution_[2] )
     {
       activeNow = true;
+    }
+
+    /*
+     * 新 CPML 路径下，detector 面不能落在 z-PML 区。
+     * 因为 detector 插值需要 k 和 k+1 两层，所以二者都必须在非 PML 区。
+     */
+    if (activeNow && useCurlCurlCPMLFD)
+    {
+      const long int kFirstPhysical = ccpml_.pz_ + 1 + pmlGuard;
+      const long int kLastPhysical  = N2_ - 2 - ccpml_.pz_ - pmlGuard;
+
+      if (rd_[jf].k < kFirstPhysical ||
+          rd_[jf].k + 1 > kLastPhysical)
+      {
+        activeNow = false;
+      }
     }
 
     /* 如果已经开始过，但这一步已经不在有效区，则结束记录 */
@@ -468,13 +510,8 @@ void Solver::detectorSample ()
                    std::string("::: Detector recording starts.") );
     }
 
-    /* 用全局 z 索引判断当前 detector 面属于哪个 rank */
-    rd_[jf].dzr = modf( ( rd_[jf].zBox - zmin_ ) / mesh_.meshResolution_[2], &rd_[jf].c );
-    rd_[jf].k   = (long int) rd_[jf].c;
-
-    long int kLocal = rd_[jf].k - k0_;
-
-    /* 直接对瞬时 S_z = (E x B)_z / mu0 做平面积分
+    /*
+     * 直接对瞬时 S_z = (E x B)_z / mu0 做平面积分。
      * 单位换算沿用原始 powerSample 的思路，但不再带 Fourier 的 2/Nf^2 因子。
      */
     const Double powerScale =
@@ -482,15 +519,62 @@ void Solver::detectorSample ()
       * std::pow(mesh_.lengthScale_, 2)
       / ( m0_ * std::pow(mesh_.timeScale_, 3) );
 
-    /* 必须保证当前层 k 和下一层 k+1 都在当前 rank 可访问范围内 */
-    if (kLocal >= 0 && kLocal + 1 < np_)
+    /*
+     * 横向积分范围。
+     * 默认保持原来的 2 到 N-2；
+     * 新 CPML 路径下排除 x/y PML 区。
+     */
+    int iStart = 2;
+    int iEnd   = n0 - 2;
+    int jStart = 2;
+    int jEnd   = n1 - 2;
+
+    if (useCurlCurlCPMLFD)
+    {
+      iStart = std::max(iStart, ccpml_.px_ + 1 + pmlGuard);
+      iEnd   = std::min(iEnd,   n0 - 1 - ccpml_.px_ - pmlGuard);
+
+      jStart = std::max(jStart, ccpml_.py_ + 1 + pmlGuard);
+      jEnd   = std::min(jEnd,   n1 - 1 - ccpml_.py_ - pmlGuard);
+    }
+
+    static bool printedDetectorPMLRange = false;
+
+    if (!printedDetectorPMLRange && rank_ == 0 && useCurlCurlCPMLFD)
+    {
+      std::cout
+        << "Detector non-PML sampling range:"
+        << " i=[" << iStart << "," << iEnd << ")"
+        << " j=[" << jStart << "," << jEnd << ")"
+        << " pmlGuard=" << pmlGuard
+        << " px=" << ccpml_.px_
+        << " py=" << ccpml_.py_
+        << " pz=" << ccpml_.pz_
+        << std::endl;
+
+      printedDetectorPMLRange = true;
+    }
+
+    /*
+     * 必须保证当前层 k 和下一层 k+1 都在当前 rank 可访问范围内。
+     * 同时横向非 PML 积分区域必须非空。
+     */
+    if (kLocal >= 0 && kLocal + 1 < np_ &&
+        iStart < iEnd && jStart < jEnd)
     {
       ownerLocal = rank_;
 
-      /* 由 owner rank 生成当前整张 detector 面的局部场快照，并累加瞬时坡印廷通量 */
-      for (int i = 2; i < N0_ - 2; i += 1)
+      /*
+       * 由 owner rank 生成当前整张 detector 面的局部场快照，
+       * 并累加瞬时坡印廷通量。
+       *
+       * 新 CPML 路径下：
+       *   power 只积分非 PML 横向区域；
+       *   field frame 的 PML 区域保持为 0。
+       */
+      for (int i = iStart; i < iEnd; i += 1)
       {
-        for (int j = 2; j < N1_ - 2; j += 1)
+        for (int j = jStart; j < jEnd; j += 1)
         {
           mi = kLocal * N1_ * N0_ + i * N1_ + j;
 

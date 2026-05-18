@@ -576,12 +576,14 @@ namespace MITHRA
     initializeMesh();
 
 	/*初始化CPML边界吸收框架*/
-	cpmlXY_.enabled = true;
+	cpmlXY_.enabled = false;
 	cpmlXY_.nx = 16;
 	cpmlXY_.ny = 16;
 	cpmlXY_.nz = 32;
 	cpmlXY_.m = 1.0;
 	initializeCPMLXY();
+
+	initializeCurlCurlCPML();
 
     /* 将束团转换至实验室参考系，并针对 FEL 模拟对束团进行适配——即：添加散粒噪声、分布镜像宏粒子，并添加束团尾部。*/
     lorentzBoostBunch();
@@ -595,6 +597,9 @@ namespace MITHRA
 
     /* 初始化字段的更新数据。 */
     initializeField();
+
+	/*设置吸收层参数，依赖于field*/
+	setCurlCurlCPMLCoefficients();
 
     /* 如果启用了采样功能，则初始化对该字段进行采样及保存所需的数据。 */
     if (seed_.sampling_)			initializeSeedSampling();
@@ -2684,6 +2689,918 @@ namespace MITHRA
 					std::string(", maxDampY=0.5*sigmaY*dt=") + stringify(maxDampY) +
 					std::string(", maxDampZ=0.5*sigmaZ*dt=") + stringify(maxDampZ) +
 					std::string(", phiMemory=") + stringify(cpmlXY_.phiMemoryEnabled));
+	}
+
+	void Solver::initializeCurlCurlCPML()
+	{
+		ccpml_.enabled_ = true;
+
+		/* 第一版先硬编码，后面再接 input 文件 */
+		ccpml_.px_ = 10;
+		ccpml_.py_ = 10;
+		ccpml_.pz_ = 10;
+
+		ccpml_.nx_ = N0_;
+		ccpml_.ny_ = N1_;
+		ccpml_.nz_ = np_;
+
+		/* 防止 PML 厚度超过局部网格 */
+		if (ccpml_.px_ > (N0_ - 2) / 2) ccpml_.px_ = (N0_ - 2) / 2;
+		if (ccpml_.py_ > (N1_ - 2) / 2) ccpml_.py_ = (N1_ - 2) / 2;
+		if (ccpml_.pz_ > (N2_ - 2) / 2) ccpml_.pz_ = (N2_ - 2) / 2;
+
+		ccpml_.xSlot_.assign(N0_, -1);
+		ccpml_.ySlot_.assign(N1_, -1);
+		ccpml_.zSlot_.assign(np_, -1);
+
+		ccpml_.nxSlot_ = 2 * ccpml_.px_;
+		ccpml_.nySlot_ = 2 * ccpml_.py_;
+		ccpml_.nzSlot_ = 0;
+
+		/* x 方向：左右两个物理边界都在本 rank 内 */
+		for (int i = 1; i < N0_ - 1; ++i)
+			{
+			if (i <= ccpml_.px_)
+				ccpml_.xSlot_[i] = i - 1;
+			else if (i >= N0_ - 1 - ccpml_.px_)
+				ccpml_.xSlot_[i] = ccpml_.px_ + (N0_ - 2 - i);
+			}
+
+		/* y 方向：上下两个物理边界都在本 rank 内 */
+		for (int j = 1; j < N1_ - 1; ++j)
+			{
+			if (j <= ccpml_.py_)
+				ccpml_.ySlot_[j] = j - 1;
+			else if (j >= N1_ - 1 - ccpml_.py_)
+				ccpml_.ySlot_[j] = ccpml_.py_ + (N1_ - 2 - j);
+			}
+
+		/*
+		* z 方向：只在全局前后边界 rank 上分配。
+		* 注意：不要把 MPI 子域边界当成 PML。
+		*/
+		if (rank_ == 0)
+			{
+			for (int k = 1; k < np_ - 1 && k <= ccpml_.pz_; ++k)
+				{
+				ccpml_.zSlot_[k] = ccpml_.nzSlot_;
+				ccpml_.nzSlot_++;
+				}
+			}
+
+		if (rank_ == size_ - 1)
+			{
+			for (int k = np_ - 2; k >= 1 && k >= np_ - 1 - ccpml_.pz_; --k)
+				{
+				if (ccpml_.zSlot_[k] < 0)
+					{
+					ccpml_.zSlot_[k] = ccpml_.nzSlot_;
+					ccpml_.nzSlot_++;
+					}
+				}
+			}
+
+		/* CPML 系数：先全部设成不生效 */
+		ccpml_.kx_.assign(N0_, 1.0);
+		ccpml_.ax_.assign(N0_, 0.0);
+		ccpml_.bx_.assign(N0_, 0.0);
+
+		ccpml_.ky_.assign(N1_, 1.0);
+		ccpml_.ay_.assign(N1_, 0.0);
+		ccpml_.by_.assign(N1_, 0.0);
+
+		ccpml_.kz_.assign(np_, 1.0);
+		ccpml_.az_.assign(np_, 0.0);
+		ccpml_.bz_.assign(np_, 0.0);
+
+		/* 临时 B = curl A */
+		btmp_.assign(N1N0_ * np_, FieldVector<Double>(0.0));
+
+		/* 临时 q = div_pml A */
+		qtmp_.assign(N1N0_ * np_, 0.0);
+
+		/* x-PML slab */
+		long nxMem = (long)ccpml_.nxSlot_ * N1_ * np_;
+
+		ccpml_.psi_x_By_.assign(nxMem, 0.0);
+		ccpml_.psi_x_Bz_.assign(nxMem, 0.0);
+
+		ccpml_.psi_phi_x_Ax_.assign(nxMem, 0.0);
+		ccpml_.psi_A_x_q_.assign(nxMem, 0.0);
+
+		/* y-PML slab */
+		long nyMem = (long)N0_ * ccpml_.nySlot_ * np_;
+
+		ccpml_.psi_y_Bx_.assign(nyMem, 0.0);
+		ccpml_.psi_y_Bz_.assign(nyMem, 0.0);
+
+		ccpml_.psi_phi_y_Ay_.assign(nyMem, 0.0);
+		ccpml_.psi_A_y_q_.assign(nyMem, 0.0);
+
+		/* z-PML slab */
+		long nzMem = (long)N0_ * N1_ * ccpml_.nzSlot_;
+
+		ccpml_.psi_z_Bx_.assign(nzMem, 0.0);
+		ccpml_.psi_z_By_.assign(nzMem, 0.0);
+
+		ccpml_.psi_phi_z_Az_.assign(nzMem, 0.0);
+		ccpml_.psi_A_z_q_.assign(nzMem, 0.0);
+
+		double psiMemMB =
+			(
+			4.0 * nxMem +
+			4.0 * nyMem +
+			4.0 * nzMem
+			) * sizeof(Double) / 1024.0 / 1024.0;
+
+		double tmpMemMB =
+			(
+			3.0 * (double)N1N0_ * np_ +   // btmp_: 3 components
+			1.0 * (double)N1N0_ * np_     // qtmp_: scalar
+			) * sizeof(Double) / 1024.0 / 1024.0;
+
+		std::cout
+		<< "Rank " << rank_
+		<< " ::: CurlCurlCPML initialized. "
+		<< "xSlot=" << ccpml_.nxSlot_
+		<< ", ySlot=" << ccpml_.nySlot_
+		<< ", zSlot=" << ccpml_.nzSlot_
+		<< ", psi memory=" << psiMemMB << " MB"
+		<< ", tmp memory=" << tmpMemMB << " MB"
+		<< std::endl;
+	}
+
+	Double Solver::cpmlDxBy(int i, int j, int k, Double dx_By)
+	{
+		int sx = ccpml_.xSlot_[i];
+
+		if (sx < 0)
+			return dx_By;
+
+		long q = ccpml_.idxX(sx, j, k);
+
+		ccpml_.psi_x_By_[q] =
+			ccpml_.bx_[i] * ccpml_.psi_x_By_[q]
+			+ ccpml_.ax_[i] * dx_By;
+
+		return dx_By / ccpml_.kx_[i] + ccpml_.psi_x_By_[q];
+	}
+
+
+	Double Solver::cpmlDxBz(int i, int j, int k, Double dx_Bz)
+	{
+		int sx = ccpml_.xSlot_[i];
+
+		if (sx < 0)
+			return dx_Bz;
+
+		long q = ccpml_.idxX(sx, j, k);
+
+		ccpml_.psi_x_Bz_[q] =
+			ccpml_.bx_[i] * ccpml_.psi_x_Bz_[q]
+			+ ccpml_.ax_[i] * dx_Bz;
+
+		return dx_Bz / ccpml_.kx_[i] + ccpml_.psi_x_Bz_[q];
+	}
+
+
+	Double Solver::cpmlDyBx(int i, int j, int k, Double dy_Bx)
+	{
+		int sy = ccpml_.ySlot_[j];
+
+		if (sy < 0)
+			return dy_Bx;
+
+		long q = ccpml_.idxY(i, sy, k);
+
+		ccpml_.psi_y_Bx_[q] =
+			ccpml_.by_[j] * ccpml_.psi_y_Bx_[q]
+			+ ccpml_.ay_[j] * dy_Bx;
+
+		return dy_Bx / ccpml_.ky_[j] + ccpml_.psi_y_Bx_[q];
+	}
+
+
+	Double Solver::cpmlDyBz(int i, int j, int k, Double dy_Bz)
+	{
+		int sy = ccpml_.ySlot_[j];
+
+		if (sy < 0)
+			return dy_Bz;
+
+		long q = ccpml_.idxY(i, sy, k);
+
+		ccpml_.psi_y_Bz_[q] =
+			ccpml_.by_[j] * ccpml_.psi_y_Bz_[q]
+			+ ccpml_.ay_[j] * dy_Bz;
+
+		return dy_Bz / ccpml_.ky_[j] + ccpml_.psi_y_Bz_[q];
+	}
+
+
+	Double Solver::cpmlDzBx(int i, int j, int k, Double dz_Bx)
+	{
+		int sz = ccpml_.zSlot_[k];
+
+		if (sz < 0)
+			return dz_Bx;
+
+		long q = ccpml_.idxZ(i, j, sz);
+
+		ccpml_.psi_z_Bx_[q] =
+			ccpml_.bz_[k] * ccpml_.psi_z_Bx_[q]
+			+ ccpml_.az_[k] * dz_Bx;
+
+		return dz_Bx / ccpml_.kz_[k] + ccpml_.psi_z_Bx_[q];
+	}
+
+
+	Double Solver::cpmlDzBy(int i, int j, int k, Double dz_By)
+	{
+		int sz = ccpml_.zSlot_[k];
+
+		if (sz < 0)
+			return dz_By;
+
+		long q = ccpml_.idxZ(i, j, sz);
+
+		ccpml_.psi_z_By_[q] =
+			ccpml_.bz_[k] * ccpml_.psi_z_By_[q]
+			+ ccpml_.az_[k] * dz_By;
+
+		return dz_By / ccpml_.kz_[k] + ccpml_.psi_z_By_[q];
+	}
+
+	Double Solver::cpmlDivDxAx(int i, int j, int k, Double dx_Ax)
+	{
+	int sx = ccpml_.xSlot_[i];
+
+	if (sx < 0)
+		return dx_Ax;
+
+	long q = ccpml_.idxX(sx, j, k);
+
+	ccpml_.psi_phi_x_Ax_[q] =
+		ccpml_.bx_[i] * ccpml_.psi_phi_x_Ax_[q]
+		+ ccpml_.ax_[i] * dx_Ax;
+
+	return dx_Ax / ccpml_.kx_[i] + ccpml_.psi_phi_x_Ax_[q];
+	}
+
+
+	Double Solver::cpmlDivDyAy(int i, int j, int k, Double dy_Ay)
+	{
+	int sy = ccpml_.ySlot_[j];
+
+	if (sy < 0)
+		return dy_Ay;
+
+	long q = ccpml_.idxY(i, sy, k);
+
+	ccpml_.psi_phi_y_Ay_[q] =
+		ccpml_.by_[j] * ccpml_.psi_phi_y_Ay_[q]
+		+ ccpml_.ay_[j] * dy_Ay;
+
+	return dy_Ay / ccpml_.ky_[j] + ccpml_.psi_phi_y_Ay_[q];
+	}
+
+
+	Double Solver::cpmlDivDzAz(int i, int j, int k, Double dz_Az)
+	{
+	int sz = ccpml_.zSlot_[k];
+
+	if (sz < 0)
+		return dz_Az;
+
+	long q = ccpml_.idxZ(i, j, sz);
+
+	ccpml_.psi_phi_z_Az_[q] =
+		ccpml_.bz_[k] * ccpml_.psi_phi_z_Az_[q]
+		+ ccpml_.az_[k] * dz_Az;
+
+	return dz_Az / ccpml_.kz_[k] + ccpml_.psi_phi_z_Az_[q];
+	}
+
+	Double Solver::cpmlGradDxQ(int i, int j, int k, Double dx_q)
+	{
+	int sx = ccpml_.xSlot_[i];
+
+	if (sx < 0)
+		return dx_q;
+
+	long q = ccpml_.idxX(sx, j, k);
+
+	ccpml_.psi_A_x_q_[q] =
+		ccpml_.bx_[i] * ccpml_.psi_A_x_q_[q]
+		+ ccpml_.ax_[i] * dx_q;
+
+	return dx_q / ccpml_.kx_[i] + ccpml_.psi_A_x_q_[q];
+	}
+
+
+	Double Solver::cpmlGradDyQ(int i, int j, int k, Double dy_q)
+	{
+	int sy = ccpml_.ySlot_[j];
+
+	if (sy < 0)
+		return dy_q;
+
+	long q = ccpml_.idxY(i, sy, k);
+
+	ccpml_.psi_A_y_q_[q] =
+		ccpml_.by_[j] * ccpml_.psi_A_y_q_[q]
+		+ ccpml_.ay_[j] * dy_q;
+
+	return dy_q / ccpml_.ky_[j] + ccpml_.psi_A_y_q_[q];
+	}
+
+
+	Double Solver::cpmlGradDzQ(int i, int j, int k, Double dz_q)
+	{
+	int sz = ccpml_.zSlot_[k];
+
+	if (sz < 0)
+		return dz_q;
+
+	long q = ccpml_.idxZ(i, j, sz);
+
+	ccpml_.psi_A_z_q_[q] =
+		ccpml_.bz_[k] * ccpml_.psi_A_z_q_[q]
+		+ ccpml_.az_[k] * dz_q;
+
+	return dz_q / ccpml_.kz_[k] + ccpml_.psi_A_z_q_[q];
+	}
+
+	void Solver::computeCurlAForCPML()
+	{
+		/*
+		* btmp_ = curl(an_)
+		*
+		* an_ 是当前时刻 A^n。
+		* btmp_ 只是 CPML curl-curl 推进用的临时 B。
+		*/
+
+		for (int k = 1; k < np_ - 1; ++k)
+		{
+			for (int i = 1; i < N0_ - 1; ++i)
+			{
+				for (int j = 1; j < N1_ - 1; ++j)
+				{
+					long m = N1N0_ * k + N1_ * i + j;
+
+					/*
+					* Bx = d_y Az - d_z Ay
+					* By = d_z Ax - d_x Az
+					* Bz = d_x Ay - d_y Ax
+					*
+					* uf_.dx2, dy2, dz2 在原程序中通常表示 2*dx, 2*dy, 2*dz。
+					*/
+
+					btmp_[m][0] =
+						ccpml_.syInvDy_ * ( (*an_)[m + 1][2]      - (*an_)[m][2] )
+					- ccpml_.szInvDz_ * ( (*an_)[m + N1N0_][1] - (*an_)[m][1] );
+
+					btmp_[m][1] =
+						ccpml_.szInvDz_ * ( (*an_)[m + N1N0_][0] - (*an_)[m][0] )
+					- ccpml_.sxInvDx_ * ( (*an_)[m + N1_][2]   - (*an_)[m][2] );
+
+					btmp_[m][2] =
+						ccpml_.sxInvDx_ * ( (*an_)[m + N1_][1] - (*an_)[m][1] )
+					- ccpml_.syInvDy_ * ( (*an_)[m + 1][0]   - (*an_)[m][0] );
+				}
+			}
+		}
+
+		/*
+		* 最外层不参与中心差分，先置零。
+		* 后续如果需要可改成边界单边差分，但第一版先简单处理。
+		*/
+
+		for (int k = 0; k < np_; ++k)
+		{
+			for (int i = 0; i < N0_; ++i)
+			{
+				long m1 = N1N0_ * k + N1_ * i;
+				long m2 = N1N0_ * k + N1_ * i + (N1_ - 1);
+
+				btmp_[m1] = FieldVector<Double>(0.0);
+				btmp_[m2] = FieldVector<Double>(0.0);
+			}
+		}
+
+		for (int k = 0; k < np_; ++k)
+		{
+			for (int j = 0; j < N1_; ++j)
+			{
+				long m1 = N1N0_ * k + j;
+				long m2 = N1N0_ * k + N1_ * (N0_ - 1) + j;
+
+				btmp_[m1] = FieldVector<Double>(0.0);
+				btmp_[m2] = FieldVector<Double>(0.0);
+			}
+		}
+
+		for (int i = 0; i < N0_; ++i)
+		{
+			for (int j = 0; j < N1_; ++j)
+			{
+				long m1 = N1_ * i + j;
+				long m2 = N1N0_ * (np_ - 1) + N1_ * i + j;
+
+				btmp_[m1] = FieldVector<Double>(0.0);
+				btmp_[m2] = FieldVector<Double>(0.0);
+			}
+		}
+	}
+
+	void Solver::exchangeBtmpForCPML()
+	{
+		MPI_Status status;
+
+		int msgtagB1 = 101;
+		int msgtagB3 = 103;
+
+		/*
+		* btmp_ 的每个元素是 FieldVector<Double>，三分量连续存储。
+		* 每个 z-plane 有 N1N0_ 个 FieldVector，也就是 3*N1N0_ 个 Double。
+		*/
+
+		if (rank_ != size_ - 1)
+		{
+			MPI_Send(
+				&btmp_[(np_ - 2) * N1N0_][0],
+				3 * N1N0_,
+				MPI_DOUBLE,
+				rank_ + 1,
+				msgtagB1,
+				MPI_COMM_WORLD
+			);
+		}
+
+		if (rank_ != 0)
+		{
+			MPI_Recv(
+				&btmp_[0][0],
+				3 * N1N0_,
+				MPI_DOUBLE,
+				rank_ - 1,
+				msgtagB1,
+				MPI_COMM_WORLD,
+				&status
+			);
+		}
+
+		if (rank_ != 0)
+		{
+			MPI_Send(
+				&btmp_[N1N0_][0],
+				3 * N1N0_,
+				MPI_DOUBLE,
+				rank_ - 1,
+				msgtagB3,
+				MPI_COMM_WORLD
+			);
+		}
+
+		if (rank_ != size_ - 1)
+		{
+			MPI_Recv(
+				&btmp_[(np_ - 1) * N1N0_][0],
+				3 * N1N0_,
+				MPI_DOUBLE,
+				rank_ + 1,
+				msgtagB3,
+				MPI_COMM_WORLD,
+				&status
+			);
+		}
+	}
+
+	void Solver::computeDivAForCPML()
+	{
+		/*
+		* qtmp_ = div_phi_pml A
+		*
+		* q = D_x^phi A_x + D_y^phi A_y + D_z^phi A_z
+		*
+		* 注意：
+		* 这里会更新 psi_phi_x_Ax_, psi_phi_y_Ay_, psi_phi_z_Az_
+		*/
+
+		for (int k = 1; k < np_ - 1; ++k)
+			{
+			for (int i = 1; i < N0_ - 1; ++i)
+				{
+				for (int j = 1; j < N1_ - 1; ++j)
+					{
+					long m = N1N0_ * k + N1_ * i + j;
+
+					Double dx_Ax =
+						ccpml_.invDx_ * ((*an_)[m][0] - (*an_)[m - N1_][0]);
+
+					Double dy_Ay =
+						ccpml_.invDy_ * ((*an_)[m][1] - (*an_)[m - 1][1]);
+
+					Double dz_Az =
+						ccpml_.invDz_ * ((*an_)[m][2] - (*an_)[m - N1N0_][2]);
+
+					Double Dx_Ax = ccpml_.sx_ * cpmlDivDxAx(i, j, k, dx_Ax);
+					Double Dy_Ay = ccpml_.sy_ * cpmlDivDyAy(i, j, k, dy_Ay);
+					Double Dz_Az = ccpml_.sz_ * cpmlDivDzAz(i, j, k, dz_Az);
+
+					qtmp_[m] = Dx_Ax + Dy_Ay + Dz_Az;
+					}
+				}
+			}
+
+		/* 最外层先置零，避免未定义值参与后续中心差分 */
+		for (int k = 0; k < np_; ++k)
+			{
+			for (int i = 0; i < N0_; ++i)
+				{
+				qtmp_[N1N0_ * k + N1_ * i] = 0.0;
+				qtmp_[N1N0_ * k + N1_ * i + (N1_ - 1)] = 0.0;
+				}
+			}
+
+		for (int k = 0; k < np_; ++k)
+			{
+			for (int j = 0; j < N1_; ++j)
+				{
+				qtmp_[N1N0_ * k + j] = 0.0;
+				qtmp_[N1N0_ * k + N1_ * (N0_ - 1) + j] = 0.0;
+				}
+			}
+
+		for (int i = 0; i < N0_; ++i)
+			{
+			for (int j = 0; j < N1_; ++j)
+				{
+				qtmp_[N1_ * i + j] = 0.0;
+				qtmp_[N1N0_ * (np_ - 1) + N1_ * i + j] = 0.0;
+				}
+			}
+	}
+
+	void Solver::exchangeQtmpForCPML()
+	{
+		MPI_Status status;
+
+		int msgtagQ1 = 201;
+		int msgtagQ3 = 203;
+
+		if (rank_ != size_ - 1)
+			{
+			MPI_Send(
+				&qtmp_[(np_ - 2) * N1N0_],
+				N1N0_,
+				MPI_DOUBLE,
+				rank_ + 1,
+				msgtagQ1,
+				MPI_COMM_WORLD
+			);
+			}
+
+		if (rank_ != 0)
+			{
+			MPI_Recv(
+				&qtmp_[0],
+				N1N0_,
+				MPI_DOUBLE,
+				rank_ - 1,
+				msgtagQ1,
+				MPI_COMM_WORLD,
+				&status
+			);
+			}
+
+		if (rank_ != 0)
+			{
+			MPI_Send(
+				&qtmp_[N1N0_],
+				N1N0_,
+				MPI_DOUBLE,
+				rank_ - 1,
+				msgtagQ3,
+				MPI_COMM_WORLD
+			);
+			}
+
+		if (rank_ != size_ - 1)
+			{
+			MPI_Recv(
+				&qtmp_[(np_ - 1) * N1N0_],
+				N1N0_,
+				MPI_DOUBLE,
+				rank_ + 1,
+				msgtagQ3,
+				MPI_COMM_WORLD,
+				&status
+			);
+			}
+	}
+
+	void Solver::setCurlCurlCPMLCoefficients()
+	{
+		/*
+		* CPML recursive convolution:
+		*
+		*   D f = df / kappa + psi
+		*
+		*   psi_new = b * psi_old + a * df
+		*
+		* 关键：
+		*   sigma 必须带 1/time 量纲。
+		*   这里用 MITHRA 原始 FD 系数反推内部光速 cAbs，
+		*   使 sigmaMax ~ cAbs / dPML。
+		*/
+
+		const Double mOrder = 3.0;
+
+		/*
+		* 第一轮建议用弱一些的参数。
+		* 稳定后再逐步增强：
+		*   sigmaScale: 0.1 -> 0.2 -> 0.5 -> 1.0
+		*   targetR:    1e-2 -> 1e-4 -> 1e-6
+		*   kappaMax:   1.0 -> 2.0 -> 3.0
+		*/
+		const Double targetR    = 1.0e-4;
+		const Double kappaMax   = 1.0;
+		const Double alphaMax   = 0.0;
+		const Double sigmaScale = 0.2;
+
+		const Double dt = uf_.dt;
+
+		/*
+		* 使用 uf_ 里的网格尺寸，保证和场推进使用的 dx/dy/dz 一致。
+		*/
+		const Double dx = uf_.dx;
+		const Double dy = uf_.dy;
+		const Double dz = uf_.dz;
+
+		/*
+		* 从原 FD 系数反推 (c0 dt)^2。
+		* 一般 c2dt2_x 和 c2dt2_y 应该一致。
+		*/
+		const Double c2dt2_x = uf_.a[1] * dx * dx;
+		const Double c2dt2_y = uf_.a[2] * dy * dy;
+		const Double c2dt2   = 0.5 * (c2dt2_x + c2dt2_y);
+
+		const Double cAbs = sqrt(c2dt2) / dt;
+
+		/*
+		* 先重置为无 PML。
+		*/
+		ccpml_.kx_.assign(N0_, 1.0);
+		ccpml_.ax_.assign(N0_, 0.0);
+		ccpml_.bx_.assign(N0_, 0.0);
+
+		ccpml_.ky_.assign(N1_, 1.0);
+		ccpml_.ay_.assign(N1_, 0.0);
+		ccpml_.by_.assign(N1_, 0.0);
+
+		ccpml_.kz_.assign(np_, 1.0);
+		ccpml_.az_.assign(np_, 0.0);
+		ccpml_.bz_.assign(np_, 0.0);
+
+		ccpml_.Cx_ = uf_.a[1] * uf_.dx * uf_.dx;
+		ccpml_.Cy_ = uf_.a[2] * uf_.dy * uf_.dy;
+		ccpml_.Cz_ = uf_.a[3] * uf_.dz * uf_.dz;
+
+		ccpml_.sx_ = sqrt(ccpml_.Cx_);
+		ccpml_.sy_ = sqrt(ccpml_.Cy_);
+		ccpml_.sz_ = sqrt(ccpml_.Cz_);
+
+		ccpml_.invDx_ = 1.0 / uf_.dx;
+		ccpml_.invDy_ = 1.0 / uf_.dy;
+		ccpml_.invDz_ = 1.0 / uf_.dz;
+
+		ccpml_.sxInvDx_ = ccpml_.sx_ * ccpml_.invDx_;
+		ccpml_.syInvDy_ = ccpml_.sy_ * ccpml_.invDy_;
+		ccpml_.szInvDz_ = ccpml_.sz_ * ccpml_.invDz_;
+
+		if (rank_ == 0)
+		{
+		std::cout
+			<< "CurlCurl weighted derivative coeff:"
+			<< " Cx=" << ccpml_.Cx_
+			<< " Cy=" << ccpml_.Cy_
+			<< " Cz=" << ccpml_.Cz_
+			<< " sx=" << ccpml_.sx_
+			<< " sy=" << ccpml_.sy_
+			<< " sz=" << ccpml_.sz_
+			<< std::endl;
+		}
+
+		/*
+		* x direction profile
+		*/
+		if (ccpml_.px_ > 0)
+			{
+			const Double dPml = ccpml_.px_ * dx;
+
+			const Double sigmaMax =
+				cAbs * ( - (mOrder + 1.0) * log(targetR) / (2.0 * dPml) );
+
+			for (int i = 1; i < N0_ - 1; ++i)
+				{
+				if (ccpml_.xSlot_[i] < 0) continue;
+
+				Double depth = 0.0;
+
+				if (i <= ccpml_.px_)
+					depth = (Double)(ccpml_.px_ - i + 1) / (Double)ccpml_.px_;
+				else
+					depth = (Double)(i - (N0_ - 1 - ccpml_.px_) + 1) / (Double)ccpml_.px_;
+
+				if (depth < 0.0) depth = 0.0;
+				if (depth > 1.0) depth = 1.0;
+
+				const Double depthM = pow(depth, mOrder);
+
+				const Double sigma = sigmaScale * sigmaMax * depthM;
+				const Double kappa = 1.0 + (kappaMax - 1.0) * depthM;
+				const Double alpha = alphaMax * (1.0 - depth);
+
+				const Double b = exp(-(sigma / kappa + alpha) * dt);
+
+				Double a = 0.0;
+				const Double denom = kappa * (sigma + kappa * alpha);
+
+				if (fabs(denom) > 1.0e-300)
+					a = sigma / denom * (b - 1.0);
+
+				ccpml_.kx_[i] = kappa;
+				ccpml_.ax_[i] = a;
+				ccpml_.bx_[i] = b;
+				}
+			}
+
+		/*
+		* y direction profile
+		*/
+		if (ccpml_.py_ > 0)
+			{
+			const Double dPml = ccpml_.py_ * dy;
+
+			const Double sigmaMax =
+				cAbs * ( - (mOrder + 1.0) * log(targetR) / (2.0 * dPml) );
+
+			for (int j = 1; j < N1_ - 1; ++j)
+				{
+				if (ccpml_.ySlot_[j] < 0) continue;
+
+				Double depth = 0.0;
+
+				if (j <= ccpml_.py_)
+					depth = (Double)(ccpml_.py_ - j + 1) / (Double)ccpml_.py_;
+				else
+					depth = (Double)(j - (N1_ - 1 - ccpml_.py_) + 1) / (Double)ccpml_.py_;
+
+				if (depth < 0.0) depth = 0.0;
+				if (depth > 1.0) depth = 1.0;
+
+				const Double depthM = pow(depth, mOrder);
+
+				const Double sigma = sigmaScale * sigmaMax * depthM;
+				const Double kappa = 1.0 + (kappaMax - 1.0) * depthM;
+				const Double alpha = alphaMax * (1.0 - depth);
+
+				const Double b = exp(-(sigma / kappa + alpha) * dt);
+
+				Double a = 0.0;
+				const Double denom = kappa * (sigma + kappa * alpha);
+
+				if (fabs(denom) > 1.0e-300)
+					a = sigma / denom * (b - 1.0);
+
+				ccpml_.ky_[j] = kappa;
+				ccpml_.ay_[j] = a;
+				ccpml_.by_[j] = b;
+				}
+			}
+
+		/*
+		* z direction profile
+		*
+		* 注意：
+		*   z 方向必须使用全局 z index。
+		*   rank 中间的 MPI 子域边界不是物理 PML。
+		*/
+		if (ccpml_.pz_ > 0)
+			{
+			const Double dPml = ccpml_.pz_ * dz;
+
+			const Double sigmaMax =
+				cAbs * ( - (mOrder + 1.0) * log(targetR) / (2.0 * dPml) );
+
+			for (int k = 1; k < np_ - 1; ++k)
+				{
+				if (ccpml_.zSlot_[k] < 0) continue;
+
+				const int kg = k0_ + k;
+
+				Double depth = 0.0;
+
+				if (rank_ == 0 && kg <= ccpml_.pz_)
+					depth = (Double)(ccpml_.pz_ - kg + 1) / (Double)ccpml_.pz_;
+				else if (rank_ == size_ - 1 && kg >= N2_ - 1 - ccpml_.pz_)
+					depth = (Double)(kg - (N2_ - 1 - ccpml_.pz_) + 1) / (Double)ccpml_.pz_;
+				else
+					continue;
+
+				if (depth < 0.0) depth = 0.0;
+				if (depth > 1.0) depth = 1.0;
+
+				const Double depthM = pow(depth, mOrder);
+
+				const Double sigma = sigmaScale * sigmaMax * depthM;
+				const Double kappa = 1.0 + (kappaMax - 1.0) * depthM;
+				const Double alpha = alphaMax * (1.0 - depth);
+
+				const Double b = exp(-(sigma / kappa + alpha) * dt);
+
+				Double a = 0.0;
+				const Double denom = kappa * (sigma + kappa * alpha);
+
+				if (fabs(denom) > 1.0e-300)
+					a = sigma / denom * (b - 1.0);
+
+				ccpml_.kz_[k] = kappa;
+				ccpml_.az_[k] = a;
+				ccpml_.bz_[k] = b;
+				}
+			}
+
+		/*
+		* 全局诊断。
+		*/
+		Double localMinB = 1.0;
+		Double localMaxA = 0.0;
+		Double localMaxK = 1.0;
+
+		for (int i = 0; i < N0_; ++i)
+			{
+			if (ccpml_.xSlot_[i] >= 0)
+				{
+				if (ccpml_.bx_[i] < localMinB) localMinB = ccpml_.bx_[i];
+				if (fabs(ccpml_.ax_[i]) > localMaxA) localMaxA = fabs(ccpml_.ax_[i]);
+				if (ccpml_.kx_[i] > localMaxK) localMaxK = ccpml_.kx_[i];
+				}
+			}
+
+		for (int j = 0; j < N1_; ++j)
+			{
+			if (ccpml_.ySlot_[j] >= 0)
+				{
+				if (ccpml_.by_[j] < localMinB) localMinB = ccpml_.by_[j];
+				if (fabs(ccpml_.ay_[j]) > localMaxA) localMaxA = fabs(ccpml_.ay_[j]);
+				if (ccpml_.ky_[j] > localMaxK) localMaxK = ccpml_.ky_[j];
+				}
+			}
+
+		for (int k = 0; k < np_; ++k)
+			{
+			if (ccpml_.zSlot_[k] >= 0)
+				{
+				if (ccpml_.bz_[k] < localMinB) localMinB = ccpml_.bz_[k];
+				if (fabs(ccpml_.az_[k]) > localMaxA) localMaxA = fabs(ccpml_.az_[k]);
+				if (ccpml_.kz_[k] > localMaxK) localMaxK = ccpml_.kz_[k];
+				}
+			}
+
+		Double globalMinB = 1.0;
+		Double globalMaxA = 0.0;
+		Double globalMaxK = 1.0;
+
+		MPI_Allreduce(&localMinB, &globalMinB, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+		MPI_Allreduce(&localMaxA, &globalMaxA, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+		MPI_Allreduce(&localMaxK, &globalMaxK, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+		if (rank_ == 0)
+			{
+			std::cout
+				<< "CurlCurlCPML coefficients set:"
+				<< " m=" << mOrder
+				<< " targetR=" << targetR
+				<< " kappaMax=" << kappaMax
+				<< " alphaMax=" << alphaMax
+				<< " sigmaScale=" << sigmaScale
+				<< " cAbs=" << cAbs
+				<< " dt=" << dt
+				<< " c2dt2_x=" << c2dt2_x
+				<< " c2dt2_y=" << c2dt2_y
+				<< std::endl;
+
+			std::cout
+				<< "CPML coeff diag:"
+				<< " globalMinB=" << globalMinB
+				<< " globalMax|a|=" << globalMaxA
+				<< " globalMaxK=" << globalMaxK
+				<< std::endl;
+			}
+
+		
 	}
 
 }

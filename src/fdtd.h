@@ -63,6 +63,21 @@ namespace MITHRA
 
     /*将字段的总概要文件写入给定的文件名中。*/
     void fieldProfile ();
+
+    void advanceInteriorCurlCurlCPMLFD();
+
+    void diagnoseCurlCurlCPML();
+
+    void diagnoseCurrentForCurlCurlCPML();
+
+    void diagnoseCompareFDvsCurlCurlCPML();
+
+    void setOuterAForCurlCurlCPML();
+
+    void diagnoseCurrentZMinZMaxForCPML();
+
+    void diagnoseZBoundaryAForCPML();
+    void diagnoseZBoundaryEBForCPML();
   };
 }
 #endif

@@ -339,32 +339,44 @@ namespace MITHRA
 	    }
       }
     else if ( mesh_.solver_ == FD )
-      {
-	for (unsigned i = 1; i < uf_.N0m1; i++)
-	  for (unsigned j = 1; j < uf_.N1m1; j++)
-	    for (unsigned k = 1; k < uf_.npm1; k++)
-	    {
-			m = N1N0_ * k + N1_ * i + j;
-			l = 3 * m;
+	{
+		if (ccpml_.enabled_)
+		{
+			computeCurlAForCPML();
+			exchangeBtmpForCPML();
 
-			const bool useCPML = cpmlXY_.enabled && !inPhysicalXY(i, j);
+			computeDivAForCPML();
+			exchangeQtmpForCPML();
 
-			if (useCPML)
-			{
+			// diagnoseCurrentForCurlCurlCPML();
 
-			}
-			else
-			{
-				uf_.af.advanceMagneticPotentialFD(
-					uf_.anp1+l,    uf_.anm1+l,    uf_.an+l,
-					uf_.an  +l+L0, uf_.an  +l+L2, uf_.an+l+L3,
-					uf_.an  +l-L0, uf_.an  +l-L3, uf_.an+l-L2,
-					uf_.an  +l+3 , uf_.an  +l+L4, uf_.an+l+L5,
-					uf_.an  +l-3 , uf_.an  +l-L5, uf_.an+l-L4,
-					uf_.an  +l+L1, uf_.an  +l-L1, uf_.jn+l);
-			}
-	    }
-      }
+			// diagnoseCurlCurlCPML();
+
+			diagnoseCompareFDvsCurlCurlCPML();
+
+			// diagnoseCurrentZMinZMaxForCPML();
+
+			advanceInteriorCurlCurlCPMLFD();
+		}
+		else
+		{
+			for (unsigned i = 1; i < uf_.N0m1; i++)
+			for (unsigned j = 1; j < uf_.N1m1; j++)
+				for (unsigned k = 1; k < uf_.npm1; k++)
+				{
+					m = N1N0_ * k + N1_ * i + j;
+					l = 3 * m;
+
+					uf_.af.advanceMagneticPotentialFD(
+						uf_.anp1+l,    uf_.anm1+l,    uf_.an+l,
+						uf_.an  +l+L0, uf_.an  +l+L2, uf_.an+l+L3,
+						uf_.an  +l-L0, uf_.an  +l-L3, uf_.an+l-L2,
+						uf_.an  +l+3 , uf_.an  +l+L4, uf_.an+l+L5,
+						uf_.an  +l-3 , uf_.an  +l-L5, uf_.an+l-L4,
+						uf_.an  +l+L1, uf_.an  +l-L1, uf_.jn+l);
+				}
+		}
+	}
 
     /*如果种子的振幅超过一定的极限，则将种子注入计算域
 	*通过TF/SF边界。*/
@@ -436,357 +448,365 @@ namespace MITHRA
 	  }
       }
 
-    /*在x = xmin边界上循环网格中的点，并使用第一个更新字段
-	*阶吸收边界条件。*/
-    uf_.af.ufB_ = &uf_.bB[0];
-    for (unsigned j = 1; j < uf_.N1m1; j++)
-      for (unsigned k = 1; k < uf_.npm1; k++)
+	const bool useCurlCurlCPMLFD = (mesh_.solver_ == FD && ccpml_.enabled_);
+	if (useCurlCurlCPMLFD)
 	{
-	  l = 3 * ( N1N0_ * k + j );
-
-	  uf_.af.advanceBoundaryF(
-	      uf_.anp1+l,	uf_.anm1+l,	uf_.an  +l,
-	      uf_.anm1+l+L0,	uf_.an  +l+L0, 	uf_.anp1+l+L0,
-	      uf_.an  +l+L6,  	uf_.an  +l-L7,	uf_.an  +l+L2,
-	      uf_.an  +l+L3, 	uf_.an  +l+3,   uf_.an  +l-3,
-	      uf_.an  +l+L1,  	uf_.an  +l-L1);
+		setOuterAForCurlCurlCPML();
 	}
-
-    /*在x = xmax边界上循环网格中的点，并使用第一个更新字段
-	*阶吸收边界条件。*/
-    for (unsigned j = 1; j < uf_.N1m1; j++)
-      for (unsigned k = 1; k < uf_.npm1; k++)
+	else
 	{
-	  l = 3 * ( N1N0_ * k + N1N0_ - N1_ + j );
+		/*在x = xmin边界上循环网格中的点，并使用第一个更新字段
+		*阶吸收边界条件。*/
+		uf_.af.ufB_ = &uf_.bB[0];
+		for (unsigned j = 1; j < uf_.N1m1; j++)
+		for (unsigned k = 1; k < uf_.npm1; k++)
+		{
+		l = 3 * ( N1N0_ * k + j );
 
-	  uf_.af.advanceBoundaryF(
-	      uf_.anp1+l,	uf_.anm1+l,	uf_.an  +l,
-	      uf_.anm1+l-L0,	uf_.an  +l-L0,	uf_.anp1+l-L0,
-	      uf_.an  +l+L7,	uf_.an  +l-L6,	uf_.an  +l-L3,
-	      uf_.an  +l-L2, 	uf_.an  +l+3,	uf_.an  +l-3,
-	      uf_.an  +l+L1,  	uf_.an  +l-L1 );
+		uf_.af.advanceBoundaryF(
+			uf_.anp1+l,	uf_.anm1+l,	uf_.an  +l,
+			uf_.anm1+l+L0,	uf_.an  +l+L0, 	uf_.anp1+l+L0,
+			uf_.an  +l+L6,  	uf_.an  +l-L7,	uf_.an  +l+L2,
+			uf_.an  +l+L3, 	uf_.an  +l+3,   uf_.an  +l-3,
+			uf_.an  +l+L1,  	uf_.an  +l-L1);
+		}
+
+		/*在x = xmax边界上循环网格中的点，并使用第一个更新字段
+		*阶吸收边界条件。*/
+		for (unsigned j = 1; j < uf_.N1m1; j++)
+		for (unsigned k = 1; k < uf_.npm1; k++)
+		{
+		l = 3 * ( N1N0_ * k + N1N0_ - N1_ + j );
+
+		uf_.af.advanceBoundaryF(
+			uf_.anp1+l,	uf_.anm1+l,	uf_.an  +l,
+			uf_.anm1+l-L0,	uf_.an  +l-L0,	uf_.anp1+l-L0,
+			uf_.an  +l+L7,	uf_.an  +l-L6,	uf_.an  +l-L3,
+			uf_.an  +l-L2, 	uf_.an  +l+3,	uf_.an  +l-3,
+			uf_.an  +l+L1,  	uf_.an  +l-L1 );
+		}
+
+		/*循环网格中y = ymin边界上的点，并使用第一个更新字段
+		*阶吸收边界条件。*/
+		uf_.af.ufB_ = &uf_.cB[0];
+		for (unsigned i = 1; i < uf_.N0m1; i++)
+		for (unsigned k = 1; k < uf_.npm1; k++)
+		{
+		l = 3 * ( N1N0_ * k + N1_* i );
+
+		uf_.af.advanceBoundaryF(
+			uf_.anp1+l,	uf_.anm1+l,	uf_.an  +l,
+			uf_.anm1+l+3,   	uf_.an  +l+3,   uf_.anp1+l+3,
+			uf_.an  +l+L6,  	uf_.an  +l+L7, 	uf_.an  +l+L4,
+			uf_.an  +l+L5, 	uf_.an  +l+L0,  uf_.an  +l-L0,
+			uf_.an  +l+L1,  	uf_.an  +l-L1);
+		}
+
+		/*循环网格中y = ymax边界上的点，并使用第一个更新字段
+		*阶吸收边界条件。*/
+		for (unsigned i = 1; i < uf_.N0m1; i++)
+		for (unsigned k = 1; k < uf_.npm1; k++)
+		{
+		l = 3 * ( N1N0_ * k + N1_* i + N1_ - 1 );
+
+		uf_.af.advanceBoundaryF(
+			uf_.anp1+l,	uf_.anm1+l,	uf_.an  +l,
+			uf_.anm1+l-3, 	uf_.an  +l-3,  	uf_.anp1+l-3,
+			uf_.an  +l-L7,  	uf_.an  +l-L6, 	uf_.an  +l-L5,
+			uf_.an  +l-L4,	uf_.an  +l+L0,  uf_.an  +l-L0,
+			uf_.an  +l+L1,  	uf_.an  +l-L1);
+		}
+
+		/*在z = zmin边界上循环网格中的点，并使用第一个更新字段
+		*阶吸收边界条件。*/
+		uf_.af.ufB_ = &uf_.dB[0];
+		if ( rank_ == 0 )
+		{
+		for (unsigned i = 1; i < uf_.N0m1; i++)
+		for (unsigned j = 1; j < uf_.N1m1; j++)
+			{
+			l = 3 * ( N1_ * i + j );
+
+			uf_.af.advanceBoundaryF(
+			uf_.anp1+l,		uf_.anm1+l,		uf_.an  +l,
+			uf_.anm1+l+L1,     	uf_.an  +l+L1,   	uf_.anp1+l+L1,
+			uf_.an  +l+L2,   	uf_.an  +l-L3, 		uf_.an  +l+L4,
+			uf_.an  +l-L5, 	uf_.an  +l+L0,     	uf_.an  +l-L0,
+			uf_.an  +l+3,     	uf_.an  +l-3);
+			}
+		}
+
+		/*在z = zmax边界上循环网格中的点，并使用第一个更新字段
+		*阶吸收边界条件。*/
+		if (rank_ == size_ - 1)
+		{
+		for (unsigned i = 1; i < uf_.N0m1; i++)
+		for (unsigned j = 1; j < uf_.N1m1; j++)
+			{
+			l = 3 * ( N1N0_ * uf_.npm1 + N1_ * i + j );
+
+			uf_.af.advanceBoundaryF(
+			uf_.anp1+l,		uf_.anm1+l,		uf_.an  +l,
+			uf_.anm1+l-L1,     	uf_.an  +l-L1,   	uf_.anp1+l-L1,
+			uf_.an  +l+L3,   	uf_.an  +l-L2, 		uf_.an  +l+L5,
+			uf_.an  +l-L4, 	uf_.an  +l+L0,     	uf_.an  +l-L0,
+			uf_.an  +l+3,    	uf_.an  +l-3);
+			}
+		}
+
+		if ( mesh_.truncationOrder_ == 2 )
+		{
+
+		/*循环网格中x = (xmin,xmax)和y = (ymin,ymax)边界上的边缘点
+		*并使用一阶吸收边界条件更新字段。理解
+		*下面几行代码，最好在旁边列出Li的值。*/
+		uf_.af.ufB_ = &uf_.eE[0];
+		for (unsigned k = 1; k < uf_.npm1; k++)
+		{
+			l = 3 * ( N1N0_ * k );
+
+			uf_.af.advanceEdgeF(
+			uf_.anp1+l,		uf_.an+l,	uf_.anm1+l,
+			uf_.anp1+l+L0,		uf_.an+l+L0,	uf_.anm1+l+L0,
+			uf_.anp1+l+3,		uf_.an+l+3,	uf_.anm1+l+3,
+			uf_.anp1+l+L6,		uf_.an+l+L6,	uf_.anm1+l+L6,
+			uf_.an  +l-L1,		uf_.an+l+L3,	uf_.an  +l+L5,	uf_.an+l+L9,
+			uf_.an  +l+L1,		uf_.an+l+L2,	uf_.an  +l+L4,	uf_.an+l+L8);
+
+			l = 3 * ( N1N0_ * k + N1_ * uf_.N0m1 );
+
+			uf_.af.advanceEdgeF(
+			uf_.anp1+l,		uf_.an+l,	uf_.anm1+l,
+			uf_.anp1+l-L0,		uf_.an+l-L0,	uf_.anm1+l-L0,
+			uf_.anp1+l+3,		uf_.an+l+3,	uf_.anm1+l+3,
+			uf_.anp1+l+L7,		uf_.an+l+L7,	uf_.anm1+l+L7,
+			uf_.an  +l-L1,		uf_.an+l-L2,	uf_.an  +l+L5,	uf_.an+l+L11,
+			uf_.an  +l+L1,		uf_.an+l-L3,	uf_.an  +l+L4,	uf_.an+l+L10);
+
+			l = 3 * ( N1N0_ * k + uf_.N1m1 );
+
+			uf_.af.advanceEdgeF(
+			uf_.anp1+l,		uf_.an+l,	uf_.anm1+l,
+			uf_.anp1+l+L0,		uf_.an+l+L0,	uf_.anm1+l+L0,
+			uf_.anp1+l-3,		uf_.an+l-3,	uf_.anm1+l-3,
+			uf_.anp1+l-L7,		uf_.an+l-L7,	uf_.anm1+l-L7,
+			uf_.an  +l-L1,		uf_.an+l+L3,	uf_.an  +l-L4,	uf_.an+l-L10,
+			uf_.an  +l+L1,		uf_.an+l+L2,	uf_.an  +l-L5,	uf_.an+l-L11);
+
+			l = 3 * ( N1N0_ * k + N1_ * uf_.N0m1 + uf_.N1m1 );
+
+			uf_.af.advanceEdgeF(
+			uf_.anp1+l,		uf_.an+l,	uf_.anm1+l,
+			uf_.anp1+l-L0,		uf_.an+l-L0,	uf_.anm1+l-L0,
+			uf_.anp1+l-3,		uf_.an+l-3,	uf_.anm1+l-3,
+			uf_.anp1+l-L6,		uf_.an+l-L6,	uf_.anm1+l-L6,
+			uf_.an  +l-L1,		uf_.an+l-L2,	uf_.an  +l-L4,	uf_.an+l-L8,
+			uf_.an  +l+L1,		uf_.an+l-L3,	uf_.an  +l-L5,	uf_.an+l-L9);
+		}
+
+		/*循环网格中z = (zmin,zmax)和y = (ymin,ymax)边界上的边缘点和
+		*使用一阶吸收边界条件更新场。要了解
+		*在代码行之后，最好在旁边列出Li的值。*/
+		uf_.af.ufB_ = &uf_.fE[0];
+		for (unsigned i = 1; i < uf_.N0m1; i++)
+		{
+			if ( rank_ == 0 )
+			{
+			l = 3 * ( N1_ * i );
+
+			uf_.af.advanceEdgeF(
+				uf_.anp1+l,		uf_.an+l,	uf_.anm1+l,
+				uf_.anp1+l+3,	uf_.an+l+3,	uf_.anm1+l+3,
+				uf_.anp1+l+L1,	uf_.an+l+L1,	uf_.anm1+l+L1,
+				uf_.anp1+l+L4,	uf_.an+l+L4,	uf_.anm1+l+L4,
+				uf_.an  +l-L0,	uf_.an+l+L7,	uf_.an  +l-L3,	uf_.an+l+L10,
+				uf_.an  +l+L0,	uf_.an+l+L6,	uf_.an  +l+L2,	uf_.an+l+L8);
+
+			l = 3 * ( N1_ * i + uf_.N1m1 );
+
+			uf_.af.advanceEdgeF(
+				uf_.anp1+l,		uf_.an+l,	uf_.anm1+l,
+				uf_.anp1+l-3,	uf_.an+l-3,	uf_.anm1+l-3,
+				uf_.anp1+l+L1,	uf_.an+l+L1,	uf_.anm1+l+L1,
+				uf_.anp1+l-L5,	uf_.an+l-L5,	uf_.anm1+l-L5,
+				uf_.an  +l-L0,	uf_.an+l-L6,	uf_.an  +l-L3,	uf_.an+l-L9,
+				uf_.an  +l+L0,	uf_.an+l-L7,	uf_.an  +l+L2,	uf_.an+l-L11);
+			}
+
+			if ( rank_ == size_ - 1 )
+			{
+			l = 3 * ( N1_ * i + N1N0_ * uf_.npm1 );
+
+			uf_.af.advanceEdgeF(
+				uf_.anp1+l,		uf_.an+l,	uf_.anm1+l,
+				uf_.anp1+l+3,	uf_.an+l+3,	uf_.anm1+l+3,
+				uf_.anp1+l-L1,	uf_.an+l-L1,	uf_.anm1+l-L1,
+				uf_.anp1+l+L5,	uf_.an+l+L5,	uf_.anm1+l+L5,
+				uf_.an  +l-L0,	uf_.an+l+L7,	uf_.an  +l-L2,	uf_.an+l+L11,
+				uf_.an  +l+L0,	uf_.an+l+L6,	uf_.an  +l+L3,	uf_.an+l+L9);
+
+			l = 3 * ( N1_ * i + N1N0_ * uf_.npm1 + uf_.N1m1 );
+
+			uf_.af.advanceEdgeF(
+				uf_.anp1+l,		uf_.an+l,	uf_.anm1+l,
+				uf_.anp1+l-3,	uf_.an+l-3,	uf_.anm1+l-3,
+				uf_.anp1+l-L1,	uf_.an+l-L1,	uf_.anm1+l-L1,
+				uf_.anp1+l-L4,	uf_.an+l-L4,	uf_.anm1+l-L4,
+				uf_.an  +l-L0,	uf_.an+l-L6,	uf_.an  +l-L2,	uf_.an+l-L8,
+				uf_.an  +l+L0,	uf_.an+l-L7,	uf_.an  +l+L3,	uf_.an+l-L10);
+			}
+		}
+
+		/*循环网格中z = (zmin,zmax)和x = (xmin,xmax)边界上的边缘点和
+		*使用一阶吸收边界条件更新场。要了解
+		*在代码行之后，最好在旁边列出Li的值。*/
+		uf_.af.ufB_ = &uf_.gE[0];
+		for (unsigned j = 1; j < uf_.N1m1; j++)
+		{
+			if ( rank_ == 0 )
+			{
+			l = 3 * j;
+
+			uf_.af.advanceEdgeF(
+				uf_.anp1+l,		uf_.an+l,	uf_.anm1+l,
+				uf_.anp1+l+L1,	uf_.an+l+L1,	uf_.anm1+l+L1,
+				uf_.anp1+l+L0,	uf_.an+l+L0,	uf_.anm1+l+L0,
+				uf_.anp1+l+L2,	uf_.an+l+L2,	uf_.anm1+l+L2,
+				uf_.an+l-3,		uf_.an+l-L5,	uf_.an+l-L7,	uf_.an+l-L11,
+				uf_.an+l+3,		uf_.an+l+L4,	uf_.an+l+L6,	uf_.an+l+L8);
+
+			l = 3 * ( N1N0_ - N1_ + j );
+
+			uf_.af.advanceEdgeF(
+				uf_.anp1+l,		uf_.an+l,	uf_.anm1+l,
+				uf_.anp1+l+L1,	uf_.an+l+L1,	uf_.anm1+l+L1,
+				uf_.anp1+l-L0,	uf_.an+l-L0,	uf_.anm1+l-L0,
+				uf_.anp1+l-L3,	uf_.an+l-L3,	uf_.anm1+l-L3,
+				uf_.an+l-3,		uf_.an+l-L5,	uf_.an+l-L6,	uf_.an+l-L9,
+				uf_.an+l+3,		uf_.an+l+L4,	uf_.an+l+L7,	uf_.an+l+L10);
+			}
+
+			if ( rank_ == size_ - 1 )
+			{
+			l = 3 * ( N1N0_ * uf_.npm1 + j );
+
+			uf_.af.advanceEdgeF(
+				uf_.anp1+l,		uf_.an+l,	uf_.anm1+l,
+				uf_.anp1+l-L1,	uf_.an+l-L1,	uf_.anm1+l-L1,
+				uf_.anp1+l+L0,	uf_.an+l+L0,	uf_.anm1+l+L0,
+				uf_.anp1+l+L3,	uf_.an+l+L3,	uf_.anm1+l+L3,
+				uf_.an+l-3,		uf_.an+l-L4,	uf_.an+l-L7,	uf_.an+l-L10,
+				uf_.an+l+3,		uf_.an+l+L5,	uf_.an+l+L6,	uf_.an+l+L9);
+
+			l = 3 * ( N1N0_ * uf_.npm1 + N1_ * uf_.N0m1 + j );
+
+			uf_.af.advanceEdgeF(
+				uf_.anp1+l,		uf_.an+l,	uf_.anm1+l,
+				uf_.anp1+l-L1,	uf_.an+l-L1,	uf_.anm1+l-L1,
+				uf_.anp1+l-L0,	uf_.an+l-L0,	uf_.anm1+l-L0,
+				uf_.anp1+l-L2,	uf_.an+l-L2,	uf_.anm1+l-L2,
+				uf_.an+l-3,		uf_.an+l-L4,	uf_.an+l-L6,	uf_.an+l-L8,
+				uf_.an+l+3,		uf_.an+l+L5,	uf_.an+l+L7,	uf_.an+l+L11);
+			}
+		}
+
+		/*现在更新计算域中八个角的字段。*/
+		uf_.af.ufB_ = &uf_.hC[0];
+		if ( rank_ == 0 )
+		{
+			m = 0;
+			uf_.af.advanceCornerF(
+			uf_.anp1+3*m,			uf_.an+3*m,			uf_.anm1+3*m,
+			uf_.anp1+3*(m+N1_),		uf_.an+3*(m+N1_),		uf_.anm1+3*(m+N1_),
+			uf_.anp1+3*(m+1),		uf_.an+3*(m+1),			uf_.anm1+3*(m+1),
+			uf_.anp1+3*(m+N1N0_),		uf_.an+3*(m+N1N0_),		uf_.anm1+3*(m+N1N0_),
+			uf_.anp1+3*(m+N1_+1),		uf_.an+3*(m+N1_+1),		uf_.anm1+3*(m+N1_+1),
+			uf_.anp1+3*(m+N1N0_+N1_),	uf_.an+3*(m+N1N0_+N1_),		uf_.anm1+3*(m+N1N0_+N1_),
+			uf_.anp1+3*(m+N1N0_+1),		uf_.an+3*(m+N1N0_+1),		uf_.anm1+3*(m+N1N0_+1),
+			uf_.anp1+3*(m+N1N0_+N1_+1),	uf_.an+3*(m+N1N0_+N1_+1),	uf_.anm1+3*(m+N1N0_+N1_+1));
+
+			m = N1N0_ - N1_;
+			uf_.af.advanceCornerF(
+			uf_.anp1+3*m,			uf_.an+3*m,			uf_.anm1+3*m,
+			uf_.anp1+3*(m-N1_),		uf_.an+3*(m-N1_),		uf_.anm1+3*(m-N1_),
+			uf_.anp1+3*(m+1),		uf_.an+3*(m+1),			uf_.anm1+3*(m+1),
+			uf_.anp1+3*(m+N1N0_),		uf_.an+3*(m+N1N0_),		uf_.anm1+3*(m+N1N0_),
+			uf_.anp1+3*(m-N1_+1),		uf_.an+3*(m-N1_+1),		uf_.anm1+3*(m-N1_+1),
+			uf_.anp1+3*(m+N1N0_-N1_),	uf_.an+3*(m+N1N0_-N1_),		uf_.anm1+3*(m+N1N0_-N1_),
+			uf_.anp1+3*(m+N1N0_+1),		uf_.an+3*(m+N1N0_+1),		uf_.anm1+3*(m+N1N0_+1),
+			uf_.anp1+3*(m+N1N0_-N1_+1),	uf_.an+3*(m+N1N0_-N1_+1),	uf_.anm1+3*(m+N1N0_-N1_+1));
+
+			m = uf_.N1m1;
+			uf_.af.advanceCornerF(
+			uf_.anp1+3*m,			uf_.an+3*m,			uf_.anm1+3*m,
+			uf_.anp1+3*(m+N1_),		uf_.an+3*(m+N1_),		uf_.anm1+3*(m+N1_),
+			uf_.anp1+3*(m-1),		uf_.an+3*(m-1),			uf_.anm1+3*(m-1),
+			uf_.anp1+3*(m+N1N0_),		uf_.an+3*(m+N1N0_),		uf_.anm1+3*(m+N1N0_),
+			uf_.anp1+3*(m+N1_-1),		uf_.an+3*(m+N1_-1),		uf_.anm1+3*(m+N1_-1),
+			uf_.anp1+3*(m+N1N0_+N1_),	uf_.an+3*(m+N1N0_+N1_),		uf_.anm1+3*(m+N1N0_+N1_),
+			uf_.anp1+3*(m+N1N0_-1),		uf_.an+3*(m+N1N0_-1),		uf_.anm1+3*(m+N1N0_-1),
+			uf_.anp1+3*(m+N1N0_+N1_-1),	uf_.an+3*(m+N1N0_+N1_-1),	uf_.anm1+3*(m+N1N0_+N1_-1));
+
+			m = N1N0_ - N1_ + uf_.N1m1;
+			uf_.af.advanceCornerF(
+			uf_.anp1+3*m,			uf_.an+3*m,			uf_.anm1+3*m,
+			uf_.anp1+3*(m-N1_),		uf_.an+3*(m-N1_),		uf_.anm1+3*(m-N1_),
+			uf_.anp1+3*(m-1),		uf_.an+3*(m-1),			uf_.anm1+3*(m-1),
+			uf_.anp1+3*(m+N1N0_),		uf_.an+3*(m+N1N0_),		uf_.anm1+3*(m+N1N0_),
+			uf_.anp1+3*(m-N1_-1),		uf_.an+3*(m-N1_-1),		uf_.anm1+3*(m-N1_-1),
+			uf_.anp1+3*(m+N1N0_-N1_),	uf_.an+3*(m+N1N0_-N1_),		uf_.anm1+3*(m+N1N0_-N1_),
+			uf_.anp1+3*(m+N1N0_-1),		uf_.an+3*(m+N1N0_-1),		uf_.anm1+3*(m+N1N0_-1),
+			uf_.anp1+3*(m+N1N0_-N1_-1),	uf_.an+3*(m+N1N0_-N1_-1),	uf_.anm1+3*(m+N1N0_-N1_-1));
+		}
+
+		if ( rank_ == size_ - 1 )
+		{
+			m = N1N0_ * uf_.npm1;
+			uf_.af.advanceCornerF(
+			uf_.anp1+3*m,			uf_.an+3*m,			uf_.anm1+3*m,
+			uf_.anp1+3*(m+N1_),		uf_.an+3*(m+N1_),		uf_.anm1+3*(m+N1_),
+			uf_.anp1+3*(m+1),		uf_.an+3*(m+1),			uf_.anm1+3*(m+1),
+			uf_.anp1+3*(m-N1N0_),		uf_.an+3*(m-N1N0_),		uf_.anm1+3*(m-N1N0_),
+			uf_.anp1+3*(m+N1_+1),		uf_.an+3*(m+N1_+1),		uf_.anm1+3*(m+N1_+1),
+			uf_.anp1+3*(m-N1N0_+N1_),	uf_.an+3*(m-N1N0_+N1_),		uf_.anm1+3*(m-N1N0_+N1_),
+			uf_.anp1+3*(m-N1N0_+1),		uf_.an+3*(m-N1N0_+1),		uf_.anm1+3*(m-N1N0_+1),
+			uf_.anp1+3*(m-N1N0_+N1_+1),	uf_.an+3*(m-N1N0_+N1_+1),	uf_.anm1+3*(m-N1N0_+N1_+1));
+
+			m = N1N0_ * uf_.npm1 + N1N0_ - N1_;
+			uf_.af.advanceCornerF(
+			uf_.anp1+3*m,			uf_.an+3*m,			uf_.anm1+3*m,
+			uf_.anp1+3*(m-N1_),		uf_.an+3*(m-N1_),		uf_.anm1+3*(m-N1_),
+			uf_.anp1+3*(m+1),		uf_.an+3*(m+1),			uf_.anm1+3*(m+1),
+			uf_.anp1+3*(m-N1N0_),		uf_.an+3*(m-N1N0_),		uf_.anm1+3*(m-N1N0_),
+			uf_.anp1+3*(m-N1_+1),		uf_.an+3*(m-N1_+1),		uf_.anm1+3*(m-N1_+1),
+			uf_.anp1+3*(m-N1N0_-N1_),	uf_.an+3*(m-N1N0_-N1_),		uf_.anm1+3*(m-N1N0_-N1_),
+			uf_.anp1+3*(m-N1N0_+1),		uf_.an+3*(m-N1N0_+1),		uf_.anm1+3*(m-N1N0_+1),
+			uf_.anp1+3*(m-N1N0_-N1_+1),	uf_.an+3*(m-N1N0_-N1_+1),	uf_.anm1+3*(m-N1N0_-N1_+1));
+
+			m = N1N0_ * uf_.npm1 + uf_.N1m1;
+			uf_.af.advanceCornerF(
+			uf_.anp1+3*m,			uf_.an+3*m,			uf_.anm1+3*m,
+			uf_.anp1+3*(m+N1_),		uf_.an+3*(m+N1_),		uf_.anm1+3*(m+N1_),
+			uf_.anp1+3*(m-1),		uf_.an+3*(m-1),			uf_.anm1+3*(m-1),
+			uf_.anp1+3*(m-N1N0_),		uf_.an+3*(m-N1N0_),		uf_.anm1+3*(m-N1N0_),
+			uf_.anp1+3*(m+N1_-1),		uf_.an+3*(m+N1_-1),		uf_.anm1+3*(m+N1_-1),
+			uf_.anp1+3*(m-N1N0_+N1_),	uf_.an+3*(m-N1N0_+N1_),		uf_.anm1+3*(m-N1N0_+N1_),
+			uf_.anp1+3*(m-N1N0_-1),		uf_.an+3*(m-N1N0_-1),		uf_.anm1+3*(m-N1N0_-1),
+			uf_.anp1+3*(m-N1N0_+N1_-1),	uf_.an+3*(m-N1N0_+N1_-1),	uf_.anm1+3*(m-N1N0_+N1_-1));
+
+			m = N1N0_ * uf_.npm1 + N1N0_ - N1_ + uf_.N1m1;
+			uf_.af.advanceCornerF(
+			uf_.anp1+3*m,			uf_.an+3*m,			uf_.anm1+3*m,
+			uf_.anp1+3*(m-N1_),		uf_.an+3*(m-N1_),		uf_.anm1+3*(m-N1_),
+			uf_.anp1+3*(m-1),		uf_.an+3*(m-1),			uf_.anm1+3*(m-1),
+			uf_.anp1+3*(m-N1N0_),		uf_.an+3*(m-N1N0_),		uf_.anm1+3*(m-N1N0_),
+			uf_.anp1+3*(m-N1_-1),		uf_.an+3*(m-N1_-1),		uf_.anm1+3*(m-N1_-1),
+			uf_.anp1+3*(m-N1N0_-N1_),	uf_.an+3*(m-N1N0_-N1_),		uf_.anm1+3*(m-N1N0_-N1_),
+			uf_.anp1+3*(m-N1N0_-1),		uf_.an+3*(m-N1N0_-1),		uf_.anm1+3*(m-N1N0_-1),
+			uf_.anp1+3*(m-N1N0_-N1_-1),	uf_.an+3*(m-N1N0_-N1_-1),	uf_.anm1+3*(m-N1N0_-N1_-1));
+		}
+		}
 	}
-
-    /*循环网格中y = ymin边界上的点，并使用第一个更新字段
-	*阶吸收边界条件。*/
-    uf_.af.ufB_ = &uf_.cB[0];
-    for (unsigned i = 1; i < uf_.N0m1; i++)
-      for (unsigned k = 1; k < uf_.npm1; k++)
-	{
-	  l = 3 * ( N1N0_ * k + N1_* i );
-
-	  uf_.af.advanceBoundaryF(
-	      uf_.anp1+l,	uf_.anm1+l,	uf_.an  +l,
-	      uf_.anm1+l+3,   	uf_.an  +l+3,   uf_.anp1+l+3,
-	      uf_.an  +l+L6,  	uf_.an  +l+L7, 	uf_.an  +l+L4,
-	      uf_.an  +l+L5, 	uf_.an  +l+L0,  uf_.an  +l-L0,
-	      uf_.an  +l+L1,  	uf_.an  +l-L1);
-	}
-
-    /*循环网格中y = ymax边界上的点，并使用第一个更新字段
-	*阶吸收边界条件。*/
-    for (unsigned i = 1; i < uf_.N0m1; i++)
-      for (unsigned k = 1; k < uf_.npm1; k++)
-	{
-	  l = 3 * ( N1N0_ * k + N1_* i + N1_ - 1 );
-
-	  uf_.af.advanceBoundaryF(
-	      uf_.anp1+l,	uf_.anm1+l,	uf_.an  +l,
-	      uf_.anm1+l-3, 	uf_.an  +l-3,  	uf_.anp1+l-3,
-	      uf_.an  +l-L7,  	uf_.an  +l-L6, 	uf_.an  +l-L5,
-	      uf_.an  +l-L4,	uf_.an  +l+L0,  uf_.an  +l-L0,
-	      uf_.an  +l+L1,  	uf_.an  +l-L1);
-	}
-
-    /*在z = zmin边界上循环网格中的点，并使用第一个更新字段
-	*阶吸收边界条件。*/
-    uf_.af.ufB_ = &uf_.dB[0];
-    if ( rank_ == 0 )
-      {
-	for (unsigned i = 1; i < uf_.N0m1; i++)
-	  for (unsigned j = 1; j < uf_.N1m1; j++)
-	    {
-	      l = 3 * ( N1_ * i + j );
-
-	      uf_.af.advanceBoundaryF(
-		  uf_.anp1+l,		uf_.anm1+l,		uf_.an  +l,
-		  uf_.anm1+l+L1,     	uf_.an  +l+L1,   	uf_.anp1+l+L1,
-		  uf_.an  +l+L2,   	uf_.an  +l-L3, 		uf_.an  +l+L4,
-		  uf_.an  +l-L5, 	uf_.an  +l+L0,     	uf_.an  +l-L0,
-		  uf_.an  +l+3,     	uf_.an  +l-3);
-	    }
-      }
-
-    /*在z = zmax边界上循环网格中的点，并使用第一个更新字段
-	*阶吸收边界条件。*/
-    if (rank_ == size_ - 1)
-      {
-	for (unsigned i = 1; i < uf_.N0m1; i++)
-	  for (unsigned j = 1; j < uf_.N1m1; j++)
-	    {
-	      l = 3 * ( N1N0_ * uf_.npm1 + N1_ * i + j );
-
-	      uf_.af.advanceBoundaryF(
-		  uf_.anp1+l,		uf_.anm1+l,		uf_.an  +l,
-		  uf_.anm1+l-L1,     	uf_.an  +l-L1,   	uf_.anp1+l-L1,
-		  uf_.an  +l+L3,   	uf_.an  +l-L2, 		uf_.an  +l+L5,
-		  uf_.an  +l-L4, 	uf_.an  +l+L0,     	uf_.an  +l-L0,
-		  uf_.an  +l+3,    	uf_.an  +l-3);
-	    }
-      }
-
-    if ( mesh_.truncationOrder_ == 2 )
-      {
-
-	/*循环网格中x = (xmin,xmax)和y = (ymin,ymax)边界上的边缘点
-	*并使用一阶吸收边界条件更新字段。理解
-	*下面几行代码，最好在旁边列出Li的值。*/
-	uf_.af.ufB_ = &uf_.eE[0];
-	for (unsigned k = 1; k < uf_.npm1; k++)
-	  {
-	    l = 3 * ( N1N0_ * k );
-
-	    uf_.af.advanceEdgeF(
-		uf_.anp1+l,		uf_.an+l,	uf_.anm1+l,
-		uf_.anp1+l+L0,		uf_.an+l+L0,	uf_.anm1+l+L0,
-		uf_.anp1+l+3,		uf_.an+l+3,	uf_.anm1+l+3,
-		uf_.anp1+l+L6,		uf_.an+l+L6,	uf_.anm1+l+L6,
-		uf_.an  +l-L1,		uf_.an+l+L3,	uf_.an  +l+L5,	uf_.an+l+L9,
-		uf_.an  +l+L1,		uf_.an+l+L2,	uf_.an  +l+L4,	uf_.an+l+L8);
-
-	    l = 3 * ( N1N0_ * k + N1_ * uf_.N0m1 );
-
-	    uf_.af.advanceEdgeF(
-		uf_.anp1+l,		uf_.an+l,	uf_.anm1+l,
-		uf_.anp1+l-L0,		uf_.an+l-L0,	uf_.anm1+l-L0,
-		uf_.anp1+l+3,		uf_.an+l+3,	uf_.anm1+l+3,
-		uf_.anp1+l+L7,		uf_.an+l+L7,	uf_.anm1+l+L7,
-		uf_.an  +l-L1,		uf_.an+l-L2,	uf_.an  +l+L5,	uf_.an+l+L11,
-		uf_.an  +l+L1,		uf_.an+l-L3,	uf_.an  +l+L4,	uf_.an+l+L10);
-
-	    l = 3 * ( N1N0_ * k + uf_.N1m1 );
-
-	    uf_.af.advanceEdgeF(
-		uf_.anp1+l,		uf_.an+l,	uf_.anm1+l,
-		uf_.anp1+l+L0,		uf_.an+l+L0,	uf_.anm1+l+L0,
-		uf_.anp1+l-3,		uf_.an+l-3,	uf_.anm1+l-3,
-		uf_.anp1+l-L7,		uf_.an+l-L7,	uf_.anm1+l-L7,
-		uf_.an  +l-L1,		uf_.an+l+L3,	uf_.an  +l-L4,	uf_.an+l-L10,
-		uf_.an  +l+L1,		uf_.an+l+L2,	uf_.an  +l-L5,	uf_.an+l-L11);
-
-	    l = 3 * ( N1N0_ * k + N1_ * uf_.N0m1 + uf_.N1m1 );
-
-	    uf_.af.advanceEdgeF(
-		uf_.anp1+l,		uf_.an+l,	uf_.anm1+l,
-		uf_.anp1+l-L0,		uf_.an+l-L0,	uf_.anm1+l-L0,
-		uf_.anp1+l-3,		uf_.an+l-3,	uf_.anm1+l-3,
-		uf_.anp1+l-L6,		uf_.an+l-L6,	uf_.anm1+l-L6,
-		uf_.an  +l-L1,		uf_.an+l-L2,	uf_.an  +l-L4,	uf_.an+l-L8,
-		uf_.an  +l+L1,		uf_.an+l-L3,	uf_.an  +l-L5,	uf_.an+l-L9);
-	  }
-
-	/*循环网格中z = (zmin,zmax)和y = (ymin,ymax)边界上的边缘点和
-	*使用一阶吸收边界条件更新场。要了解
-	*在代码行之后，最好在旁边列出Li的值。*/
-	uf_.af.ufB_ = &uf_.fE[0];
-	for (unsigned i = 1; i < uf_.N0m1; i++)
-	  {
-	    if ( rank_ == 0 )
-	      {
-		l = 3 * ( N1_ * i );
-
-		uf_.af.advanceEdgeF(
-		    uf_.anp1+l,		uf_.an+l,	uf_.anm1+l,
-		    uf_.anp1+l+3,	uf_.an+l+3,	uf_.anm1+l+3,
-		    uf_.anp1+l+L1,	uf_.an+l+L1,	uf_.anm1+l+L1,
-		    uf_.anp1+l+L4,	uf_.an+l+L4,	uf_.anm1+l+L4,
-		    uf_.an  +l-L0,	uf_.an+l+L7,	uf_.an  +l-L3,	uf_.an+l+L10,
-		    uf_.an  +l+L0,	uf_.an+l+L6,	uf_.an  +l+L2,	uf_.an+l+L8);
-
-		l = 3 * ( N1_ * i + uf_.N1m1 );
-
-		uf_.af.advanceEdgeF(
-		    uf_.anp1+l,		uf_.an+l,	uf_.anm1+l,
-		    uf_.anp1+l-3,	uf_.an+l-3,	uf_.anm1+l-3,
-		    uf_.anp1+l+L1,	uf_.an+l+L1,	uf_.anm1+l+L1,
-		    uf_.anp1+l-L5,	uf_.an+l-L5,	uf_.anm1+l-L5,
-		    uf_.an  +l-L0,	uf_.an+l-L6,	uf_.an  +l-L3,	uf_.an+l-L9,
-		    uf_.an  +l+L0,	uf_.an+l-L7,	uf_.an  +l+L2,	uf_.an+l-L11);
-	      }
-
-	    if ( rank_ == size_ - 1 )
-	      {
-		l = 3 * ( N1_ * i + N1N0_ * uf_.npm1 );
-
-		uf_.af.advanceEdgeF(
-		    uf_.anp1+l,		uf_.an+l,	uf_.anm1+l,
-		    uf_.anp1+l+3,	uf_.an+l+3,	uf_.anm1+l+3,
-		    uf_.anp1+l-L1,	uf_.an+l-L1,	uf_.anm1+l-L1,
-		    uf_.anp1+l+L5,	uf_.an+l+L5,	uf_.anm1+l+L5,
-		    uf_.an  +l-L0,	uf_.an+l+L7,	uf_.an  +l-L2,	uf_.an+l+L11,
-		    uf_.an  +l+L0,	uf_.an+l+L6,	uf_.an  +l+L3,	uf_.an+l+L9);
-
-		l = 3 * ( N1_ * i + N1N0_ * uf_.npm1 + uf_.N1m1 );
-
-		uf_.af.advanceEdgeF(
-		    uf_.anp1+l,		uf_.an+l,	uf_.anm1+l,
-		    uf_.anp1+l-3,	uf_.an+l-3,	uf_.anm1+l-3,
-		    uf_.anp1+l-L1,	uf_.an+l-L1,	uf_.anm1+l-L1,
-		    uf_.anp1+l-L4,	uf_.an+l-L4,	uf_.anm1+l-L4,
-		    uf_.an  +l-L0,	uf_.an+l-L6,	uf_.an  +l-L2,	uf_.an+l-L8,
-		    uf_.an  +l+L0,	uf_.an+l-L7,	uf_.an  +l+L3,	uf_.an+l-L10);
-	      }
-	  }
-
-	/*循环网格中z = (zmin,zmax)和x = (xmin,xmax)边界上的边缘点和
-	*使用一阶吸收边界条件更新场。要了解
-	*在代码行之后，最好在旁边列出Li的值。*/
-	uf_.af.ufB_ = &uf_.gE[0];
-	for (unsigned j = 1; j < uf_.N1m1; j++)
-	  {
-	    if ( rank_ == 0 )
-	      {
-		l = 3 * j;
-
-		uf_.af.advanceEdgeF(
-		    uf_.anp1+l,		uf_.an+l,	uf_.anm1+l,
-		    uf_.anp1+l+L1,	uf_.an+l+L1,	uf_.anm1+l+L1,
-		    uf_.anp1+l+L0,	uf_.an+l+L0,	uf_.anm1+l+L0,
-		    uf_.anp1+l+L2,	uf_.an+l+L2,	uf_.anm1+l+L2,
-		    uf_.an+l-3,		uf_.an+l-L5,	uf_.an+l-L7,	uf_.an+l-L11,
-		    uf_.an+l+3,		uf_.an+l+L4,	uf_.an+l+L6,	uf_.an+l+L8);
-
-		l = 3 * ( N1N0_ - N1_ + j );
-
-		uf_.af.advanceEdgeF(
-		    uf_.anp1+l,		uf_.an+l,	uf_.anm1+l,
-		    uf_.anp1+l+L1,	uf_.an+l+L1,	uf_.anm1+l+L1,
-		    uf_.anp1+l-L0,	uf_.an+l-L0,	uf_.anm1+l-L0,
-		    uf_.anp1+l-L3,	uf_.an+l-L3,	uf_.anm1+l-L3,
-		    uf_.an+l-3,		uf_.an+l-L5,	uf_.an+l-L6,	uf_.an+l-L9,
-		    uf_.an+l+3,		uf_.an+l+L4,	uf_.an+l+L7,	uf_.an+l+L10);
-	      }
-
-	    if ( rank_ == size_ - 1 )
-	      {
-		l = 3 * ( N1N0_ * uf_.npm1 + j );
-
-		uf_.af.advanceEdgeF(
-		    uf_.anp1+l,		uf_.an+l,	uf_.anm1+l,
-		    uf_.anp1+l-L1,	uf_.an+l-L1,	uf_.anm1+l-L1,
-		    uf_.anp1+l+L0,	uf_.an+l+L0,	uf_.anm1+l+L0,
-		    uf_.anp1+l+L3,	uf_.an+l+L3,	uf_.anm1+l+L3,
-		    uf_.an+l-3,		uf_.an+l-L4,	uf_.an+l-L7,	uf_.an+l-L10,
-		    uf_.an+l+3,		uf_.an+l+L5,	uf_.an+l+L6,	uf_.an+l+L9);
-
-		l = 3 * ( N1N0_ * uf_.npm1 + N1_ * uf_.N0m1 + j );
-
-		uf_.af.advanceEdgeF(
-		    uf_.anp1+l,		uf_.an+l,	uf_.anm1+l,
-		    uf_.anp1+l-L1,	uf_.an+l-L1,	uf_.anm1+l-L1,
-		    uf_.anp1+l-L0,	uf_.an+l-L0,	uf_.anm1+l-L0,
-		    uf_.anp1+l-L2,	uf_.an+l-L2,	uf_.anm1+l-L2,
-		    uf_.an+l-3,		uf_.an+l-L4,	uf_.an+l-L6,	uf_.an+l-L8,
-		    uf_.an+l+3,		uf_.an+l+L5,	uf_.an+l+L7,	uf_.an+l+L11);
-	      }
-	  }
-
-	/*现在更新计算域中八个角的字段。*/
-	uf_.af.ufB_ = &uf_.hC[0];
-	if ( rank_ == 0 )
-	  {
-	    m = 0;
-	    uf_.af.advanceCornerF(
-		uf_.anp1+3*m,			uf_.an+3*m,			uf_.anm1+3*m,
-		uf_.anp1+3*(m+N1_),		uf_.an+3*(m+N1_),		uf_.anm1+3*(m+N1_),
-		uf_.anp1+3*(m+1),		uf_.an+3*(m+1),			uf_.anm1+3*(m+1),
-		uf_.anp1+3*(m+N1N0_),		uf_.an+3*(m+N1N0_),		uf_.anm1+3*(m+N1N0_),
-		uf_.anp1+3*(m+N1_+1),		uf_.an+3*(m+N1_+1),		uf_.anm1+3*(m+N1_+1),
-		uf_.anp1+3*(m+N1N0_+N1_),	uf_.an+3*(m+N1N0_+N1_),		uf_.anm1+3*(m+N1N0_+N1_),
-		uf_.anp1+3*(m+N1N0_+1),		uf_.an+3*(m+N1N0_+1),		uf_.anm1+3*(m+N1N0_+1),
-		uf_.anp1+3*(m+N1N0_+N1_+1),	uf_.an+3*(m+N1N0_+N1_+1),	uf_.anm1+3*(m+N1N0_+N1_+1));
-
-	    m = N1N0_ - N1_;
-	    uf_.af.advanceCornerF(
-		uf_.anp1+3*m,			uf_.an+3*m,			uf_.anm1+3*m,
-		uf_.anp1+3*(m-N1_),		uf_.an+3*(m-N1_),		uf_.anm1+3*(m-N1_),
-		uf_.anp1+3*(m+1),		uf_.an+3*(m+1),			uf_.anm1+3*(m+1),
-		uf_.anp1+3*(m+N1N0_),		uf_.an+3*(m+N1N0_),		uf_.anm1+3*(m+N1N0_),
-		uf_.anp1+3*(m-N1_+1),		uf_.an+3*(m-N1_+1),		uf_.anm1+3*(m-N1_+1),
-		uf_.anp1+3*(m+N1N0_-N1_),	uf_.an+3*(m+N1N0_-N1_),		uf_.anm1+3*(m+N1N0_-N1_),
-		uf_.anp1+3*(m+N1N0_+1),		uf_.an+3*(m+N1N0_+1),		uf_.anm1+3*(m+N1N0_+1),
-		uf_.anp1+3*(m+N1N0_-N1_+1),	uf_.an+3*(m+N1N0_-N1_+1),	uf_.anm1+3*(m+N1N0_-N1_+1));
-
-	    m = uf_.N1m1;
-	    uf_.af.advanceCornerF(
-		uf_.anp1+3*m,			uf_.an+3*m,			uf_.anm1+3*m,
-		uf_.anp1+3*(m+N1_),		uf_.an+3*(m+N1_),		uf_.anm1+3*(m+N1_),
-		uf_.anp1+3*(m-1),		uf_.an+3*(m-1),			uf_.anm1+3*(m-1),
-		uf_.anp1+3*(m+N1N0_),		uf_.an+3*(m+N1N0_),		uf_.anm1+3*(m+N1N0_),
-		uf_.anp1+3*(m+N1_-1),		uf_.an+3*(m+N1_-1),		uf_.anm1+3*(m+N1_-1),
-		uf_.anp1+3*(m+N1N0_+N1_),	uf_.an+3*(m+N1N0_+N1_),		uf_.anm1+3*(m+N1N0_+N1_),
-		uf_.anp1+3*(m+N1N0_-1),		uf_.an+3*(m+N1N0_-1),		uf_.anm1+3*(m+N1N0_-1),
-		uf_.anp1+3*(m+N1N0_+N1_-1),	uf_.an+3*(m+N1N0_+N1_-1),	uf_.anm1+3*(m+N1N0_+N1_-1));
-
-	    m = N1N0_ - N1_ + uf_.N1m1;
-	    uf_.af.advanceCornerF(
-		uf_.anp1+3*m,			uf_.an+3*m,			uf_.anm1+3*m,
-		uf_.anp1+3*(m-N1_),		uf_.an+3*(m-N1_),		uf_.anm1+3*(m-N1_),
-		uf_.anp1+3*(m-1),		uf_.an+3*(m-1),			uf_.anm1+3*(m-1),
-		uf_.anp1+3*(m+N1N0_),		uf_.an+3*(m+N1N0_),		uf_.anm1+3*(m+N1N0_),
-		uf_.anp1+3*(m-N1_-1),		uf_.an+3*(m-N1_-1),		uf_.anm1+3*(m-N1_-1),
-		uf_.anp1+3*(m+N1N0_-N1_),	uf_.an+3*(m+N1N0_-N1_),		uf_.anm1+3*(m+N1N0_-N1_),
-		uf_.anp1+3*(m+N1N0_-1),		uf_.an+3*(m+N1N0_-1),		uf_.anm1+3*(m+N1N0_-1),
-		uf_.anp1+3*(m+N1N0_-N1_-1),	uf_.an+3*(m+N1N0_-N1_-1),	uf_.anm1+3*(m+N1N0_-N1_-1));
-	  }
-
-	if ( rank_ == size_ - 1 )
-	  {
-	    m = N1N0_ * uf_.npm1;
-	    uf_.af.advanceCornerF(
-		uf_.anp1+3*m,			uf_.an+3*m,			uf_.anm1+3*m,
-		uf_.anp1+3*(m+N1_),		uf_.an+3*(m+N1_),		uf_.anm1+3*(m+N1_),
-		uf_.anp1+3*(m+1),		uf_.an+3*(m+1),			uf_.anm1+3*(m+1),
-		uf_.anp1+3*(m-N1N0_),		uf_.an+3*(m-N1N0_),		uf_.anm1+3*(m-N1N0_),
-		uf_.anp1+3*(m+N1_+1),		uf_.an+3*(m+N1_+1),		uf_.anm1+3*(m+N1_+1),
-		uf_.anp1+3*(m-N1N0_+N1_),	uf_.an+3*(m-N1N0_+N1_),		uf_.anm1+3*(m-N1N0_+N1_),
-		uf_.anp1+3*(m-N1N0_+1),		uf_.an+3*(m-N1N0_+1),		uf_.anm1+3*(m-N1N0_+1),
-		uf_.anp1+3*(m-N1N0_+N1_+1),	uf_.an+3*(m-N1N0_+N1_+1),	uf_.anm1+3*(m-N1N0_+N1_+1));
-
-	    m = N1N0_ * uf_.npm1 + N1N0_ - N1_;
-	    uf_.af.advanceCornerF(
-		uf_.anp1+3*m,			uf_.an+3*m,			uf_.anm1+3*m,
-		uf_.anp1+3*(m-N1_),		uf_.an+3*(m-N1_),		uf_.anm1+3*(m-N1_),
-		uf_.anp1+3*(m+1),		uf_.an+3*(m+1),			uf_.anm1+3*(m+1),
-		uf_.anp1+3*(m-N1N0_),		uf_.an+3*(m-N1N0_),		uf_.anm1+3*(m-N1N0_),
-		uf_.anp1+3*(m-N1_+1),		uf_.an+3*(m-N1_+1),		uf_.anm1+3*(m-N1_+1),
-		uf_.anp1+3*(m-N1N0_-N1_),	uf_.an+3*(m-N1N0_-N1_),		uf_.anm1+3*(m-N1N0_-N1_),
-		uf_.anp1+3*(m-N1N0_+1),		uf_.an+3*(m-N1N0_+1),		uf_.anm1+3*(m-N1N0_+1),
-		uf_.anp1+3*(m-N1N0_-N1_+1),	uf_.an+3*(m-N1N0_-N1_+1),	uf_.anm1+3*(m-N1N0_-N1_+1));
-
-	    m = N1N0_ * uf_.npm1 + uf_.N1m1;
-	    uf_.af.advanceCornerF(
-		uf_.anp1+3*m,			uf_.an+3*m,			uf_.anm1+3*m,
-		uf_.anp1+3*(m+N1_),		uf_.an+3*(m+N1_),		uf_.anm1+3*(m+N1_),
-		uf_.anp1+3*(m-1),		uf_.an+3*(m-1),			uf_.anm1+3*(m-1),
-		uf_.anp1+3*(m-N1N0_),		uf_.an+3*(m-N1N0_),		uf_.anm1+3*(m-N1N0_),
-		uf_.anp1+3*(m+N1_-1),		uf_.an+3*(m+N1_-1),		uf_.anm1+3*(m+N1_-1),
-		uf_.anp1+3*(m-N1N0_+N1_),	uf_.an+3*(m-N1N0_+N1_),		uf_.anm1+3*(m-N1N0_+N1_),
-		uf_.anp1+3*(m-N1N0_-1),		uf_.an+3*(m-N1N0_-1),		uf_.anm1+3*(m-N1N0_-1),
-		uf_.anp1+3*(m-N1N0_+N1_-1),	uf_.an+3*(m-N1N0_+N1_-1),	uf_.anm1+3*(m-N1N0_+N1_-1));
-
-	    m = N1N0_ * uf_.npm1 + N1N0_ - N1_ + uf_.N1m1;
-	    uf_.af.advanceCornerF(
-		uf_.anp1+3*m,			uf_.an+3*m,			uf_.anm1+3*m,
-		uf_.anp1+3*(m-N1_),		uf_.an+3*(m-N1_),		uf_.anm1+3*(m-N1_),
-		uf_.anp1+3*(m-1),		uf_.an+3*(m-1),			uf_.anm1+3*(m-1),
-		uf_.anp1+3*(m-N1N0_),		uf_.an+3*(m-N1N0_),		uf_.anm1+3*(m-N1N0_),
-		uf_.anp1+3*(m-N1_-1),		uf_.an+3*(m-N1_-1),		uf_.anm1+3*(m-N1_-1),
-		uf_.anp1+3*(m-N1N0_-N1_),	uf_.an+3*(m-N1N0_-N1_),		uf_.anm1+3*(m-N1N0_-N1_),
-		uf_.anp1+3*(m-N1N0_-1),		uf_.an+3*(m-N1N0_-1),		uf_.anm1+3*(m-N1N0_-1),
-		uf_.anp1+3*(m-N1N0_-N1_-1),	uf_.an+3*(m-N1N0_-N1_-1),	uf_.anm1+3*(m-N1N0_-N1_-1));
-	  }
-      }
 
     /*在整个处理器中通信计算字段。*/
     if (rank_ != size_ - 1)
@@ -817,8 +837,16 @@ namespace MITHRA
 	  /*对于左边界（z=zmin），只需将场设置为下一个z平面。*/
 	  if ( rank_ == 0 )
 	    {
-	      en_[m-N1N0_] = en_[m];
-	      bn_[m-N1N0_] = bn_[m];
+	      	if (useCurlCurlCPMLFD)
+			{
+				en_[m-N1N0_] = FieldVector<Double>(0.0);
+				bn_[m-N1N0_] = FieldVector<Double>(0.0);
+			}
+			else
+			{
+				en_[m-N1N0_] = en_[m];
+				bn_[m-N1N0_] = bn_[m];
+			}
 	    }
 
 	  m = N1N0_ * ( np_ - 2 ) + N1_ * i + j;
@@ -832,8 +860,16 @@ namespace MITHRA
 	  /*对于右边界（z=zmax），只需将字段设置为与之前的z平面相等。*/
 	  if ( rank_ == size_ - 1 )
 	    {
-	      en_[m+N1N0_] = en_[m];
-	      bn_[m+N1N0_] = bn_[m];
+	          if (useCurlCurlCPMLFD)
+				{
+					en_[m+N1N0_] = FieldVector<Double>(0.0);
+					bn_[m+N1N0_] = FieldVector<Double>(0.0);
+				}
+				else
+				{
+					en_[m+N1N0_] = en_[m];
+					bn_[m+N1N0_] = bn_[m];
+				}
 	    }
 	}
 
@@ -863,7 +899,13 @@ namespace MITHRA
       }
 
 	/* 整个场步完成后，再把 CPML 记忆变量从 n+1 滚到 n */
-	if (cpmlXY_.enabled) shiftCPMLXY();
+	// if (cpmlXY_.enabled) shiftCPMLXY();
+
+	// if (useCurlCurlCPMLFD)
+	// {
+	// 	diagnoseZBoundaryAForCPML();
+	// 	diagnoseZBoundaryEBForCPML();
+	// }
   }
 
   /******************************************************************************************************
@@ -1659,4 +1701,1053 @@ namespace MITHRA
     /*关闭文件。*/
     (*pf_.file).close();
   }
+
+  void FdTd::advanceInteriorCurlCurlCPMLFD()
+	{
+		/*
+		* 使用：
+		*   A_tt = - curl_pml( curl A ) + source
+		*
+		* 前提：
+		*   computeCurlAForCPML();
+		*   exchangeBtmpForCPML();
+		* 已经在本时间步前面调用过。
+		*/
+
+		/*
+		* 原程序中：
+		*   uf_.a[1] = (c0 * dt / dx)^2
+		*   uf_.a[2] = (c0 * dt / dy)^2
+		*
+		* 所以：
+		*   uf_.a[1] * dx^2 = (c0 * dt)^2
+		*/
+		const Double srcCoef = uf_.a[4];
+
+		static bool printed = false;
+
+		if (!printed && rank_ == 0)
+		{
+			std::cout
+				<< "Weighted CurlCurl coefficient check:"
+				<< " dx=" << uf_.dx
+				<< " dy=" << uf_.dy
+				<< " dz=" << uf_.dz
+				<< " uf.a1=" << uf_.a[1]
+				<< " uf.a2=" << uf_.a[2]
+				<< " uf.a3=" << uf_.a[3]
+				<< " Cx=" << ccpml_.Cx_
+				<< " Cy=" << ccpml_.Cy_
+				<< " Cz=" << ccpml_.Cz_
+				<< " sx=" << ccpml_.sx_
+				<< " sy=" << ccpml_.sy_
+				<< " sz=" << ccpml_.sz_
+				<< " invDx=" << ccpml_.invDx_
+				<< " invDy=" << ccpml_.invDy_
+				<< " invDz=" << ccpml_.invDz_
+				<< " sxInvDx=" << ccpml_.sxInvDx_
+				<< " syInvDy=" << ccpml_.syInvDy_
+				<< " szInvDz=" << ccpml_.szInvDz_
+				<< " srcCoef=" << srcCoef
+				<< std::endl;
+
+			printed = true;
+		}
+
+		for (unsigned i = 1; i < uf_.N0m1; i++)
+			for (unsigned j = 1; j < uf_.N1m1; j++)
+			for (unsigned k = 1; k < uf_.npm1; k++)
+				{
+				long m = N1N0_ * k + N1_ * i + j;
+
+				/* 外层 curl 所需的 B 导数 */
+				Double dx_By =
+					ccpml_.invDx_ * (btmp_[m][1] - btmp_[m - N1_][1]);
+
+				Double dx_Bz =
+					ccpml_.invDx_ * (btmp_[m][2] - btmp_[m - N1_][2]);
+
+				Double dy_Bx =
+					ccpml_.invDy_ * (btmp_[m][0] - btmp_[m - 1][0]);
+
+				Double dy_Bz =
+					ccpml_.invDy_ * (btmp_[m][2] - btmp_[m - 1][2]);
+
+				Double dz_Bx =
+					ccpml_.invDz_ * (btmp_[m][0] - btmp_[m - N1N0_][0]);
+
+				Double dz_By =
+					ccpml_.invDz_ * (btmp_[m][1] - btmp_[m - N1N0_][1]);
+				/* CPML 修正导数；非 PML 区域自动退化为普通导数 */
+				Double Dx_By = ccpml_.sx_ * cpmlDxBy(i, j, k, dx_By);
+				Double Dx_Bz = ccpml_.sx_ * cpmlDxBz(i, j, k, dx_Bz);
+
+				Double Dy_Bx = ccpml_.sy_ * cpmlDyBx(i, j, k, dy_Bx);
+				Double Dy_Bz = ccpml_.sy_ * cpmlDyBz(i, j, k, dy_Bz);
+
+				Double Dz_Bx = ccpml_.sz_ * cpmlDzBx(i, j, k, dz_Bx);
+				Double Dz_By = ccpml_.sz_ * cpmlDzBy(i, j, k, dz_By);
+
+				/*
+				* curl_pml B:
+				*   Cx = Dy Bz - Dz By
+				*   Cy = Dz Bx - Dx Bz
+				*   Cz = Dx By - Dy Bx
+				*/
+				Double curlB_x = Dy_Bz - Dz_By;
+				Double curlB_y = Dz_Bx - Dx_Bz;
+				Double curlB_z = Dx_By - Dy_Bx;
+
+				Double dx_q =
+					ccpml_.invDx_ * (qtmp_[m + N1_] - qtmp_[m]);
+
+				Double dy_q =
+					ccpml_.invDy_ * (qtmp_[m + 1] - qtmp_[m]);
+
+				Double dz_q =
+					ccpml_.invDz_ * (qtmp_[m + N1N0_] - qtmp_[m]);
+
+				Double gradQ_x = ccpml_.sx_ * cpmlGradDxQ(i, j, k, dx_q);
+				Double gradQ_y = ccpml_.sy_ * cpmlGradDyQ(i, j, k, dy_q);
+				Double gradQ_z = ccpml_.sz_ * cpmlGradDzQ(i, j, k, dz_q);
+
+				/*
+				* anp1_ 此时仍然存的是 J。
+				* 必须先把 J 读出来，再覆盖 anp1_ 为 A^{n+1}。
+				*/
+				FieldVector<Double> J;
+				J = (*anp1_)[m];
+
+				/*
+				* anp1_ 此时仍然是 J。
+				* 在 CPML/source mask 区域，不允许 J 作为源项驱动 A。
+				*
+				* sourceGuard = 0: 只关掉严格 PML 区；
+				* sourceGuard = 1: 额外关掉 PML 内侧 1 层，避免沉积形函数跨界。
+				*/
+				const int sourceGuard = 1;
+
+				bool inSourceMaskX =
+					(i <  (unsigned)(ccpml_.px_ + sourceGuard)) ||
+					(i >= N0_ - (unsigned)(ccpml_.px_ + sourceGuard));
+
+				bool inSourceMaskY =
+					(j <  (unsigned)(ccpml_.py_ + sourceGuard)) ||
+					(j >= N1_ - (unsigned)(ccpml_.py_ + sourceGuard));
+
+				bool inSourceMaskZ = false;
+
+				if (rank_ == 0)
+				{
+				inSourceMaskZ =
+					inSourceMaskZ ||
+					(k < (unsigned)(ccpml_.pz_ + sourceGuard));
+				}
+
+				if (rank_ == size_ - 1)
+				{
+				inSourceMaskZ =
+					inSourceMaskZ ||
+					(k >= np_ - (unsigned)(ccpml_.pz_ + sourceGuard));
+				}
+
+				if (inSourceMaskX || inSourceMaskY || inSourceMaskZ)
+				{
+				J = FieldVector<Double>(0.0);
+				}
+
+				(*anp1_)[m][0] =
+					2.0 * (*an_)[m][0]
+				-       (*anm1_)[m][0]
+				- curlB_x
+				+ gradQ_x
+				+ srcCoef  * J[0];
+
+				(*anp1_)[m][1] =
+					2.0 * (*an_)[m][1]
+				-       (*anm1_)[m][1]
+				- curlB_y
+				+ gradQ_y
+				+ srcCoef  * J[1];
+
+				(*anp1_)[m][2] =
+					2.0 * (*an_)[m][2]
+				-       (*anm1_)[m][2]
+				- curlB_z
+				+ gradQ_z
+				+ srcCoef  * J[2];
+				}
+	}
+	void FdTd::diagnoseCurlCurlCPML()
+{
+  static int diagStep = 0;
+  diagStep++;
+
+  if (diagStep % 50 != 0) return;
+
+  Double localMaxDivA  = 0.0;
+  Double localMaxCurlA = 0.0;
+  Double localMaxA = 0.0;
+
+  for (unsigned k = 1; k < uf_.npm1; k++)
+    for (unsigned i = 1; i < uf_.N0m1; i++)
+      for (unsigned j = 1; j < uf_.N1m1; j++)
+        {
+          long m = N1N0_ * k + N1_ * i + j;
+
+          Double divA =
+              ((*an_)[m + N1_][0]      - (*an_)[m - N1_][0])      / uf_.dx2
+            + ((*an_)[m + 1][1]        - (*an_)[m - 1][1])        / uf_.dy2
+            + ((*an_)[m + N1N0_][2]    - (*an_)[m - N1N0_][2])    / uf_.dz2;
+
+          Double curlA = sqrt(btmp_[m].norm2());
+		  Double ampA = sqrt((*an_)[m].norm2());
+
+			if (ampA > localMaxA)
+			localMaxA = ampA;
+
+          if (fabs(divA) > localMaxDivA)
+            localMaxDivA = fabs(divA);
+
+          if (curlA > localMaxCurlA)
+            localMaxCurlA = curlA;
+        }
+
+  Double globalMaxDivA  = 0.0;
+  Double globalMaxCurlA = 0.0;
+
+  MPI_Allreduce(
+      &localMaxDivA,
+      &globalMaxDivA,
+      1,
+      MPI_DOUBLE,
+      MPI_MAX,
+      MPI_COMM_WORLD
+  );
+
+  MPI_Allreduce(
+      &localMaxCurlA,
+      &globalMaxCurlA,
+      1,
+      MPI_DOUBLE,
+      MPI_MAX,
+      MPI_COMM_WORLD
+  );
+  Double globalMaxA = 0.0;
+
+	MPI_Allreduce(
+		&localMaxA,
+		&globalMaxA,
+		1,
+		MPI_DOUBLE,
+		MPI_MAX,
+		MPI_COMM_WORLD
+	);
+
+  if (rank_ == 0)
+    {
+      Double dx = 0.5 * uf_.dx2;
+		Double dy = 0.5 * uf_.dy2;
+		Double dz = 0.5 * uf_.dz2;
+		Double lmin = std::min(dx, std::min(dy, dz));
+
+		std::cout
+		<< "CurlCurlCPML diag step=" << diagStep
+		<< " max|A|=" << globalMaxA
+		<< " max|divA|=" << globalMaxDivA
+		<< " max|curlA|=" << globalMaxCurlA
+		<< " divA/(A/Lmin)="
+		<< globalMaxDivA / (globalMaxA / lmin + 1.0e-300)
+		<< " divA/curlA="
+		<< globalMaxDivA / (globalMaxCurlA + 1.0e-300)
+		<< std::endl;
+    }
+}
+void FdTd::diagnoseCurrentForCurlCurlCPML()
+{
+  static int diagStepJ = 0;
+  diagStepJ++;
+
+  if (diagStepJ % 50 != 0) return;
+
+  Double localMaxDivJ = 0.0;
+  Double localMaxJ    = 0.0;
+
+  /*
+   * anp1_ 此时仍是 J。
+   * 为了避免 z ghost 不确定，k 范围先取 2 到 npm1-1。
+   */
+  for (unsigned k = 2; k < uf_.npm1 - 1; k++)
+    for (unsigned i = 2; i < uf_.N0m1 - 1; i++)
+      for (unsigned j = 2; j < uf_.N1m1 - 1; j++)
+        {
+          long m = N1N0_ * k + N1_ * i + j;
+
+          Double divJ =
+              ((*anp1_)[m + N1_][0]      - (*anp1_)[m - N1_][0])      / uf_.dx2
+            + ((*anp1_)[m + 1][1]        - (*anp1_)[m - 1][1])        / uf_.dy2
+            + ((*anp1_)[m + N1N0_][2]    - (*anp1_)[m - N1N0_][2])    / uf_.dz2;
+
+          Double ampJ = sqrt((*anp1_)[m].norm2());
+
+          if (fabs(divJ) > localMaxDivJ)
+            localMaxDivJ = fabs(divJ);
+
+          if (ampJ > localMaxJ)
+            localMaxJ = ampJ;
+        }
+
+  Double globalMaxDivJ = 0.0;
+  Double globalMaxJ    = 0.0;
+
+  MPI_Allreduce(&localMaxDivJ, &globalMaxDivJ,
+                1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+  MPI_Allreduce(&localMaxJ, &globalMaxJ,
+                1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+  Double dx = 0.5 * uf_.dx2;
+  Double dy = 0.5 * uf_.dy2;
+  Double dz = 0.5 * uf_.dz2;
+
+  Double lmin = std::min(dx, std::min(dy, dz));
+
+  if (rank_ == 0)
+    {
+      std::cout
+        << "CurlCurlCPML source diag step=" << diagStepJ
+        << " max|J|=" << globalMaxJ
+        << " max|divJ|=" << globalMaxDivJ
+        << " divJ/(J/Lmin)="
+        << globalMaxDivJ / (globalMaxJ / lmin + 1.0e-300)
+        << std::endl;
+    }
+}
+
+void FdTd::diagnoseCompareFDvsCurlCurlCPML()
+{
+  static int diagStep = 0;
+  diagStep++;
+
+  if (diagStep % 50 != 0) return;
+
+  /*
+   * guard 用于避开最外层临时量置零、MPI ghost 层、边界 stencil。
+   * 注意：PML 区仍然会被统计，只要它在 guard 之后。
+   */
+  const unsigned guard = 4;
+
+  /*
+   * region:
+   *   0 = physical non-PML region
+   *   1 = PML region
+   */
+  const int NREG = 2;
+
+  const Double srcCoef = uf_.a[4];
+
+  const Double checkAx = ccpml_.sxInvDx_ * ccpml_.sxInvDx_;
+  const Double checkAy = ccpml_.syInvDy_ * ccpml_.syInvDy_;
+  const Double checkAz = ccpml_.szInvDz_ * ccpml_.szInvDz_;
+
+  Double localMaxOldFull[NREG]  = {0.0, 0.0};
+  Double localMaxNewFull[NREG]  = {0.0, 0.0};
+  Double localMaxDiffFull[NREG] = {0.0, 0.0};
+
+  Double localMaxOldSpatial[NREG]  = {0.0, 0.0};
+  Double localMaxNewSpatial[NREG]  = {0.0, 0.0};
+  Double localMaxDiffSpatial[NREG] = {0.0, 0.0};
+
+  int localMaxI[NREG] = {-1, -1};
+  int localMaxJ[NREG] = {-1, -1};
+  int localMaxK[NREG] = {-1, -1};
+  int localMaxC[NREG] = {-1, -1};
+
+  Double localOldAtMax[NREG]  = {0.0, 0.0};
+  Double localNewAtMax[NREG]  = {0.0, 0.0};
+  Double localCurlAtMax[NREG] = {0.0, 0.0};
+  Double localGradAtMax[NREG] = {0.0, 0.0};
+
+  unsigned long localCount[NREG] = {0, 0};
+
+  for (unsigned i = guard; i + guard < N0_; ++i)
+  {
+    for (unsigned j = guard; j + guard < N1_; ++j)
+    {
+      for (unsigned k = guard; k + guard < np_; ++k)
+      {
+        bool inPML =
+            (ccpml_.xSlot_[i] >= 0) ||
+            (ccpml_.ySlot_[j] >= 0) ||
+            (ccpml_.zSlot_[k] >= 0);
+
+        int reg = inPML ? 1 : 0;
+
+        localCount[reg]++;
+
+        long m = N1N0_ * k + N1_ * i + j;
+
+        /*
+         * btmp_ 已经由 computeCurlAForCPML() 得到：
+         *
+         *   btmp = weighted D+ curl A
+         *
+         * 这里重新计算 weighted D- curl btmp。
+         * 不调用 cpmlDxBy / cpmlDxBz 等函数，避免更新 psi。
+         */
+
+        Double dx_By =
+            ccpml_.invDx_ * (btmp_[m][1] - btmp_[m - N1_][1]);
+
+        Double dx_Bz =
+            ccpml_.invDx_ * (btmp_[m][2] - btmp_[m - N1_][2]);
+
+        Double dy_Bx =
+            ccpml_.invDy_ * (btmp_[m][0] - btmp_[m - 1][0]);
+
+        Double dy_Bz =
+            ccpml_.invDy_ * (btmp_[m][2] - btmp_[m - 1][2]);
+
+        Double dz_Bx =
+            ccpml_.invDz_ * (btmp_[m][0] - btmp_[m - N1N0_][0]);
+
+        Double dz_By =
+            ccpml_.invDz_ * (btmp_[m][1] - btmp_[m - N1N0_][1]);
+
+        Double Dx_By = ccpml_.sx_ * dx_By;
+        Double Dx_Bz = ccpml_.sx_ * dx_Bz;
+
+        Double Dy_Bx = ccpml_.sy_ * dy_Bx;
+        Double Dy_Bz = ccpml_.sy_ * dy_Bz;
+
+        Double Dz_Bx = ccpml_.sz_ * dz_Bx;
+        Double Dz_By = ccpml_.sz_ * dz_By;
+
+        Double curlB[3];
+
+        curlB[0] = Dy_Bz - Dz_By;
+        curlB[1] = Dz_Bx - Dx_Bz;
+        curlB[2] = Dx_By - Dy_Bx;
+
+        /*
+         * qtmp_ 已经由 computeDivAForCPML() 得到：
+         *
+         *   qtmp = weighted D- div A
+         *
+         * 这里重新计算 weighted D+ grad qtmp。
+         * 不调用 cpmlGradDxQ / cpmlGradDyQ / cpmlGradDzQ，避免更新 psi。
+         */
+
+        Double dx_q =
+            ccpml_.invDx_ * (qtmp_[m + N1_] - qtmp_[m]);
+
+        Double dy_q =
+            ccpml_.invDy_ * (qtmp_[m + 1] - qtmp_[m]);
+
+        Double dz_q =
+            ccpml_.invDz_ * (qtmp_[m + N1N0_] - qtmp_[m]);
+
+        Double gradQ[3];
+
+        gradQ[0] = ccpml_.sx_ * dx_q;
+        gradQ[1] = ccpml_.sy_ * dy_q;
+        gradQ[2] = ccpml_.sz_ * dz_q;
+
+        for (int c = 0; c < 3; ++c)
+        {
+          /*
+           * 原始 FD 空间项：
+           *
+           * A^{n+1}
+           * = 2A^n - A^{n-1}
+           * + oldSpatial
+           * + a4 J
+           *
+           * oldSpatial =
+           *   (a0 - 2) A
+           * + a1(A_{+x}+A_{-x})
+           * + a2(A_{+y}+A_{-y})
+           * + a3(A_{+z}+A_{-z})
+           */
+
+          Double oldSpatial =
+              (uf_.a[0] - 2.0) * (*an_)[m][c]
+            + uf_.a[1] * ((*an_)[m + N1_][c]   + (*an_)[m - N1_][c])
+            + uf_.a[2] * ((*an_)[m + 1][c]     + (*an_)[m - 1][c])
+            + uf_.a[3] * ((*an_)[m + N1N0_][c] + (*an_)[m - N1N0_][c]);
+
+          /*
+           * weighted curl-curl + grad-div 空间项：
+           *
+           * newSpatial =
+           *   - weighted D- curl (weighted D+ curl A)
+           *   + weighted D+ grad (weighted D- div A)
+           *
+           * 注意：
+           *   不再乘 curlCoef；
+           *   不再加 zCorrCoef * lapZ_A；
+           *   不再有裸 lapZ_A。
+           */
+
+          Double newSpatial =
+              - curlB[c]
+              + gradQ[c];
+
+          Double oldFull =
+              2.0 * (*an_)[m][c]
+            -       (*anm1_)[m][c]
+            + oldSpatial
+            + srcCoef * (*anp1_)[m][c];
+
+          Double newFull =
+              2.0 * (*an_)[m][c]
+            -       (*anm1_)[m][c]
+            + newSpatial
+            + srcCoef * (*anp1_)[m][c];
+
+          Double diffSpatial = fabs(newSpatial - oldSpatial);
+          Double diffFull    = fabs(newFull - oldFull);
+
+          if (fabs(oldSpatial) > localMaxOldSpatial[reg])
+            localMaxOldSpatial[reg] = fabs(oldSpatial);
+
+          if (fabs(newSpatial) > localMaxNewSpatial[reg])
+            localMaxNewSpatial[reg] = fabs(newSpatial);
+
+          if (diffSpatial > localMaxDiffSpatial[reg])
+          {
+            localMaxDiffSpatial[reg] = diffSpatial;
+
+            localMaxI[reg] = (int)i;
+            localMaxJ[reg] = (int)j;
+            localMaxK[reg] = (int)k;
+            localMaxC[reg] = c;
+
+            localOldAtMax[reg]  = oldSpatial;
+            localNewAtMax[reg]  = newSpatial;
+            localCurlAtMax[reg] = curlB[c];
+            localGradAtMax[reg] = gradQ[c];
+          }
+
+          if (fabs(oldFull) > localMaxOldFull[reg])
+            localMaxOldFull[reg] = fabs(oldFull);
+
+          if (fabs(newFull) > localMaxNewFull[reg])
+            localMaxNewFull[reg] = fabs(newFull);
+
+          if (diffFull > localMaxDiffFull[reg])
+            localMaxDiffFull[reg] = diffFull;
+        }
+      }
+    }
+  }
+
+  Double globalMaxOldFull[NREG];
+  Double globalMaxNewFull[NREG];
+  Double globalMaxDiffFull[NREG];
+
+  Double globalMaxOldSpatial[NREG];
+  Double globalMaxNewSpatial[NREG];
+  Double globalMaxDiffSpatial[NREG];
+
+  unsigned long globalCount[NREG];
+
+  MPI_Allreduce(localMaxOldFull, globalMaxOldFull,
+                NREG, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+  MPI_Allreduce(localMaxNewFull, globalMaxNewFull,
+                NREG, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+  MPI_Allreduce(localMaxDiffFull, globalMaxDiffFull,
+                NREG, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+  MPI_Allreduce(localMaxOldSpatial, globalMaxOldSpatial,
+                NREG, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+  MPI_Allreduce(localMaxNewSpatial, globalMaxNewSpatial,
+                NREG, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+  MPI_Allreduce(localMaxDiffSpatial, globalMaxDiffSpatial,
+                NREG, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+  MPI_Allreduce(localCount, globalCount,
+                NREG, MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD);
+
+  if (rank_ == 0)
+  {
+    std::cout
+      << "FD-vs-WeightedCurlCurlGradDiv region diag step=" << diagStep
+      << " guard=" << guard
+      << std::endl;
+
+    std::cout
+      << "  coeff:"
+      << " a0=" << uf_.a[0]
+      << " a1=" << uf_.a[1]
+      << " a2=" << uf_.a[2]
+      << " a3=" << uf_.a[3]
+      << " a4=" << uf_.a[4]
+      << std::endl;
+
+    std::cout
+      << "  weighted check:"
+      << " sxInvDx^2=" << checkAx
+      << " syInvDy^2=" << checkAy
+      << " szInvDz^2=" << checkAz
+      << std::endl;
+
+    std::cout
+      << "  weighted coeff:"
+      << " sx=" << ccpml_.sx_
+      << " sy=" << ccpml_.sy_
+      << " sz=" << ccpml_.sz_
+      << " invDx=" << ccpml_.invDx_
+      << " invDy=" << ccpml_.invDy_
+      << " invDz=" << ccpml_.invDz_
+      << std::endl;
+
+    for (int reg = 0; reg < NREG; ++reg)
+    {
+      const char* name = (reg == 0) ? "PHYS" : "PML";
+
+      std::cout
+        << "  [" << name << "] count=" << globalCount[reg]
+        << std::endl;
+
+      std::cout
+        << "  [" << name << "] spatial:"
+        << " max|old|=" << globalMaxOldSpatial[reg]
+        << " max|new|=" << globalMaxNewSpatial[reg]
+        << " max|new-old|=" << globalMaxDiffSpatial[reg]
+        << " rel=" << globalMaxDiffSpatial[reg]
+                / (globalMaxOldSpatial[reg] + 1.0e-300)
+        << std::endl;
+
+      std::cout
+        << "  [" << name << "] full update:"
+        << " max|old|=" << globalMaxOldFull[reg]
+        << " max|new|=" << globalMaxNewFull[reg]
+        << " max|new-old|=" << globalMaxDiffFull[reg]
+        << " rel=" << globalMaxDiffFull[reg]
+                / (globalMaxOldFull[reg] + 1.0e-300)
+        << std::endl;
+    }
+  }
+
+  /*
+   * 打印每个区域最大 spatial diff 所在 rank 的局部信息。
+   * 不用 MPI_MAXLOC，直接让拥有 global max 的 rank 输出。
+   */
+  for (int reg = 0; reg < NREG; ++reg)
+  {
+    if (fabs(localMaxDiffSpatial[reg] - globalMaxDiffSpatial[reg])
+        <= 1.0e-30 * (globalMaxDiffSpatial[reg] + 1.0))
+    {
+      const char* name = (reg == 0) ? "PHYS" : "PML";
+
+      std::cout
+        << "  [" << name << "] max spatial diff location:"
+        << " rank=" << rank_
+        << " i=" << localMaxI[reg]
+        << " j=" << localMaxJ[reg]
+        << " k=" << localMaxK[reg]
+        << " c=" << localMaxC[reg]
+        << " oldSpatial=" << localOldAtMax[reg]
+        << " newSpatial=" << localNewAtMax[reg]
+        << " diff=" << localMaxDiffSpatial[reg]
+        << " curlB=" << localCurlAtMax[reg]
+        << " gradQ=" << localGradAtMax[reg]
+        << std::endl;
+    }
+  }
+}
+
+void FdTd::setOuterAForCurlCurlCPML()
+{
+  long m;
+
+  // x = 0, x = N0_-1
+  for (unsigned k = 0; k < np_; ++k)
+    for (unsigned j = 0; j < N1_; ++j)
+    {
+      m = N1N0_ * k + j;
+      (*anp1_)[m] = FieldVector<Double>(0.0);
+
+      m = N1N0_ * k + N1_ * (N0_ - 1) + j;
+      (*anp1_)[m] = FieldVector<Double>(0.0);
+    }
+
+  // y = 0, y = N1_-1
+  for (unsigned k = 0; k < np_; ++k)
+    for (unsigned i = 0; i < N0_; ++i)
+    {
+      m = N1N0_ * k + N1_ * i;
+      (*anp1_)[m] = FieldVector<Double>(0.0);
+
+      m = N1N0_ * k + N1_ * i + (N1_ - 1);
+      (*anp1_)[m] = FieldVector<Double>(0.0);
+    }
+
+  // global z = 0
+  if (rank_ == 0)
+  {
+    for (unsigned i = 0; i < N0_; ++i)
+      for (unsigned j = 0; j < N1_; ++j)
+      {
+        m = N1_ * i + j;
+        (*anp1_)[m] = FieldVector<Double>(0.0);
+      }
+  }
+
+  // global z = zmax
+  if (rank_ == size_ - 1)
+  {
+    for (unsigned i = 0; i < N0_; ++i)
+      for (unsigned j = 0; j < N1_; ++j)
+      {
+        m = N1N0_ * (np_ - 1) + N1_ * i + j;
+        (*anp1_)[m] = FieldVector<Double>(0.0);
+      }
+  }
+}
+
+void FdTd::diagnoseCurrentZMinZMaxForCPML()
+{
+  static int step = 0;
+  step++;
+  if (step % 50 != 0) return;
+
+  Double localMaxJZMin = 0.0;
+  Double localMaxJZMax = 0.0;
+  Double localMaxJPML  = 0.0;
+  Double localMaxJPhys = 0.0;
+
+  for (unsigned k = 0; k < np_; ++k)
+    for (unsigned i = 0; i < N0_; ++i)
+      for (unsigned j = 0; j < N1_; ++j)
+      {
+        long m = N1N0_ * k + N1_ * i + j;
+
+        Double ampJ = sqrt((*anp1_)[m].norm2());
+
+        bool isPML =
+            (ccpml_.xSlot_[i] >= 0) ||
+            (ccpml_.ySlot_[j] >= 0) ||
+            (ccpml_.zSlot_[k] >= 0);
+
+        if (isPML)
+        {
+          if (ampJ > localMaxJPML) localMaxJPML = ampJ;
+        }
+        else
+        {
+          if (ampJ > localMaxJPhys) localMaxJPhys = ampJ;
+        }
+
+        if (rank_ == 0 && k <= (unsigned)(ccpml_.pz_ + 2))
+        {
+          if (ampJ > localMaxJZMin) localMaxJZMin = ampJ;
+        }
+
+        if (rank_ == size_ - 1 && k + (unsigned)(ccpml_.pz_ + 3) >= np_)
+        {
+          if (ampJ > localMaxJZMax) localMaxJZMax = ampJ;
+        }
+      }
+
+  Double globalMaxJZMin = 0.0;
+  Double globalMaxJZMax = 0.0;
+  Double globalMaxJPML  = 0.0;
+  Double globalMaxJPhys = 0.0;
+
+  MPI_Allreduce(&localMaxJZMin, &globalMaxJZMin, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+  MPI_Allreduce(&localMaxJZMax, &globalMaxJZMax, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+  MPI_Allreduce(&localMaxJPML,  &globalMaxJPML,  1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+  MPI_Allreduce(&localMaxJPhys, &globalMaxJPhys, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+  if (rank_ == 0)
+  {
+    std::cout
+      << "CPML current region diag step=" << step
+      << " maxJ_zmin=" << globalMaxJZMin
+      << " maxJ_zmax=" << globalMaxJZMax
+      << " maxJ_pml="  << globalMaxJPML
+      << " maxJ_phys=" << globalMaxJPhys
+      << std::endl;
+  }
+}
+
+void FdTd::diagnoseZBoundaryAForCPML()
+{
+  static int diagStep = 0;
+  diagStep++;
+
+  if (diagStep % 50 != 0) return;
+
+  const int nProbe = 7;
+
+  int off[nProbe];
+
+  off[0] = 0;
+  off[1] = 1;
+  off[2] = 2;
+  off[3] = std::max(1, ccpml_.pz_ / 2);
+  off[4] = ccpml_.pz_;
+  off[5] = ccpml_.pz_ + 1;
+  off[6] = ccpml_.pz_ + 3;
+
+  Double localZMin[nProbe];
+  Double localZMax[nProbe];
+
+  for (int p = 0; p < nProbe; ++p)
+  {
+    localZMin[p] = 0.0;
+    localZMax[p] = 0.0;
+  }
+
+  /*
+   * zmin side: only rank 0 owns the physical zmin boundary.
+   */
+  if (rank_ == 0)
+  {
+    for (int p = 0; p < nProbe; ++p)
+    {
+      int k = off[p];
+
+      if (k < 0 || k >= (int)np_) continue;
+
+      Double maxA = 0.0;
+
+      for (unsigned i = 1; i < N0_ - 1; ++i)
+      {
+        for (unsigned j = 1; j < N1_ - 1; ++j)
+        {
+          long m = N1N0_ * k + N1_ * i + j;
+
+          Double a = sqrt((*anp1_)[m].norm2());
+
+          if (a > maxA) maxA = a;
+        }
+      }
+
+      localZMin[p] = maxA;
+    }
+  }
+
+  /*
+   * zmax side: only the last rank owns the physical zmax boundary.
+   */
+  if (rank_ == size_ - 1)
+  {
+    for (int p = 0; p < nProbe; ++p)
+    {
+      int k = (int)np_ - 1 - off[p];
+
+      if (k < 0 || k >= (int)np_) continue;
+
+      Double maxA = 0.0;
+
+      for (unsigned i = 1; i < N0_ - 1; ++i)
+      {
+        for (unsigned j = 1; j < N1_ - 1; ++j)
+        {
+          long m = N1N0_ * k + N1_ * i + j;
+
+          Double a = sqrt((*anp1_)[m].norm2());
+
+          if (a > maxA) maxA = a;
+        }
+      }
+
+      localZMax[p] = maxA;
+    }
+  }
+
+  Double globalZMin[nProbe];
+  Double globalZMax[nProbe];
+
+  MPI_Allreduce(localZMin, globalZMin, nProbe, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+  MPI_Allreduce(localZMax, globalZMax, nProbe, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+  if (rank_ == 0)
+  {
+    std::cout
+      << "Z-boundary A diag step=" << diagStep
+      << " offsets=";
+
+    for (int p = 0; p < nProbe; ++p)
+      std::cout << off[p] << (p == nProbe - 1 ? "" : ",");
+
+    std::cout << std::endl;
+
+    std::cout << "  zmin max|A|:";
+    for (int p = 0; p < nProbe; ++p)
+      std::cout << " k+" << off[p] << "=" << globalZMin[p];
+
+    std::cout << std::endl;
+
+    std::cout << "  zmax max|A|:";
+    for (int p = 0; p < nProbe; ++p)
+      std::cout << " k-" << off[p] << "=" << globalZMax[p];
+
+    std::cout << std::endl;
+  }
+}
+
+void FdTd::diagnoseZBoundaryEBForCPML()
+{
+  static int diagStep = 0;
+  diagStep++;
+
+  if (diagStep % 50 != 0) return;
+
+  const int nProbe = 7;
+
+  int off[nProbe];
+
+  off[0] = 0;
+  off[1] = 1;
+  off[2] = 2;
+  off[3] = std::max(1, ccpml_.pz_ / 2);
+  off[4] = ccpml_.pz_;
+  off[5] = ccpml_.pz_ + 1;
+  off[6] = ccpml_.pz_ + 3;
+
+  Double localEZMin[nProbe];
+  Double localBZMin[nProbe];
+  Double localEZMax[nProbe];
+  Double localBZMax[nProbe];
+
+  for (int p = 0; p < nProbe; ++p)
+  {
+    localEZMin[p] = 0.0;
+    localBZMin[p] = 0.0;
+    localEZMax[p] = 0.0;
+    localBZMax[p] = 0.0;
+  }
+
+  if (rank_ == 0)
+  {
+    for (int p = 0; p < nProbe; ++p)
+    {
+      int k = off[p];
+
+      if (k < 0 || k >= (int)np_) continue;
+
+      Double maxE = 0.0;
+      Double maxB = 0.0;
+
+      for (unsigned i = 1; i < N0_ - 1; ++i)
+      {
+        for (unsigned j = 1; j < N1_ - 1; ++j)
+        {
+          long m = N1N0_ * k + N1_ * i + j;
+
+          /*
+           * k=0 是物理最外层，CPML 路径下你已经手动设置 en/bn。
+           * 不要对 k=0 调 fieldEvaluate。
+           */
+          if (k > 0 && k < (int)np_ - 1)
+          {
+            if (!pic_[m]) fieldEvaluate(m);
+          }
+
+          Double e = sqrt(en_[m].norm2());
+          Double b = sqrt(bn_[m].norm2());
+
+          if (e > maxE) maxE = e;
+          if (b > maxB) maxB = b;
+        }
+      }
+
+      localEZMin[p] = maxE;
+      localBZMin[p] = maxB;
+    }
+  }
+
+  if (rank_ == size_ - 1)
+  {
+    for (int p = 0; p < nProbe; ++p)
+    {
+      int k = (int)np_ - 1 - off[p];
+
+      if (k < 0 || k >= (int)np_) continue;
+
+      Double maxE = 0.0;
+      Double maxB = 0.0;
+
+      for (unsigned i = 1; i < N0_ - 1; ++i)
+      {
+        for (unsigned j = 1; j < N1_ - 1; ++j)
+        {
+          long m = N1N0_ * k + N1_ * i + j;
+
+          /*
+           * k=np_-1 是物理最外层，CPML 路径下你已经手动设置 en/bn。
+           * 不要对 k=np_-1 调 fieldEvaluate。
+           */
+          if (k > 0 && k < (int)np_ - 1)
+          {
+            if (!pic_[m]) fieldEvaluate(m);
+          }
+
+          Double e = sqrt(en_[m].norm2());
+          Double b = sqrt(bn_[m].norm2());
+
+          if (e > maxE) maxE = e;
+          if (b > maxB) maxB = b;
+        }
+      }
+
+      localEZMax[p] = maxE;
+      localBZMax[p] = maxB;
+    }
+  }
+
+  Double globalEZMin[nProbe];
+  Double globalBZMin[nProbe];
+  Double globalEZMax[nProbe];
+  Double globalBZMax[nProbe];
+
+  MPI_Allreduce(localEZMin, globalEZMin, nProbe, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+  MPI_Allreduce(localBZMin, globalBZMin, nProbe, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+  MPI_Allreduce(localEZMax, globalEZMax, nProbe, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+  MPI_Allreduce(localBZMax, globalBZMax, nProbe, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+  if (rank_ == 0)
+  {
+    std::cout
+      << "Z-boundary EB diag step=" << diagStep
+      << " offsets=";
+
+    for (int p = 0; p < nProbe; ++p)
+      std::cout << off[p] << (p == nProbe - 1 ? "" : ",");
+
+    std::cout << std::endl;
+
+    std::cout << "  zmin max|E|:";
+    for (int p = 0; p < nProbe; ++p)
+      std::cout << " k+" << off[p] << "=" << globalEZMin[p];
+
+    std::cout << std::endl;
+
+    std::cout << "  zmin max|B|:";
+    for (int p = 0; p < nProbe; ++p)
+      std::cout << " k+" << off[p] << "=" << globalBZMin[p];
+
+    std::cout << std::endl;
+
+    std::cout << "  zmax max|E|:";
+    for (int p = 0; p < nProbe; ++p)
+      std::cout << " k-" << off[p] << "=" << globalEZMax[p];
+
+    std::cout << std::endl;
+
+    std::cout << "  zmax max|B|:";
+    for (int p = 0; p < nProbe; ++p)
+      std::cout << " k-" << off[p] << "=" << globalBZMax[p];
+
+    std::cout << std::endl;
+  }
+}
 }

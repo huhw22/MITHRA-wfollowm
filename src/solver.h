@@ -225,7 +225,7 @@ namespace MITHRA
     Double particleLabZ(const Charge& q) const;
     void   updateSoftKill(Charge& q);
 
-    /*计算CPML吸收的框架*/
+    /*计算吸收的框架*/
     void initializeCPMLXY();
 
     bool inXPML(unsigned int i) const;
@@ -233,6 +233,39 @@ namespace MITHRA
     bool inPhysicalXY(unsigned int i, unsigned int j) const;
 
     void shiftCPMLXY();
+
+    /*计算CPML吸收的框架*/
+    void initializeCurlCurlCPML();
+
+    /*导数辅助函数*/
+    Double cpmlDxBy(int i, int j, int k, Double dx_By);
+    Double cpmlDxBz(int i, int j, int k, Double dx_Bz);
+
+    Double cpmlDyBx(int i, int j, int k, Double dy_Bx);
+    Double cpmlDyBz(int i, int j, int k, Double dy_Bz);
+
+    Double cpmlDzBx(int i, int j, int k, Double dz_Bx);
+    Double cpmlDzBy(int i, int j, int k, Double dz_By);
+
+    Double cpmlDivDxAx(int i, int j, int k, Double dx_Ax);
+    Double cpmlDivDyAy(int i, int j, int k, Double dy_Ay);
+    Double cpmlDivDzAz(int i, int j, int k, Double dz_Az);
+
+    Double cpmlGradDxQ(int i, int j, int k, Double dx_q);
+    Double cpmlGradDyQ(int i, int j, int k, Double dy_q);
+    Double cpmlGradDzQ(int i, int j, int k, Double dz_q);
+
+    /*辅助得到临时磁场*/
+    void computeCurlAForCPML();
+
+    /*交换btmp*/
+    void exchangeBtmpForCPML();
+
+    void computeDivAForCPML();
+    void exchangeQtmpForCPML();
+
+    /*设置数值*/
+    void setCurlCurlCPMLCoefficients();
 
 
     /****************************************************************************************************
@@ -375,8 +408,15 @@ namespace MITHRA
     /*相对论变换框架*/
     BoostFrameTransform boostFrame_;
 
-    /*CPML吸收框架*/
+    /*简单吸收框架*/
     CPMLXY cpmlXY_;
+
+    /* 改进版cpml吸收*/
+    CurlCurlCPML ccpml_;
+    /* curl-curl CPML 临时磁场 */
+    std::vector<FieldVector<Double> > btmp_;
+
+    std::vector<Double> qtmp_;
   };
 
 }
