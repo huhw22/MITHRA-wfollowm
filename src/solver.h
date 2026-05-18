@@ -237,7 +237,14 @@ namespace MITHRA
     Double cpmlDzMinusG(int i, int j, int k, int c, Double dzm_G);
 
     void computeScalarCPMLFirstDerivatives();
-    void zeroScalarCPMLGtmpBoundary();
+
+    void setOuterAForScalarCPML();
+
+    void diagnoseScalarCPMLRegions();
+
+    Double peekScalarCPMLDxMinusG(int i, int j, int k, int c, Double dxm_G);
+    Double peekScalarCPMLDyMinusG(int i, int j, int k, int c, Double dym_G);
+    Double peekScalarCPMLDzMinusG(int i, int j, int k, int c, Double dzm_G);
 
 
     /****************************************************************************************************

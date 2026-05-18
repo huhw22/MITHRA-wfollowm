@@ -2603,7 +2603,6 @@ namespace MITHRA
 	spml_.psi_zp_A_.assign(zMemSize, FieldVector<Double>(0.0));
 	spml_.psi_zm_G_.assign(zMemSize, FieldVector<Double>(0.0));
 
-	setScalarCPMLCoefficients();
 
 	const Double bytesPerFieldVector =
 		3.0 * sizeof(Double);
@@ -3139,6 +3138,584 @@ namespace MITHRA
 				spml_.sz_ * cpmlDzPlusA(i, j, k, c, dzp_A);
 			}
 		}
+		}
+	}
+  }
+
+  void Solver::setOuterAForScalarCPML()
+  {
+	/*
+	* Scalar CPML 外侧硬边界。
+	*
+	* 这里只设置 A^{n+1} 的最外层边界。
+	* PML 区本身负责吸收，最外层置零只是为了关闭计算域。
+	*
+	* 注意：
+	*   x/y 边界是每个 MPI rank 都有的横向物理边界；
+	*   z 边界只有 rank 0 的 k=0 和最后一个 rank 的 k=np_-1
+	*   是全局物理边界。
+	*/
+
+	const FieldVector<Double> zero(0.0);
+
+	/*
+	* x = xmin / xmax
+	*
+	* 只处理本 rank 的有效 z 层 k=1...np_-2。
+	* 不动中间 MPI rank 的 z ghost 层。
+	*/
+	for (int k = 1; k < np_ - 1; ++k)
+	{
+		for (int j = 0; j < N1_; ++j)
+		{
+		long mLeft  = N1N0_ * k + j;
+		long mRight = N1N0_ * k + N1_ * (N0_ - 1) + j;
+
+		(*anp1_)[mLeft]  = zero;
+		(*anp1_)[mRight] = zero;
+		}
+	}
+
+	/*
+	* y = ymin / ymax
+	*
+	* 同样只处理本 rank 的有效 z 层。
+	*/
+	for (int k = 1; k < np_ - 1; ++k)
+	{
+		for (int i = 0; i < N0_; ++i)
+		{
+		long mLower = N1N0_ * k + N1_ * i;
+		long mUpper = N1N0_ * k + N1_ * i + (N1_ - 1);
+
+		(*anp1_)[mLower] = zero;
+		(*anp1_)[mUpper] = zero;
+		}
+	}
+
+	/*
+	* z = zmin
+	*
+	* 只有 rank 0 的 k=0 是全局左边界。
+	*/
+	if (rank_ == 0)
+	{
+		int k = 0;
+
+		for (int i = 0; i < N0_; ++i)
+		{
+		for (int j = 0; j < N1_; ++j)
+		{
+			long m = N1N0_ * k + N1_ * i + j;
+			(*anp1_)[m] = zero;
+		}
+		}
+	}
+
+	/*
+	* z = zmax
+	*
+	* 只有最后一个 rank 的 k=np_-1 是全局右边界。
+	*/
+	if (rank_ == size_ - 1)
+	{
+		int k = np_ - 1;
+
+		for (int i = 0; i < N0_; ++i)
+		{
+		for (int j = 0; j < N1_; ++j)
+		{
+			long m = N1N0_ * k + N1_ * i + j;
+			(*anp1_)[m] = zero;
+		}
+		}
+	}
+  }
+
+  Double Solver::peekScalarCPMLDxMinusG(int i, int j, int k, int c, Double dxm_G)
+  {
+	int sx = spml_.xSlot_[i];
+
+	if (sx < 0)
+		return dxm_G;
+
+	long q = spml_.idxX(sx, j, k);
+
+	Double psiNew =
+		spml_.bx_[i] * spml_.psi_xm_G_[q][c]
+		+ spml_.ax_[i] * dxm_G;
+
+	return dxm_G / spml_.kx_[i] + psiNew;
+  }
+
+
+  Double Solver::peekScalarCPMLDyMinusG(int i, int j, int k, int c, Double dym_G)
+  {
+	int sy = spml_.ySlot_[j];
+
+	if (sy < 0)
+		return dym_G;
+
+	long q = spml_.idxY(i, sy, k);
+
+	Double psiNew =
+		spml_.by_[j] * spml_.psi_ym_G_[q][c]
+		+ spml_.ay_[j] * dym_G;
+
+	return dym_G / spml_.ky_[j] + psiNew;
+  }
+
+
+  Double Solver::peekScalarCPMLDzMinusG(int i, int j, int k, int c, Double dzm_G)
+  {
+	int sz = spml_.zSlot_[k];
+
+	if (sz < 0)
+		return dzm_G;
+
+	long q = spml_.idxZ(i, j, sz);
+
+	Double psiNew =
+		spml_.bz_[k] * spml_.psi_zm_G_[q][c]
+		+ spml_.az_[k] * dzm_G;
+
+	return dzm_G / spml_.kz_[k] + psiNew;
+  }
+
+  void Solver::diagnoseScalarCPMLRegions()
+  {
+	static int diagStep = 0;
+	diagStep++;
+
+	if (diagStep % 50 != 0)
+		return;
+
+	enum
+	{
+		REG_DEEP_PHYS = 0,
+		REG_INTERFACE = 1,
+		REG_PML       = 2,
+		NREG          = 3
+	};
+
+	const char* regName[NREG] =
+	{
+		"DEEP_PHYS",
+		"INTERFACE",
+		"PML"
+	};
+
+	/*
+	* 如果 en_/bn_ 已经在当前步有效，可以设 true。
+	* 如果不确定，先设 false，避免用 stale E/B 误判。
+	*/
+	const bool checkPoyntingFromExistingEB = false;
+
+	const int mainPol = 0;  // 0 = Ex 主偏振
+
+	const Double srcCoef = uf_.a[4];
+
+	Double localMaxOldSpatial[NREG]  = {0.0, 0.0, 0.0};
+	Double localMaxNewSpatial[NREG]  = {0.0, 0.0, 0.0};
+	Double localMaxDiffSpatial[NREG] = {0.0, 0.0, 0.0};
+
+	Double localMaxOldFull[NREG]  = {0.0, 0.0, 0.0};
+	Double localMaxNewFull[NREG]  = {0.0, 0.0, 0.0};
+	Double localMaxDiffFull[NREG] = {0.0, 0.0, 0.0};
+
+	Double localSumAbsOldSpatial[NREG]  = {0.0, 0.0, 0.0};
+	Double localSumAbsNewSpatial[NREG]  = {0.0, 0.0, 0.0};
+	Double localSumAbsDiffSpatial[NREG] = {0.0, 0.0, 0.0};
+
+	/*
+	* 按分量统计 new operator 的强度：
+	* comp 0: Ax
+	* comp 1: Ay
+	* comp 2: Az
+	*/
+	Double localSumAbsNewComp[NREG * 3];
+
+	for (int n = 0; n < NREG * 3; ++n)
+		localSumAbsNewComp[n] = 0.0;
+
+	/*
+	* Poynting leakage:
+	*   main  = |Ex By|
+	*   cross = |Ey Bx|
+	*/
+	Double localSumPMain[NREG]  = {0.0, 0.0, 0.0};
+	Double localSumPCross[NREG] = {0.0, 0.0, 0.0};
+
+	unsigned long localCount[NREG] = {0, 0, 0};
+
+	int localMaxI[NREG] = {-1, -1, -1};
+	int localMaxJ[NREG] = {-1, -1, -1};
+	int localMaxK[NREG] = {-1, -1, -1};
+	int localMaxC[NREG] = {-1, -1, -1};
+
+	Double localOldAtMax[NREG] = {0.0, 0.0, 0.0};
+	Double localNewAtMax[NREG] = {0.0, 0.0, 0.0};
+	Double localLxAtMax[NREG]  = {0.0, 0.0, 0.0};
+	Double localLyAtMax[NREG]  = {0.0, 0.0, 0.0};
+	Double localLzAtMax[NREG]  = {0.0, 0.0, 0.0};
+
+	/*
+	* 循环范围保持和 interior update 一致。
+	*/
+	for (unsigned i = 1; i < uf_.N0m1; ++i)
+	{
+		for (unsigned j = 1; j < uf_.N1m1; ++j)
+		{
+		for (unsigned k = 1; k < uf_.npm1; ++k)
+		{
+			long m = N1N0_ * k + N1_ * i + j;
+
+			bool centerPML =
+				(spml_.xSlot_[i] >= 0) ||
+				(spml_.ySlot_[j] >= 0) ||
+				(spml_.zSlot_[k] >= 0);
+
+			bool stencilTouchesPML =
+				(spml_.xSlot_[i]     >= 0) ||
+				(spml_.xSlot_[i - 1] >= 0) ||
+				(spml_.xSlot_[i + 1] >= 0) ||
+				(spml_.ySlot_[j]     >= 0) ||
+				(spml_.ySlot_[j - 1] >= 0) ||
+				(spml_.ySlot_[j + 1] >= 0) ||
+				(spml_.zSlot_[k]     >= 0) ||
+				(spml_.zSlot_[k - 1] >= 0) ||
+				(spml_.zSlot_[k + 1] >= 0);
+
+			int reg;
+
+			if (centerPML)
+			reg = REG_PML;
+			else if (stencilTouchesPML)
+			reg = REG_INTERFACE;
+			else
+			reg = REG_DEEP_PHYS;
+
+			localCount[reg]++;
+
+			/*
+			* 这里使用和 actual scalar CPML update 一致的第二层 D-，
+			* 但用 peek 函数，不更新 psi。
+			*/
+			for (int c = 0; c < 3; ++c)
+			{
+			Double dxm_G =
+				spml_.invDx_
+				* (spml_.gx_[m][c] - spml_.gx_[m - N1_][c]);
+
+			Double dym_G =
+				spml_.invDy_
+				* (spml_.gy_[m][c] - spml_.gy_[m - 1][c]);
+
+			Double dzm_G =
+				spml_.invDz_
+				* (spml_.gz_[m][c] - spml_.gz_[m - N1N0_][c]);
+
+			Double Lx =
+				spml_.sx_
+				* peekScalarCPMLDxMinusG(i, j, k, c, dxm_G);
+
+			Double Ly =
+				spml_.sy_
+				* peekScalarCPMLDyMinusG(i, j, k, c, dym_G);
+
+			Double Lz =
+				spml_.sz_
+				* peekScalarCPMLDzMinusG(i, j, k, c, dzm_G);
+
+			Double newSpatial = Lx + Ly + Lz;
+
+			/*
+			* 原始 FD 空间项：
+			*
+			* old update:
+			*   A^{n+1}
+			* = a0 A^n - A^{n-1}
+			* + a1(A_{+x}+A_{-x})
+			* + a2(A_{+y}+A_{-y})
+			* + a3(A_{+z}+A_{-z})
+			* + a4 J
+			*
+			* 写成：
+			*   A^{n+1}
+			* = 2 A^n - A^{n-1}
+			* + oldSpatial
+			* + a4 J
+			*/
+			Double oldSpatial =
+				(uf_.a[0] - 2.0) * (*an_)[m][c]
+				+ uf_.a[1] * ((*an_)[m + N1_][c]   + (*an_)[m - N1_][c])
+				+ uf_.a[2] * ((*an_)[m + 1][c]     + (*an_)[m - 1][c])
+				+ uf_.a[3] * ((*an_)[m + N1N0_][c] + (*an_)[m - N1N0_][c]);
+
+			/*
+			* full update 只作为辅助诊断。
+			* 这里使用相同 J，因此 full diff 本质仍然来自 spatial diff。
+			*/
+			Double Jc = (*anp1_)[m][c];
+
+			Double oldFull =
+				2.0 * (*an_)[m][c]
+				-       (*anm1_)[m][c]
+				+ oldSpatial
+				+ srcCoef * Jc;
+
+			Double newFull =
+				2.0 * (*an_)[m][c]
+				-       (*anm1_)[m][c]
+				+ newSpatial
+				+ srcCoef * Jc;
+
+			Double diffSpatial = fabs(newSpatial - oldSpatial);
+			Double diffFull    = fabs(newFull - oldFull);
+
+			Double absOldSpatial = fabs(oldSpatial);
+			Double absNewSpatial = fabs(newSpatial);
+
+			if (absOldSpatial > localMaxOldSpatial[reg])
+				localMaxOldSpatial[reg] = absOldSpatial;
+
+			if (absNewSpatial > localMaxNewSpatial[reg])
+				localMaxNewSpatial[reg] = absNewSpatial;
+
+			if (diffSpatial > localMaxDiffSpatial[reg])
+			{
+				localMaxDiffSpatial[reg] = diffSpatial;
+
+				localMaxI[reg] = (int)i;
+				localMaxJ[reg] = (int)j;
+				localMaxK[reg] = (int)k;
+				localMaxC[reg] = c;
+
+				localOldAtMax[reg] = oldSpatial;
+				localNewAtMax[reg] = newSpatial;
+				localLxAtMax[reg]  = Lx;
+				localLyAtMax[reg]  = Ly;
+				localLzAtMax[reg]  = Lz;
+			}
+
+			if (fabs(oldFull) > localMaxOldFull[reg])
+				localMaxOldFull[reg] = fabs(oldFull);
+
+			if (fabs(newFull) > localMaxNewFull[reg])
+				localMaxNewFull[reg] = fabs(newFull);
+
+			if (diffFull > localMaxDiffFull[reg])
+				localMaxDiffFull[reg] = diffFull;
+
+			localSumAbsOldSpatial[reg]  += absOldSpatial;
+			localSumAbsNewSpatial[reg]  += absNewSpatial;
+			localSumAbsDiffSpatial[reg] += diffSpatial;
+
+			localSumAbsNewComp[reg * 3 + c] += absNewSpatial;
+			}
+
+			/*
+			* 可选：使用当前 en_/bn_ 统计 Poynting 偏振泄漏。
+			* 前提是 en_/bn_ 在当前 step 已经被正确更新。
+			*/
+			if (checkPoyntingFromExistingEB)
+			{
+			Double mainTerm =
+				fabs(en_[m][0] * bn_[m][1]);   // |Ex By|
+
+			Double crossTerm =
+				fabs(en_[m][1] * bn_[m][0]);   // |Ey Bx|
+
+			localSumPMain[reg]  += mainTerm;
+			localSumPCross[reg] += crossTerm;
+			}
+		}
+		}
+	}
+
+	Double globalMaxOldSpatial[NREG];
+	Double globalMaxNewSpatial[NREG];
+	Double globalMaxDiffSpatial[NREG];
+
+	Double globalMaxOldFull[NREG];
+	Double globalMaxNewFull[NREG];
+	Double globalMaxDiffFull[NREG];
+
+	Double globalSumAbsOldSpatial[NREG];
+	Double globalSumAbsNewSpatial[NREG];
+	Double globalSumAbsDiffSpatial[NREG];
+
+	Double globalSumAbsNewComp[NREG * 3];
+
+	Double globalSumPMain[NREG];
+	Double globalSumPCross[NREG];
+
+	unsigned long globalCount[NREG];
+
+	MPI_Allreduce(localMaxOldSpatial, globalMaxOldSpatial,
+					NREG, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+	MPI_Allreduce(localMaxNewSpatial, globalMaxNewSpatial,
+					NREG, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+	MPI_Allreduce(localMaxDiffSpatial, globalMaxDiffSpatial,
+					NREG, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+	MPI_Allreduce(localMaxOldFull, globalMaxOldFull,
+					NREG, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+	MPI_Allreduce(localMaxNewFull, globalMaxNewFull,
+					NREG, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+	MPI_Allreduce(localMaxDiffFull, globalMaxDiffFull,
+					NREG, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+	MPI_Allreduce(localSumAbsOldSpatial, globalSumAbsOldSpatial,
+					NREG, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+	MPI_Allreduce(localSumAbsNewSpatial, globalSumAbsNewSpatial,
+					NREG, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+	MPI_Allreduce(localSumAbsDiffSpatial, globalSumAbsDiffSpatial,
+					NREG, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+	MPI_Allreduce(localSumAbsNewComp, globalSumAbsNewComp,
+					NREG * 3, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+	MPI_Allreduce(localSumPMain, globalSumPMain,
+					NREG, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+	MPI_Allreduce(localSumPCross, globalSumPCross,
+					NREG, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+	MPI_Allreduce(localCount, globalCount,
+					NREG, MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD);
+
+	if (rank_ == 0)
+	{
+		std::cout
+		<< "ScalarCPML region diag step=" << diagStep
+		<< std::endl;
+
+		std::cout
+		<< "  coeff:"
+		<< " a0=" << uf_.a[0]
+		<< " a1=" << uf_.a[1]
+		<< " a2=" << uf_.a[2]
+		<< " a3=" << uf_.a[3]
+		<< " a4=" << uf_.a[4]
+		<< std::endl;
+
+		std::cout
+		<< "  weighted check:"
+		<< " sxInvDx^2=" << spml_.sxInvDx_ * spml_.sxInvDx_
+		<< " syInvDy^2=" << spml_.syInvDy_ * spml_.syInvDy_
+		<< " szInvDz^2=" << spml_.szInvDz_ * spml_.szInvDz_
+		<< std::endl;
+
+		for (int reg = 0; reg < NREG; ++reg)
+		{
+		Double relMaxSpatial =
+			globalMaxDiffSpatial[reg]
+			/ (globalMaxOldSpatial[reg] + 1.0e-300);
+
+		Double relSumSpatial =
+			globalSumAbsDiffSpatial[reg]
+			/ (globalSumAbsOldSpatial[reg] + 1.0e-300);
+
+		Double relMaxFull =
+			globalMaxDiffFull[reg]
+			/ (globalMaxOldFull[reg] + 1.0e-300);
+
+		Double newX = globalSumAbsNewComp[reg * 3 + 0];
+		Double newY = globalSumAbsNewComp[reg * 3 + 1];
+		Double newZ = globalSumAbsNewComp[reg * 3 + 2];
+
+		Double nonMain =
+			(mainPol == 0) ? (newY + newZ) :
+			(mainPol == 1) ? (newX + newZ) :
+							(newX + newY);
+
+		Double mainVal =
+			globalSumAbsNewComp[reg * 3 + mainPol];
+
+		Double operatorPolarLeak =
+			nonMain / (mainVal + 1.0e-300);
+
+		std::cout
+			<< "  [" << regName[reg] << "] count=" << globalCount[reg]
+			<< std::endl;
+
+		std::cout
+			<< "  [" << regName[reg] << "] spatial max:"
+			<< " max|old|=" << globalMaxOldSpatial[reg]
+			<< " max|new|=" << globalMaxNewSpatial[reg]
+			<< " max|new-old|=" << globalMaxDiffSpatial[reg]
+			<< " rel=" << relMaxSpatial
+			<< std::endl;
+
+		std::cout
+			<< "  [" << regName[reg] << "] spatial sum:"
+			<< " sum|old|=" << globalSumAbsOldSpatial[reg]
+			<< " sum|new|=" << globalSumAbsNewSpatial[reg]
+			<< " sum|new-old|=" << globalSumAbsDiffSpatial[reg]
+			<< " rel=" << relSumSpatial
+			<< std::endl;
+
+		std::cout
+			<< "  [" << regName[reg] << "] full update:"
+			<< " max|old|=" << globalMaxOldFull[reg]
+			<< " max|new|=" << globalMaxNewFull[reg]
+			<< " max|new-old|=" << globalMaxDiffFull[reg]
+			<< " rel=" << relMaxFull
+			<< std::endl;
+
+		std::cout
+			<< "  [" << regName[reg] << "] operator component sums:"
+			<< " |LxComp|=" << newX
+			<< " |LyComp|=" << newY
+			<< " |LzComp|=" << newZ
+			<< " nonMain/main=" << operatorPolarLeak
+			<< std::endl;
+
+		if (checkPoyntingFromExistingEB)
+		{
+			Double RP =
+				globalSumPCross[reg]
+			/ (globalSumPMain[reg] + 1.0e-300);
+
+			std::cout
+			<< "  [" << regName[reg] << "] Poynting leakage:"
+			<< " sum|ExBy|=" << globalSumPMain[reg]
+			<< " sum|EyBx|=" << globalSumPCross[reg]
+			<< " R_P=" << RP
+			<< std::endl;
+		}
+		}
+	}
+
+	/*
+	* 打印每个区域最大 spatial diff 所在位置。
+	*/
+	for (int reg = 0; reg < NREG; ++reg)
+	{
+		if (fabs(localMaxDiffSpatial[reg] - globalMaxDiffSpatial[reg])
+			<= 1.0e-30 * (globalMaxDiffSpatial[reg] + 1.0))
+		{
+		std::cout
+			<< "  [" << regName[reg] << "] max spatial diff location:"
+			<< " rank=" << rank_
+			<< " i=" << localMaxI[reg]
+			<< " j=" << localMaxJ[reg]
+			<< " k=" << localMaxK[reg]
+			<< " c=" << localMaxC[reg]
+			<< " oldSpatial=" << localOldAtMax[reg]
+			<< " newSpatial=" << localNewAtMax[reg]
+			<< " diff=" << localMaxDiffSpatial[reg]
+			<< " Lx=" << localLxAtMax[reg]
+			<< " Ly=" << localLyAtMax[reg]
+			<< " Lz=" << localLzAtMax[reg]
+			<< std::endl;
 		}
 	}
   }

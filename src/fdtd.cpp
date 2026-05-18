@@ -329,6 +329,10 @@ namespace MITHRA
 		if (spml_.enabled_)
 		{
 			computeScalarCPMLFirstDerivatives();
+
+			diagnoseScalarCPMLRegions();
+
+			advanceInteriorScalarCPMLFD();
 		}
 		else
 		{
@@ -424,6 +428,7 @@ namespace MITHRA
 		(mesh_.solver_ == FD && spml_.enabled_);
 	if (useScalarCPMLFD)
 	{
+		setOuterAForScalarCPML();
 	}
 	else
 	{
@@ -1664,6 +1669,139 @@ namespace MITHRA
 
     /*关闭文件。*/
     (*pf_.file).close();
+  }
+
+  void FdTd::advanceInteriorScalarCPMLFD()
+  {
+	/*
+	* Scalar component-wise CPML:
+	*
+	*   gx = sx * D_x^+_pml A
+	*   gy = sy * D_y^+_pml A
+	*   gz = sz * D_z^+_pml A
+	*
+	*   Lx = sx * D_x^-_pml gx
+	*   Ly = sy * D_y^-_pml gy
+	*   Lz = sz * D_z^-_pml gz
+	*
+	*   A^{n+1} = 2 A^n - A^{n-1} + Lx + Ly + Lz + a4 J
+	*/
+
+	const Double srcCoef = uf_.a[4];
+
+	static bool printed = false;
+
+	if (!printed && rank_ == 0)
+	{
+		std::cout
+		<< "ScalarCPML FD update:"
+		<< " dx=" << uf_.dx
+		<< " dy=" << uf_.dy
+		<< " dz=" << uf_.dz
+		<< " a1=" << uf_.a[1]
+		<< " a2=" << uf_.a[2]
+		<< " a3=" << uf_.a[3]
+		<< " sxInvDx^2=" << spml_.sxInvDx_ * spml_.sxInvDx_
+		<< " syInvDy^2=" << spml_.syInvDy_ * spml_.syInvDy_
+		<< " szInvDz^2=" << spml_.szInvDz_ * spml_.szInvDz_
+		<< " srcCoef=" << srcCoef
+		<< std::endl;
+
+		printed = true;
+	}
+
+	for (unsigned i = 1; i < uf_.N0m1; i++)
+	{
+		for (unsigned j = 1; j < uf_.N1m1; j++)
+		{
+		for (unsigned k = 1; k < uf_.npm1; k++)
+		{
+			long m = N1N0_ * k + N1_ * i + j;
+
+			/*
+			* anp1_ 此时仍然存的是 J。
+			* 必须先读出 J，再覆盖 anp1_ 为 A^{n+1}。
+			*/
+			FieldVector<Double> J;
+			J = (*anp1_)[m];
+
+			/*
+			* PML/source mask 区域不允许 J 继续驱动 A。
+			* 这部分沿用你之前的逻辑，但把 ccpml_ 改成 spml_。
+			*/
+			const int sourceGuard = 1;
+
+			bool inSourceMaskX =
+				(i <  (unsigned)(spml_.px_ + sourceGuard)) ||
+				(i >= N0_ - (unsigned)(spml_.px_ + sourceGuard));
+
+			bool inSourceMaskY =
+				(j <  (unsigned)(spml_.py_ + sourceGuard)) ||
+				(j >= N1_ - (unsigned)(spml_.py_ + sourceGuard));
+
+			bool inSourceMaskZ = false;
+
+			if (rank_ == 0)
+			{
+			inSourceMaskZ =
+				inSourceMaskZ ||
+				(k < (unsigned)(spml_.pz_ + sourceGuard));
+			}
+
+			if (rank_ == size_ - 1)
+			{
+			inSourceMaskZ =
+				inSourceMaskZ ||
+				(k >= np_ - (unsigned)(spml_.pz_ + sourceGuard));
+			}
+
+			if (inSourceMaskX || inSourceMaskY || inSourceMaskZ)
+			{
+			J = FieldVector<Double>(0.0);
+			}
+
+			for (int c = 0; c < 3; ++c)
+			{
+			/*
+			* 第二层 D^-：
+			*
+			* gx[m] stores sx * D_x^+_pml A at x-face m.
+			* D_x^- gx = (gx[m] - gx[m-N1_]) / dx.
+			*/
+
+			Double dxm_G =
+				spml_.invDx_
+				* (spml_.gx_[m][c] - spml_.gx_[m - N1_][c]);
+
+			Double dym_G =
+				spml_.invDy_
+				* (spml_.gy_[m][c] - spml_.gy_[m - 1][c]);
+
+			Double dzm_G =
+				spml_.invDz_
+				* (spml_.gz_[m][c] - spml_.gz_[m - N1N0_][c]);
+
+			Double Lx =
+				spml_.sx_
+				* cpmlDxMinusG(i, j, k, c, dxm_G);
+
+			Double Ly =
+				spml_.sy_
+				* cpmlDyMinusG(i, j, k, c, dym_G);
+
+			Double Lz =
+				spml_.sz_
+				* cpmlDzMinusG(i, j, k, c, dzm_G);
+
+			(*anp1_)[m][c] =
+				2.0 * (*an_)[m][c]
+				-       (*anm1_)[m][c]
+				+       Lx + Ly + Lz
+				+       srcCoef * J[c];
+			}
+		}
+		}
+	}
   }
 
 

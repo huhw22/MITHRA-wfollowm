@@ -64,6 +64,8 @@ namespace MITHRA
     /*将字段的总概要文件写入给定的文件名中。*/
     void fieldProfile ();
 
+    void advanceInteriorScalarCPMLFD();
+
 
   };
 }
