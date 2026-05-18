@@ -124,63 +124,6 @@ namespace MITHRA
 					 P v6 , P v61, P v62,
 					 P v7 , P v8 , P v9 );
 
-    /* x/y-CPML: 矢势，标准有限差分 */
-    void advanceMagneticPotentialFD_CPMLXY(
-        Q v0 , P v1 , P v2 ,
-        P v3 , P v31, P v32,
-        P v4 , P v41, P v42,
-        P v5 , P v51, P v52,
-        P v6 , P v61, P v62,
-        P v7 , P v8 , P v9,
-
-        Q psiXnp1, P psiXn_c, P psiXn_p, P psiXn_m,
-        Q psiYnp1, P psiYn_c, P psiYn_p, P psiYn_m,
-
-        Double bx, Double cx, Double kappaX,
-        Double by, Double cy, Double kappaY,
-        Double dx, Double dy);
-
-    /* x/y-CPML: 矢势，非标准有限差分 */
-    void advanceMagneticPotentialNSFD_CPML(
-      Q v0 , P v1 , P v2 ,
-      P v3 , P v31, P v32,
-      P v4 , P v41, P v42,
-      P v5 , P v51, P v52,
-      P v6 , P v61, P v62,
-      P v7 , P v8 , P v9,
-      Double eta, Double dt);
-
-    /* x/y-CPML: 标量势，标准有限差分 */
-    void advanceScalarPotentialFD_CPMLXY(
-        Q v0 , P v1 , P v2 ,
-        P v3 , P v31, P v32,
-        P v4 , P v41, P v42,
-        P v5 , P v51, P v52,
-        P v6 , P v61, P v62,
-        P v7 , P v8 , P v9,
-
-        Q psiXnp1, P psiXn_c, P psiXn_p, P psiXn_m,
-        Q psiYnp1, P psiYn_c, P psiYn_p, P psiYn_m,
-
-        Double bx, Double cx, Double kappaX,
-        Double by, Double cy, Double kappaY,
-        Double dx, Double dy);
-
-    /* x/y-CPML: 标量势，非标准有限差分 */
-    void advanceScalarPotentialNSFD_CPMLXY(
-        Q v0 , P v1 , P v2 ,
-        P v3 , P v31, P v32,
-        P v4 , P v41, P v42,
-        P v5 , P v51, P v52,
-        P v6 , P v61, P v62,
-        P v7 , P v8 , P v9,
-
-        Q psiXnp1, P psiXn_c, P psiXn_p, P psiXn_m,
-        Q psiYnp1, P psiYn_c, P psiYn_p, P psiYn_m,
-
-        Double bx, Double cx, Double kappaX,
-        Double by, Double cy, Double kappaY,
-        Double dx, Double dy);
 
     void advanceBoundaryF 		(Q v0 , P v1 , P v2 ,
 					 P v3 , P v4 , P v5 ,
@@ -498,114 +441,226 @@ namespace MITHRA
     std::vector<std::string>		fileNames;
   };
 
-  /*CPML吸收结构体*/
-  struct CPMLXY
+  struct ScalarCPML
   {
-      bool enabled = false;
-      bool phiMemoryEnabled = false;
+    /*
+    * 开关与厚度
+    */
+    bool enabled_ = false;
 
-      unsigned nx = 0;
-      unsigned ny = 0;
-      unsigned nz = 0;
+    int px_ = 0;
+    int py_ = 0;
+    int pz_ = 0;
 
-      Double Rerr = 1.0e-8;
-      Double m = 2.0;
+    /*
+    * 网格尺寸
+    *
+    * n0_ : x direction grid size
+    * n1_ : y direction grid size
+    * np_ : local z direction grid size on this rank
+    */
+    int n0_ = 0;
+    int n1_ = 0;
+    int np_ = 0;
 
-      std::vector<Double> sigmaX;
-      std::vector<Double> sigmaY;
-      std::vector<Double> sigmaZ;
-  };
-
-  /* curl-curl 形式 A 推进用的 CPML 数据 */
-  struct CurlCurlCPML
-  {
-    bool enabled_;
-
-    /* PML 厚度 */
-    int px_;
-    int py_;
-    int pz_;
-
-    /* 局部网格尺寸 */
-    int nx_;
-    int ny_;
-    int nz_;
-
-    /* 非 PML 区域为 -1 */
+    /*
+    * slot arrays
+    *
+    * xSlot_[i] >= 0 means x-index i is inside x-PML.
+    * ySlot_[j] >= 0 means y-index j is inside y-PML.
+    * zSlot_[k] >= 0 means local z-index k is inside global z-PML.
+    *
+    * slot value is the compact index used for memory arrays.
+    */
     std::vector<int> xSlot_;
     std::vector<int> ySlot_;
     std::vector<int> zSlot_;
 
-    int nxSlot_;
-    int nySlot_;
-    int nzSlot_;
+    int nxSlot_ = 0;
+    int nySlot_ = 0;
+    int nzSlot_ = 0;
 
-    /* 一维 CPML 系数 */
-    std::vector<Double> kx_, ax_, bx_;
-    std::vector<Double> ky_, ay_, by_;
-    std::vector<Double> kz_, az_, bz_;
+    /*
+    * CPML coefficients
+    *
+    * D f = df / kappa + psi
+    * psi_new = b * psi_old + a * df
+    */
+    std::vector<Double> kx_;
+    std::vector<Double> ky_;
+    std::vector<Double> kz_;
 
-    /* x 方向 slab: D_x By, D_x Bz */
-    std::vector<Double> psi_x_By_;
-    std::vector<Double> psi_x_Bz_;
+    std::vector<Double> ax_;
+    std::vector<Double> ay_;
+    std::vector<Double> az_;
 
-    /* y 方向 slab: D_y Bx, D_y Bz */
-    std::vector<Double> psi_y_Bx_;
-    std::vector<Double> psi_y_Bz_;
+    std::vector<Double> bx_;
+    std::vector<Double> by_;
+    std::vector<Double> bz_;
 
-    /* z 方向 slab: D_z Bx, D_z By */
-    std::vector<Double> psi_z_Bx_;
-    std::vector<Double> psi_z_By_;
+    /*
+    * Directional FD coefficients
+    *
+    * Original FD:
+    *   a1 * (A_{i+1} - 2A_i + A_{i-1})
+    * + a2 * (A_{j+1} - 2A_j + A_{j-1})
+    * + a3 * (A_{k+1} - 2A_k + A_{k-1})
+    *
+    * Scalar CPML uses:
+    *   sx * D_x^- ( sx * D_x^+ A )
+    *
+    * Therefore:
+    *   (sx / dx)^2 = a1
+    *   (sy / dy)^2 = a2
+    *   (sz / dz)^2 = a3
+    */
+    Double Cx_ = 0.0;
+    Double Cy_ = 0.0;
+    Double Cz_ = 0.0;
 
-    /* div_phi A 通道：q = D_x A_x + D_y A_y + D_z A_z */
-    std::vector<Double> psi_phi_x_Ax_;
-    std::vector<Double> psi_phi_y_Ay_;
-    std::vector<Double> psi_phi_z_Az_;
+    Double sx_ = 0.0;
+    Double sy_ = 0.0;
+    Double sz_ = 0.0;
 
-    /* grad_A q 通道：D_x q, D_y q, D_z q */
-    std::vector<Double> psi_A_x_q_;
-    std::vector<Double> psi_A_y_q_;
-    std::vector<Double> psi_A_z_q_;
+    Double invDx_ = 0.0;
+    Double invDy_ = 0.0;
+    Double invDz_ = 0.0;
 
-    Double Cx_, Cy_, Cz_;
-    Double sx_, sy_, sz_;
+    Double sxInvDx_ = 0.0;
+    Double syInvDy_ = 0.0;
+    Double szInvDz_ = 0.0;
 
-    Double invDx_, invDy_, invDz_;
+    /*
+    * First-layer derivative buffers:
+    *
+    * gx_ = sx * D_x^+_pml A
+    * gy_ = sy * D_y^+_pml A
+    * gz_ = sz * D_z^+_pml A
+    *
+    * Each one is a 3-component vector field.
+    */
+    std::vector<FieldVector<Double>> gx_;
+    std::vector<FieldVector<Double>> gy_;
+    std::vector<FieldVector<Double>> gz_;
 
-    Double sxInvDx_, syInvDy_, szInvDz_;
+    /*
+    * CPML memories for scalar second-order operator.
+    *
+    * xp_A : x plus  derivative acting on A
+    * xm_G : x minus derivative acting on gx
+    *
+    * yp_A : y plus  derivative acting on A
+    * ym_G : y minus derivative acting on gy
+    *
+    * zp_A : z plus  derivative acting on A
+    * zm_G : z minus derivative acting on gz
+    *
+    * Each memory entry is FieldVector<Double>, so Ax/Ay/Az are stored
+    * independently but share the same spatial slot.
+    */
+    std::vector<FieldVector<Double>> psi_xp_A_;
+    std::vector<FieldVector<Double>> psi_xm_G_;
 
-    CurlCurlCPML()
+    std::vector<FieldVector<Double>> psi_yp_A_;
+    std::vector<FieldVector<Double>> psi_ym_G_;
+
+    std::vector<FieldVector<Double>> psi_zp_A_;
+    std::vector<FieldVector<Double>> psi_zm_G_;
+
+    /*
+    * Index helpers.
+    *
+    * x-memory layout:
+    *   [k][j][sx]
+    *
+    * y-memory layout:
+    *   [k][i][sy]
+    *
+    * z-memory layout:
+    *   [sz][i][j]
+    */
+    inline long idxX(int sx, int j, int k) const
     {
-      enabled_ = true;
-
-      px_ = 0;
-      py_ = 0;
-      pz_ = 0;
-
-      nx_ = 0;
-      ny_ = 0;
-      nz_ = 0;
-
-      nxSlot_ = 0;
-      nySlot_ = 0;
-      nzSlot_ = 0;
+      return ((long)k * n1_ + j) * nxSlot_ + sx;
     }
 
-    long idxX(int sx, int j, int k) const
+    inline long idxY(int i, int sy, int k) const
     {
-      return ( (long)k * nxSlot_ + sx ) * ny_ + j;
+      return ((long)k * n0_ + i) * nySlot_ + sy;
     }
 
-    long idxY(int i, int sy, int k) const
+    inline long idxZ(int i, int j, int sz) const
     {
-      return ( (long)k * nx_ + i ) * nySlot_ + sy;
+      return ((long)sz * n0_ + i) * n1_ + j;
     }
 
-    long idxZ(int i, int j, int sz) const
+    inline long gridSize() const
     {
-      return ( (long)sz * nx_ + i ) * ny_ + j;
+      return (long)n0_ * n1_ * np_;
+    }
+
+    void clear()
+    {
+      enabled_ = false;
+
+      px_ = py_ = pz_ = 0;
+      n0_ = n1_ = np_ = 0;
+
+      nxSlot_ = nySlot_ = nzSlot_ = 0;
+
+      xSlot_.clear();
+      ySlot_.clear();
+      zSlot_.clear();
+
+      kx_.clear();
+      ky_.clear();
+      kz_.clear();
+
+      ax_.clear();
+      ay_.clear();
+      az_.clear();
+
+      bx_.clear();
+      by_.clear();
+      bz_.clear();
+
+      gx_.clear();
+      gy_.clear();
+      gz_.clear();
+
+      psi_xp_A_.clear();
+      psi_xm_G_.clear();
+
+      psi_yp_A_.clear();
+      psi_ym_G_.clear();
+
+      psi_zp_A_.clear();
+      psi_zm_G_.clear();
+
+      Cx_ = Cy_ = Cz_ = 0.0;
+      sx_ = sy_ = sz_ = 0.0;
+
+      invDx_ = invDy_ = invDz_ = 0.0;
+      sxInvDx_ = syInvDy_ = szInvDz_ = 0.0;
+    }
+
+    void resetMemories()
+    {
+      std::fill(gx_.begin(), gx_.end(), FieldVector<Double>(0.0));
+      std::fill(gy_.begin(), gy_.end(), FieldVector<Double>(0.0));
+      std::fill(gz_.begin(), gz_.end(), FieldVector<Double>(0.0));
+
+      std::fill(psi_xp_A_.begin(), psi_xp_A_.end(), FieldVector<Double>(0.0));
+      std::fill(psi_xm_G_.begin(), psi_xm_G_.end(), FieldVector<Double>(0.0));
+
+      std::fill(psi_yp_A_.begin(), psi_yp_A_.end(), FieldVector<Double>(0.0));
+      std::fill(psi_ym_G_.begin(), psi_ym_G_.end(), FieldVector<Double>(0.0));
+
+      std::fill(psi_zp_A_.begin(), psi_zp_A_.end(), FieldVector<Double>(0.0));
+      std::fill(psi_zm_G_.begin(), psi_zm_G_.end(), FieldVector<Double>(0.0));
     }
   };
+  
 }
 
 #endif

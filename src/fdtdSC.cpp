@@ -324,9 +324,8 @@ namespace MITHRA
 			m = N1N0_ * k + N1_ * i + j;
 			l = 3 * m;
 
-			const bool useCPML = cpmlXY_.enabled && !inPhysicalXY(i, j);
 
-			if (useCPML)
+			if (1)
 			{
 
 
@@ -360,9 +359,8 @@ namespace MITHRA
 			m = N1N0_ * k + N1_ * i + j;
 			l = 3 * m;
 
-			const bool useCPML = cpmlXY_.enabled && !inPhysicalXY(i, j);
 
-			if (useCPML)
+			if (1)
 			{
 
 			}
@@ -1105,8 +1103,6 @@ namespace MITHRA
 	MPI_Recv(uf_.bn+3*(np_-1)*N1N0_,	3*N1N0_,MPI_DOUBLE,rank_+1,msgtag8,MPI_COMM_WORLD,&status);
       }
 
-	/* 整个场步完成后，再把 CPML 记忆变量从 n+1 滚到 n */
-	if (cpmlXY_.enabled) shiftCPMLXY();
   }
 
   /******************************************************************************************************

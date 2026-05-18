@@ -575,15 +575,7 @@ namespace MITHRA
     /* 初始化问题的空间和时间网格。 */
     initializeMesh();
 
-	/*初始化CPML边界吸收框架*/
-	cpmlXY_.enabled = false;
-	cpmlXY_.nx = 16;
-	cpmlXY_.ny = 16;
-	cpmlXY_.nz = 32;
-	cpmlXY_.m = 1.0;
-	initializeCPMLXY();
-
-	initializeCurlCurlCPML();
+	initializeScalarCPML(true, 10, 10, 10);
 
     /* 将束团转换至实验室参考系，并针对 FEL 模拟对束团进行适配——即：添加散粒噪声、分布镜像宏粒子，并添加束团尾部。*/
     lorentzBoostBunch();
@@ -598,8 +590,7 @@ namespace MITHRA
     /* 初始化字段的更新数据。 */
     initializeField();
 
-	/*设置吸收层参数，依赖于field*/
-	setCurlCurlCPMLCoefficients();
+	setScalarCPMLCoefficients();
 
     /* 如果启用了采样功能，则初始化对该字段进行采样及保存所需的数据。 */
     if (seed_.sampling_)			initializeSeedSampling();
@@ -2466,1141 +2457,719 @@ namespace MITHRA
     return (v);
   }
 
-  	bool Solver::inXPML(unsigned int i) const
+  void Solver::initializeScalarCPML(bool enabled, int px, int py, int pz)
+  {
+	spml_.clear();
+
+	spml_.enabled_ = enabled;
+
+	spml_.px_ = px;
+	spml_.py_ = py;
+	spml_.pz_ = pz;
+
+	if (!spml_.enabled_)
 	{
-		return cpmlXY_.enabled &&
-			(i < cpmlXY_.nx || i >= N0_ - cpmlXY_.nx);
-	}
-
-	bool Solver::inYPML(unsigned int j) const
-	{
-		return cpmlXY_.enabled &&
-			(j < cpmlXY_.ny || j >= N1_ - cpmlXY_.ny);
-	}
-
-	bool Solver::inPhysicalXY(unsigned int i, unsigned int j) const
-	{
-		return !inXPML(i) && !inYPML(j);
-	}
-
-	void Solver::shiftCPMLXY()
-	{
-			// if (!cpmlXY_.enabled) return;
-
-			// cpmlXY_.psiXn_.swap(cpmlXY_.psiXnp1_);
-			// cpmlXY_.psiYn_.swap(cpmlXY_.psiYnp1_);
-
-			// if (mesh_.spaceCharge_)
-			// {
-			// 	cpmlXY_.psiPhiXn_.swap(cpmlXY_.psiPhiXnp1_);
-			// 	cpmlXY_.psiPhiYn_.swap(cpmlXY_.psiPhiYnp1_);
-			// }
-	}
-
-	void Solver::initializeCPMLXY()
-	{
-		auto clearAllCPMLXY = [&]()
-		{
-			cpmlXY_.sigmaX.clear();
-			cpmlXY_.sigmaY.clear();
-			cpmlXY_.sigmaZ.clear();
-			cpmlXY_.phiMemoryEnabled = false;
-		};
-
-		/* 如果没开吸收层，就全部清空并返回 */
-		if (!cpmlXY_.enabled)
-		{
-			clearAllCPMLXY();
-			return;
-		}
-
-		/* 这一步必须在 initializeMesh() 之后调用 */
-		if (N0_ == 0 || N1_ == 0 || np_ == 0)
-		{
-			printmessage(std::string(__FILE__), __LINE__,
-						std::string("CPMLXY error: mesh is not initialized yet."));
-			exit(1);
-		}
-
-		if (cpmlXY_.nx == 0 || cpmlXY_.ny == 0 || cpmlXY_.nz == 0)
-		{
-			printmessage(std::string(__FILE__), __LINE__,
-						std::string("CPMLXY error: nx, ny or nz is zero."));
-			exit(1);
-		}
-
-		if (2 * cpmlXY_.nx >= N0_ || 2 * cpmlXY_.ny >= N1_)
-		{
-			printmessage(std::string(__FILE__), __LINE__,
-						std::string("CPMLXY error: x/y layer thickness is too large for current mesh size."));
-			exit(1);
-		}
-
-		/* z 方向只在全局前后端加阻尼，所以这里只检查本地 slab 至少能容纳一些 z 层 */
-		if (cpmlXY_.nz >= np_)
-		{
-			printmessage(std::string(__FILE__), __LINE__,
-						std::string("CPMLXY error: nz is too large for local z-slab size."));
-			exit(1);
-		}
-
-		const Double dx   = mesh_.meshResolution_[0];
-		const Double dy   = mesh_.meshResolution_[1];
-		const Double dz   = mesh_.meshResolution_[2];
-		const Double dt   = mesh_.timeStep_;
-		const Double m    = static_cast<Double>(cpmlXY_.m);
-		const Double Rerr = cpmlXY_.Rerr;
-
-		if (Rerr <= 0.0 || Rerr >= 1.0)
-		{
-			printmessage(std::string(__FILE__), __LINE__,
-						std::string("CPMLXY error: Rerr must satisfy 0 < Rerr < 1."));
-			exit(1);
-		}
-
-		/* 先保留这个标志，后面做 SC 时还能继续用 */
-		cpmlXY_.phiMemoryEnabled = mesh_.spaceCharge_;
-
-		/* 只分配真正需要的阻尼 profile */
-		cpmlXY_.sigmaX.assign(N0_, 0.0);
-		cpmlXY_.sigmaY.assign(N1_, 0.0);
-		cpmlXY_.sigmaZ.assign(np_, 0.0);
-
-		const Double sxmax =
-			- (m + 1.0) * std::log(Rerr) / (2.0 * cpmlXY_.nx * dx);
-
-		const Double symax =
-			- (m + 1.0) * std::log(Rerr) / (2.0 * cpmlXY_.ny * dy);
-
-		const Double szmax =
-			- (m + 1.0) * std::log(Rerr) / (2.0 * cpmlXY_.nz * dz);
-
-		/* 先保留你现在的增强方式 */
-		const Double etaScaleX = 20.0;
-		const Double etaScaleY = 20.0;
-		const Double etaScaleZ = 20.0;
-
-		/* ---------- x profile ---------- */
-		for (unsigned int i = 0; i < N0_; ++i)
-		{
-			Double xi = 0.0;
-
-			if (i < cpmlXY_.nx)
-				xi = static_cast<Double>(cpmlXY_.nx - i) / static_cast<Double>(cpmlXY_.nx);
-			else if (i >= N0_ - cpmlXY_.nx)
-				xi = static_cast<Double>(i - (N0_ - cpmlXY_.nx - 1)) / static_cast<Double>(cpmlXY_.nx);
-
-			if (xi > 1.0) xi = 1.0;
-			if (xi < 0.0) xi = 0.0;
-
-			if (xi > 0.0)
-			{
-				const Double pm = std::pow(xi, m);
-				cpmlXY_.sigmaX[i] = etaScaleX * sxmax * pm;
-			}
-		}
-
-		/* ---------- y profile ---------- */
-		for (unsigned int j = 0; j < N1_; ++j)
-		{
-			Double xi = 0.0;
-
-			if (j < cpmlXY_.ny)
-				xi = static_cast<Double>(cpmlXY_.ny - j) / static_cast<Double>(cpmlXY_.ny);
-			else if (j >= N1_ - cpmlXY_.ny)
-				xi = static_cast<Double>(j - (N1_ - cpmlXY_.ny - 1)) / static_cast<Double>(cpmlXY_.ny);
-
-			if (xi > 1.0) xi = 1.0;
-			if (xi < 0.0) xi = 0.0;
-
-			if (xi > 0.0)
-			{
-				const Double pm = std::pow(xi, m);
-				cpmlXY_.sigmaY[j] = etaScaleY * symax * pm;
-			}
-		}
-
-		/* ---------- z profile ----------
-		只在全局前后端 rank 上加阻尼：
-		- rank_ == 0            : 前端若干层
-		- rank_ == size_ - 1    : 后端若干层
-		中间 rank 保持 sigmaZ = 0
-		*/
 		if (rank_ == 0)
 		{
-			const unsigned int nzFront = std::min(cpmlXY_.nz, static_cast<unsigned>(np_));
-			for (unsigned int k = 0; k < nzFront; ++k)
-			{
-				Double xi = static_cast<Double>(cpmlXY_.nz - k) / static_cast<Double>(cpmlXY_.nz);
-				if (xi > 1.0) xi = 1.0;
-				if (xi < 0.0) xi = 0.0;
-
-				const Double pm = std::pow(xi, m);
-				cpmlXY_.sigmaZ[k] = etaScaleZ * szmax * pm;
-			}
+		std::cout << "ScalarCPML disabled." << std::endl;
 		}
 
-		if (rank_ == size_ - 1)
-		{
-			const unsigned int kBegin = (np_ > cpmlXY_.nz) ? (np_ - cpmlXY_.nz) : 0;
-			for (unsigned int k = kBegin; k < static_cast<unsigned>(np_); ++k)
-			{
-				Double xi = static_cast<Double>(k - (np_ - cpmlXY_.nz - 1)) / static_cast<Double>(cpmlXY_.nz);
-				if (xi > 1.0) xi = 1.0;
-				if (xi < 0.0) xi = 0.0;
-
-				const Double pm = std::pow(xi, m);
-				const Double sigmaVal = etaScaleZ * szmax * pm;
-
-				/* 如果 size_ == 1，前后端可能重叠，取较大值即可 */
-				if (sigmaVal > cpmlXY_.sigmaZ[k]) cpmlXY_.sigmaZ[k] = sigmaVal;
-			}
-		}
-
-		Double maxSigmaX = 0.0;
-		Double maxSigmaY = 0.0;
-		Double maxSigmaZ = 0.0;
-
-		for (unsigned int i = 0; i < N0_; ++i)
-			if (cpmlXY_.sigmaX[i] > maxSigmaX) maxSigmaX = cpmlXY_.sigmaX[i];
-
-		for (unsigned int j = 0; j < N1_; ++j)
-			if (cpmlXY_.sigmaY[j] > maxSigmaY) maxSigmaY = cpmlXY_.sigmaY[j];
-
-		for (unsigned int k = 0; k < static_cast<unsigned>(np_); ++k)
-			if (cpmlXY_.sigmaZ[k] > maxSigmaZ) maxSigmaZ = cpmlXY_.sigmaZ[k];
-
-		const Double maxDampX = 0.5 * maxSigmaX * dt;
-		const Double maxDampY = 0.5 * maxSigmaY * dt;
-		const Double maxDampZ = 0.5 * maxSigmaZ * dt;
-
-		printmessage(std::string(__FILE__), __LINE__,
-					std::string("CPMLXY initialized: nx=") + stringify(cpmlXY_.nx) +
-					std::string(", ny=") + stringify(cpmlXY_.ny) +
-					std::string(", nz=") + stringify(cpmlXY_.nz) +
-					std::string(", dt=") + stringify(dt) +
-					std::string(", Nx=") + stringify(N0_) +
-					std::string(", Ny=") + stringify(N1_) +
-					std::string(", Nz=") + stringify(N2_) +
-					std::string(", maxSigmaX=") + stringify(maxSigmaX) +
-					std::string(", maxSigmaY=") + stringify(maxSigmaY) +
-					std::string(", maxSigmaZ=") + stringify(maxSigmaZ) +
-					std::string(", maxDampX=0.5*sigmaX*dt=") + stringify(maxDampX) +
-					std::string(", maxDampY=0.5*sigmaY*dt=") + stringify(maxDampY) +
-					std::string(", maxDampZ=0.5*sigmaZ*dt=") + stringify(maxDampZ) +
-					std::string(", phiMemory=") + stringify(cpmlXY_.phiMemoryEnabled));
+		return;
 	}
 
-	void Solver::initializeCurlCurlCPML()
+	spml_.n0_ = N0_;
+	spml_.n1_ = N1_;
+	spml_.np_ = np_;
+
+	spml_.xSlot_.assign(N0_, -1);
+	spml_.ySlot_.assign(N1_, -1);
+	spml_.zSlot_.assign(np_, -1);
+
+	/*
+	* x slots
+	*/
+	int sxCount = 0;
+
+	if (spml_.px_ > 0)
 	{
-		ccpml_.enabled_ = true;
-
-		/* 第一版先硬编码，后面再接 input 文件 */
-		ccpml_.px_ = 10;
-		ccpml_.py_ = 10;
-		ccpml_.pz_ = 10;
-
-		ccpml_.nx_ = N0_;
-		ccpml_.ny_ = N1_;
-		ccpml_.nz_ = np_;
-
-		/* 防止 PML 厚度超过局部网格 */
-		if (ccpml_.px_ > (N0_ - 2) / 2) ccpml_.px_ = (N0_ - 2) / 2;
-		if (ccpml_.py_ > (N1_ - 2) / 2) ccpml_.py_ = (N1_ - 2) / 2;
-		if (ccpml_.pz_ > (N2_ - 2) / 2) ccpml_.pz_ = (N2_ - 2) / 2;
-
-		ccpml_.xSlot_.assign(N0_, -1);
-		ccpml_.ySlot_.assign(N1_, -1);
-		ccpml_.zSlot_.assign(np_, -1);
-
-		ccpml_.nxSlot_ = 2 * ccpml_.px_;
-		ccpml_.nySlot_ = 2 * ccpml_.py_;
-		ccpml_.nzSlot_ = 0;
-
-		/* x 方向：左右两个物理边界都在本 rank 内 */
 		for (int i = 1; i < N0_ - 1; ++i)
-			{
-			if (i <= ccpml_.px_)
-				ccpml_.xSlot_[i] = i - 1;
-			else if (i >= N0_ - 1 - ccpml_.px_)
-				ccpml_.xSlot_[i] = ccpml_.px_ + (N0_ - 2 - i);
-			}
+		{
+		const bool inLeftPML =
+			(i <= spml_.px_);
 
-		/* y 方向：上下两个物理边界都在本 rank 内 */
+		const bool inRightPML =
+			(i >= N0_ - 1 - spml_.px_);
+
+		if (inLeftPML || inRightPML)
+		{
+			spml_.xSlot_[i] = sxCount;
+			sxCount++;
+		}
+		}
+	}
+
+	spml_.nxSlot_ = sxCount;
+
+	/*
+	* y slots
+	*/
+	int syCount = 0;
+
+	if (spml_.py_ > 0)
+	{
 		for (int j = 1; j < N1_ - 1; ++j)
-			{
-			if (j <= ccpml_.py_)
-				ccpml_.ySlot_[j] = j - 1;
-			else if (j >= N1_ - 1 - ccpml_.py_)
-				ccpml_.ySlot_[j] = ccpml_.py_ + (N1_ - 2 - j);
-			}
+		{
+		const bool inLowerPML =
+			(j <= spml_.py_);
 
-		/*
-		* z 方向：只在全局前后边界 rank 上分配。
-		* 注意：不要把 MPI 子域边界当成 PML。
-		*/
-		if (rank_ == 0)
-			{
-			for (int k = 1; k < np_ - 1 && k <= ccpml_.pz_; ++k)
-				{
-				ccpml_.zSlot_[k] = ccpml_.nzSlot_;
-				ccpml_.nzSlot_++;
-				}
-			}
+		const bool inUpperPML =
+			(j >= N1_ - 1 - spml_.py_);
 
-		if (rank_ == size_ - 1)
-			{
-			for (int k = np_ - 2; k >= 1 && k >= np_ - 1 - ccpml_.pz_; --k)
-				{
-				if (ccpml_.zSlot_[k] < 0)
-					{
-					ccpml_.zSlot_[k] = ccpml_.nzSlot_;
-					ccpml_.nzSlot_++;
-					}
-				}
-			}
+		if (inLowerPML || inUpperPML)
+		{
+			spml_.ySlot_[j] = syCount;
+			syCount++;
+		}
+		}
+	}
 
-		/* CPML 系数：先全部设成不生效 */
-		ccpml_.kx_.assign(N0_, 1.0);
-		ccpml_.ax_.assign(N0_, 0.0);
-		ccpml_.bx_.assign(N0_, 0.0);
+	spml_.nySlot_ = syCount;
 
-		ccpml_.ky_.assign(N1_, 1.0);
-		ccpml_.ay_.assign(N1_, 0.0);
-		ccpml_.by_.assign(N1_, 0.0);
+	/*
+	* z slots
+	*
+	* 只在全局 zmin/zmax 开 z-PML。
+	* MPI 中间 rank 的 local k=0/np-1 不是物理 PML。
+	*/
+	int szCount = 0;
 
-		ccpml_.kz_.assign(np_, 1.0);
-		ccpml_.az_.assign(np_, 0.0);
-		ccpml_.bz_.assign(np_, 0.0);
+	if (spml_.pz_ > 0)
+	{
+		for (int k = 1; k < np_ - 1; ++k)
+		{
+		const int kg = k0_ + k;
 
-		/* 临时 B = curl A */
-		btmp_.assign(N1N0_ * np_, FieldVector<Double>(0.0));
+		const bool inZMinPML =
+			(rank_ == 0) &&
+			(kg <= spml_.pz_);
 
-		/* 临时 q = div_pml A */
-		qtmp_.assign(N1N0_ * np_, 0.0);
+		const bool inZMaxPML =
+			(rank_ == size_ - 1) &&
+			(kg >= N2_ - 1 - spml_.pz_);
 
-		/* x-PML slab */
-		long nxMem = (long)ccpml_.nxSlot_ * N1_ * np_;
+		if (inZMinPML || inZMaxPML)
+		{
+			spml_.zSlot_[k] = szCount;
+			szCount++;
+		}
+		}
+	}
 
-		ccpml_.psi_x_By_.assign(nxMem, 0.0);
-		ccpml_.psi_x_Bz_.assign(nxMem, 0.0);
+	spml_.nzSlot_ = szCount;
 
-		ccpml_.psi_phi_x_Ax_.assign(nxMem, 0.0);
-		ccpml_.psi_A_x_q_.assign(nxMem, 0.0);
+	/*
+	* 分配第一层导数临时量：
+	* gx = sx * D_x^+ A
+	* gy = sy * D_y^+ A
+	* gz = sz * D_z^+ A
+	*/
+	const long gridSize = spml_.gridSize();
 
-		/* y-PML slab */
-		long nyMem = (long)N0_ * ccpml_.nySlot_ * np_;
+	spml_.gx_.assign(gridSize, FieldVector<Double>(0.0));
+	spml_.gy_.assign(gridSize, FieldVector<Double>(0.0));
+	spml_.gz_.assign(gridSize, FieldVector<Double>(0.0));
 
-		ccpml_.psi_y_Bx_.assign(nyMem, 0.0);
-		ccpml_.psi_y_Bz_.assign(nyMem, 0.0);
+	/*
+	* memory sizes
+	*/
+	const long xMemSize =
+		(long)spml_.nxSlot_ * spml_.n1_ * spml_.np_;
 
-		ccpml_.psi_phi_y_Ay_.assign(nyMem, 0.0);
-		ccpml_.psi_A_y_q_.assign(nyMem, 0.0);
+	const long yMemSize =
+		(long)spml_.nySlot_ * spml_.n0_ * spml_.np_;
 
-		/* z-PML slab */
-		long nzMem = (long)N0_ * N1_ * ccpml_.nzSlot_;
+	const long zMemSize =
+		(long)spml_.nzSlot_ * spml_.n0_ * spml_.n1_;
 
-		ccpml_.psi_z_Bx_.assign(nzMem, 0.0);
-		ccpml_.psi_z_By_.assign(nzMem, 0.0);
+	/*
+	* 第一层 D+ memory 和第二层 D- memory
+	*/
+	spml_.psi_xp_A_.assign(xMemSize, FieldVector<Double>(0.0));
+	spml_.psi_xm_G_.assign(xMemSize, FieldVector<Double>(0.0));
 
-		ccpml_.psi_phi_z_Az_.assign(nzMem, 0.0);
-		ccpml_.psi_A_z_q_.assign(nzMem, 0.0);
+	spml_.psi_yp_A_.assign(yMemSize, FieldVector<Double>(0.0));
+	spml_.psi_ym_G_.assign(yMemSize, FieldVector<Double>(0.0));
 
-		double psiMemMB =
-			(
-			4.0 * nxMem +
-			4.0 * nyMem +
-			4.0 * nzMem
-			) * sizeof(Double) / 1024.0 / 1024.0;
+	spml_.psi_zp_A_.assign(zMemSize, FieldVector<Double>(0.0));
+	spml_.psi_zm_G_.assign(zMemSize, FieldVector<Double>(0.0));
 
-		double tmpMemMB =
-			(
-			3.0 * (double)N1N0_ * np_ +   // btmp_: 3 components
-			1.0 * (double)N1N0_ * np_     // qtmp_: scalar
-			) * sizeof(Double) / 1024.0 / 1024.0;
+	setScalarCPMLCoefficients();
 
+	const Double bytesPerFieldVector =
+		3.0 * sizeof(Double);
+
+	const Double tmpMB =
+		3.0 * (Double)gridSize * bytesPerFieldVector
+		/ 1024.0 / 1024.0;
+
+	const Double psiMB =
+		2.0 * (Double)(xMemSize + yMemSize + zMemSize)
+		* bytesPerFieldVector
+		/ 1024.0 / 1024.0;
+
+	if (rank_ == 0)
+	{
 		std::cout
-		<< "Rank " << rank_
-		<< " ::: CurlCurlCPML initialized. "
-		<< "xSlot=" << ccpml_.nxSlot_
-		<< ", ySlot=" << ccpml_.nySlot_
-		<< ", zSlot=" << ccpml_.nzSlot_
-		<< ", psi memory=" << psiMemMB << " MB"
-		<< ", tmp memory=" << tmpMemMB << " MB"
+		<< "ScalarCPML initialized."
+		<< " enabled=" << spml_.enabled_
+		<< " px=" << spml_.px_
+		<< " py=" << spml_.py_
+		<< " pz=" << spml_.pz_
+		<< " xSlot=" << spml_.nxSlot_
+		<< " ySlot=" << spml_.nySlot_
+		<< " zSlot(local rank0)=" << spml_.nzSlot_
+		<< " tmp memory=" << tmpMB << " MB"
+		<< " psi memory=" << psiMB << " MB"
 		<< std::endl;
 	}
+  }
 
-	Double Solver::cpmlDxBy(int i, int j, int k, Double dx_By)
+  void Solver::setScalarCPMLCoefficients()
+  {
+	/*
+	* 方向权重。
+	*
+	* 原始 FD:
+	*   uf_.a[1] * (A_{i+1} - 2A_i + A_{i-1})
+	*
+	* scalar CPML:
+	*   sx * D_x^- ( sx * D_x^+ A )
+	*
+	* 因此：
+	*   (sx / dx)^2 = uf_.a[1]
+	*/
+	spml_.Cx_ = uf_.a[1] * uf_.dx * uf_.dx;
+	spml_.Cy_ = uf_.a[2] * uf_.dy * uf_.dy;
+	spml_.Cz_ = uf_.a[3] * uf_.dz * uf_.dz;
+
+	spml_.sx_ = sqrt(spml_.Cx_);
+	spml_.sy_ = sqrt(spml_.Cy_);
+	spml_.sz_ = sqrt(spml_.Cz_);
+
+	spml_.invDx_ = 1.0 / uf_.dx;
+	spml_.invDy_ = 1.0 / uf_.dy;
+	spml_.invDz_ = 1.0 / uf_.dz;
+
+	spml_.sxInvDx_ = spml_.sx_ * spml_.invDx_;
+	spml_.syInvDy_ = spml_.sy_ * spml_.invDy_;
+	spml_.szInvDz_ = spml_.sz_ * spml_.invDz_;
+
+	/*
+	* CPML 参数。
+	* 先用保守参数。
+	*/
+	const Double mOrder     = 3.0;
+	const Double targetR    = 1.0e-4;
+	const Double kappaMax   = 1.0;
+	const Double alphaMax   = 0.0;
+	const Double sigmaScale = 0.2;
+
+	/*
+	* MITHRA 内部单位中的光速。
+	* 之前你已经确认 cAbs = 299.792。
+	* 如果代码里已有常量，建议替换成原始变量。
+	*/
+	const Double cAbs = 299.792;
+
+	const Double dt = uf_.dt;
+
+	/*
+	* 初始化为 identity。
+	*/
+	spml_.kx_.assign(N0_, 1.0);
+	spml_.ky_.assign(N1_, 1.0);
+	spml_.kz_.assign(np_, 1.0);
+
+	spml_.ax_.assign(N0_, 0.0);
+	spml_.ay_.assign(N1_, 0.0);
+	spml_.az_.assign(np_, 0.0);
+
+	spml_.bx_.assign(N0_, 0.0);
+	spml_.by_.assign(N1_, 0.0);
+	spml_.bz_.assign(np_, 0.0);
+
+	/*
+	* x profile
+	*/
+	if (spml_.px_ > 0)
 	{
-		int sx = ccpml_.xSlot_[i];
+		const Double dPml = spml_.px_ * uf_.dx;
 
-		if (sx < 0)
-			return dx_By;
+		const Double sigmaMax =
+			sigmaScale
+		* cAbs
+		* (-(mOrder + 1.0) * log(targetR))
+		/ (2.0 * dPml);
 
-		long q = ccpml_.idxX(sx, j, k);
+		for (int i = 1; i < N0_ - 1; ++i)
+		{
+		if (spml_.xSlot_[i] < 0)
+			continue;
 
-		ccpml_.psi_x_By_[q] =
-			ccpml_.bx_[i] * ccpml_.psi_x_By_[q]
-			+ ccpml_.ax_[i] * dx_By;
+		Double depth = 0.0;
 
-		return dx_By / ccpml_.kx_[i] + ccpml_.psi_x_By_[q];
+		if (i <= spml_.px_)
+		{
+			depth =
+				(Double)(spml_.px_ - i + 1)
+			/ (Double)spml_.px_;
+		}
+		else
+		{
+			depth =
+				(Double)(i - (N0_ - 1 - spml_.px_) + 1)
+			/ (Double)spml_.px_;
+		}
+
+		if (depth < 0.0) depth = 0.0;
+		if (depth > 1.0) depth = 1.0;
+
+		const Double depthM = pow(depth, mOrder);
+
+		const Double sigma = sigmaMax * depthM;
+		const Double kappa = 1.0 + (kappaMax - 1.0) * depthM;
+		const Double alpha = alphaMax * (1.0 - depth);
+
+		const Double b = exp(-(sigma / kappa + alpha) * dt);
+
+		Double a = 0.0;
+
+		const Double denom = kappa * (sigma + kappa * alpha);
+
+		if (fabs(denom) > 1.0e-300)
+			a = sigma / denom * (b - 1.0);
+
+		spml_.kx_[i] = kappa;
+		spml_.ax_[i] = a;
+		spml_.bx_[i] = b;
+		}
 	}
 
-
-	Double Solver::cpmlDxBz(int i, int j, int k, Double dx_Bz)
+	/*
+	* y profile
+	*/
+	if (spml_.py_ > 0)
 	{
-		int sx = ccpml_.xSlot_[i];
+		const Double dPml = spml_.py_ * uf_.dy;
 
-		if (sx < 0)
-			return dx_Bz;
+		const Double sigmaMax =
+			sigmaScale
+		* cAbs
+		* (-(mOrder + 1.0) * log(targetR))
+		/ (2.0 * dPml);
 
-		long q = ccpml_.idxX(sx, j, k);
+		for (int j = 1; j < N1_ - 1; ++j)
+		{
+		if (spml_.ySlot_[j] < 0)
+			continue;
 
-		ccpml_.psi_x_Bz_[q] =
-			ccpml_.bx_[i] * ccpml_.psi_x_Bz_[q]
-			+ ccpml_.ax_[i] * dx_Bz;
+		Double depth = 0.0;
 
-		return dx_Bz / ccpml_.kx_[i] + ccpml_.psi_x_Bz_[q];
+		if (j <= spml_.py_)
+		{
+			depth =
+				(Double)(spml_.py_ - j + 1)
+			/ (Double)spml_.py_;
+		}
+		else
+		{
+			depth =
+				(Double)(j - (N1_ - 1 - spml_.py_) + 1)
+			/ (Double)spml_.py_;
+		}
+
+		if (depth < 0.0) depth = 0.0;
+		if (depth > 1.0) depth = 1.0;
+
+		const Double depthM = pow(depth, mOrder);
+
+		const Double sigma = sigmaMax * depthM;
+		const Double kappa = 1.0 + (kappaMax - 1.0) * depthM;
+		const Double alpha = alphaMax * (1.0 - depth);
+
+		const Double b = exp(-(sigma / kappa + alpha) * dt);
+
+		Double a = 0.0;
+
+		const Double denom = kappa * (sigma + kappa * alpha);
+
+		if (fabs(denom) > 1.0e-300)
+			a = sigma / denom * (b - 1.0);
+
+		spml_.ky_[j] = kappa;
+		spml_.ay_[j] = a;
+		spml_.by_[j] = b;
+		}
 	}
 
-
-	Double Solver::cpmlDyBx(int i, int j, int k, Double dy_Bx)
+	/*
+	* z profile
+	*/
+	if (spml_.pz_ > 0)
 	{
-		int sy = ccpml_.ySlot_[j];
+		const Double dPml = spml_.pz_ * uf_.dz;
 
-		if (sy < 0)
-			return dy_Bx;
-
-		long q = ccpml_.idxY(i, sy, k);
-
-		ccpml_.psi_y_Bx_[q] =
-			ccpml_.by_[j] * ccpml_.psi_y_Bx_[q]
-			+ ccpml_.ay_[j] * dy_Bx;
-
-		return dy_Bx / ccpml_.ky_[j] + ccpml_.psi_y_Bx_[q];
-	}
-
-
-	Double Solver::cpmlDyBz(int i, int j, int k, Double dy_Bz)
-	{
-		int sy = ccpml_.ySlot_[j];
-
-		if (sy < 0)
-			return dy_Bz;
-
-		long q = ccpml_.idxY(i, sy, k);
-
-		ccpml_.psi_y_Bz_[q] =
-			ccpml_.by_[j] * ccpml_.psi_y_Bz_[q]
-			+ ccpml_.ay_[j] * dy_Bz;
-
-		return dy_Bz / ccpml_.ky_[j] + ccpml_.psi_y_Bz_[q];
-	}
-
-
-	Double Solver::cpmlDzBx(int i, int j, int k, Double dz_Bx)
-	{
-		int sz = ccpml_.zSlot_[k];
-
-		if (sz < 0)
-			return dz_Bx;
-
-		long q = ccpml_.idxZ(i, j, sz);
-
-		ccpml_.psi_z_Bx_[q] =
-			ccpml_.bz_[k] * ccpml_.psi_z_Bx_[q]
-			+ ccpml_.az_[k] * dz_Bx;
-
-		return dz_Bx / ccpml_.kz_[k] + ccpml_.psi_z_Bx_[q];
-	}
-
-
-	Double Solver::cpmlDzBy(int i, int j, int k, Double dz_By)
-	{
-		int sz = ccpml_.zSlot_[k];
-
-		if (sz < 0)
-			return dz_By;
-
-		long q = ccpml_.idxZ(i, j, sz);
-
-		ccpml_.psi_z_By_[q] =
-			ccpml_.bz_[k] * ccpml_.psi_z_By_[q]
-			+ ccpml_.az_[k] * dz_By;
-
-		return dz_By / ccpml_.kz_[k] + ccpml_.psi_z_By_[q];
-	}
-
-	Double Solver::cpmlDivDxAx(int i, int j, int k, Double dx_Ax)
-	{
-	int sx = ccpml_.xSlot_[i];
-
-	if (sx < 0)
-		return dx_Ax;
-
-	long q = ccpml_.idxX(sx, j, k);
-
-	ccpml_.psi_phi_x_Ax_[q] =
-		ccpml_.bx_[i] * ccpml_.psi_phi_x_Ax_[q]
-		+ ccpml_.ax_[i] * dx_Ax;
-
-	return dx_Ax / ccpml_.kx_[i] + ccpml_.psi_phi_x_Ax_[q];
-	}
-
-
-	Double Solver::cpmlDivDyAy(int i, int j, int k, Double dy_Ay)
-	{
-	int sy = ccpml_.ySlot_[j];
-
-	if (sy < 0)
-		return dy_Ay;
-
-	long q = ccpml_.idxY(i, sy, k);
-
-	ccpml_.psi_phi_y_Ay_[q] =
-		ccpml_.by_[j] * ccpml_.psi_phi_y_Ay_[q]
-		+ ccpml_.ay_[j] * dy_Ay;
-
-	return dy_Ay / ccpml_.ky_[j] + ccpml_.psi_phi_y_Ay_[q];
-	}
-
-
-	Double Solver::cpmlDivDzAz(int i, int j, int k, Double dz_Az)
-	{
-	int sz = ccpml_.zSlot_[k];
-
-	if (sz < 0)
-		return dz_Az;
-
-	long q = ccpml_.idxZ(i, j, sz);
-
-	ccpml_.psi_phi_z_Az_[q] =
-		ccpml_.bz_[k] * ccpml_.psi_phi_z_Az_[q]
-		+ ccpml_.az_[k] * dz_Az;
-
-	return dz_Az / ccpml_.kz_[k] + ccpml_.psi_phi_z_Az_[q];
-	}
-
-	Double Solver::cpmlGradDxQ(int i, int j, int k, Double dx_q)
-	{
-	int sx = ccpml_.xSlot_[i];
-
-	if (sx < 0)
-		return dx_q;
-
-	long q = ccpml_.idxX(sx, j, k);
-
-	ccpml_.psi_A_x_q_[q] =
-		ccpml_.bx_[i] * ccpml_.psi_A_x_q_[q]
-		+ ccpml_.ax_[i] * dx_q;
-
-	return dx_q / ccpml_.kx_[i] + ccpml_.psi_A_x_q_[q];
-	}
-
-
-	Double Solver::cpmlGradDyQ(int i, int j, int k, Double dy_q)
-	{
-	int sy = ccpml_.ySlot_[j];
-
-	if (sy < 0)
-		return dy_q;
-
-	long q = ccpml_.idxY(i, sy, k);
-
-	ccpml_.psi_A_y_q_[q] =
-		ccpml_.by_[j] * ccpml_.psi_A_y_q_[q]
-		+ ccpml_.ay_[j] * dy_q;
-
-	return dy_q / ccpml_.ky_[j] + ccpml_.psi_A_y_q_[q];
-	}
-
-
-	Double Solver::cpmlGradDzQ(int i, int j, int k, Double dz_q)
-	{
-	int sz = ccpml_.zSlot_[k];
-
-	if (sz < 0)
-		return dz_q;
-
-	long q = ccpml_.idxZ(i, j, sz);
-
-	ccpml_.psi_A_z_q_[q] =
-		ccpml_.bz_[k] * ccpml_.psi_A_z_q_[q]
-		+ ccpml_.az_[k] * dz_q;
-
-	return dz_q / ccpml_.kz_[k] + ccpml_.psi_A_z_q_[q];
-	}
-
-	void Solver::computeCurlAForCPML()
-	{
-		/*
-		* btmp_ = curl(an_)
-		*
-		* an_ 是当前时刻 A^n。
-		* btmp_ 只是 CPML curl-curl 推进用的临时 B。
-		*/
+		const Double sigmaMax =
+			sigmaScale
+		* cAbs
+		* (-(mOrder + 1.0) * log(targetR))
+		/ (2.0 * dPml);
 
 		for (int k = 1; k < np_ - 1; ++k)
 		{
-			for (int i = 1; i < N0_ - 1; ++i)
-			{
-				for (int j = 1; j < N1_ - 1; ++j)
-				{
-					long m = N1N0_ * k + N1_ * i + j;
+		if (spml_.zSlot_[k] < 0)
+			continue;
 
-					/*
-					* Bx = d_y Az - d_z Ay
-					* By = d_z Ax - d_x Az
-					* Bz = d_x Ay - d_y Ax
-					*
-					* uf_.dx2, dy2, dz2 在原程序中通常表示 2*dx, 2*dy, 2*dz。
-					*/
+		const int kg = k0_ + k;
 
-					btmp_[m][0] =
-						ccpml_.syInvDy_ * ( (*an_)[m + 1][2]      - (*an_)[m][2] )
-					- ccpml_.szInvDz_ * ( (*an_)[m + N1N0_][1] - (*an_)[m][1] );
+		Double depth = 0.0;
 
-					btmp_[m][1] =
-						ccpml_.szInvDz_ * ( (*an_)[m + N1N0_][0] - (*an_)[m][0] )
-					- ccpml_.sxInvDx_ * ( (*an_)[m + N1_][2]   - (*an_)[m][2] );
-
-					btmp_[m][2] =
-						ccpml_.sxInvDx_ * ( (*an_)[m + N1_][1] - (*an_)[m][1] )
-					- ccpml_.syInvDy_ * ( (*an_)[m + 1][0]   - (*an_)[m][0] );
-				}
-			}
+		if (rank_ == 0 && kg <= spml_.pz_)
+		{
+			depth =
+				(Double)(spml_.pz_ - kg + 1)
+			/ (Double)spml_.pz_;
+		}
+		else if (rank_ == size_ - 1 &&
+				kg >= N2_ - 1 - spml_.pz_)
+		{
+			depth =
+				(Double)(kg - (N2_ - 1 - spml_.pz_) + 1)
+			/ (Double)spml_.pz_;
+		}
+		else
+		{
+			continue;
 		}
 
-		/*
-		* 最外层不参与中心差分，先置零。
-		* 后续如果需要可改成边界单边差分，但第一版先简单处理。
-		*/
+		if (depth < 0.0) depth = 0.0;
+		if (depth > 1.0) depth = 1.0;
 
-		for (int k = 0; k < np_; ++k)
-		{
-			for (int i = 0; i < N0_; ++i)
-			{
-				long m1 = N1N0_ * k + N1_ * i;
-				long m2 = N1N0_ * k + N1_ * i + (N1_ - 1);
+		const Double depthM = pow(depth, mOrder);
 
-				btmp_[m1] = FieldVector<Double>(0.0);
-				btmp_[m2] = FieldVector<Double>(0.0);
-			}
-		}
+		const Double sigma = sigmaMax * depthM;
+		const Double kappa = 1.0 + (kappaMax - 1.0) * depthM;
+		const Double alpha = alphaMax * (1.0 - depth);
 
-		for (int k = 0; k < np_; ++k)
-		{
-			for (int j = 0; j < N1_; ++j)
-			{
-				long m1 = N1N0_ * k + j;
-				long m2 = N1N0_ * k + N1_ * (N0_ - 1) + j;
+		const Double b = exp(-(sigma / kappa + alpha) * dt);
 
-				btmp_[m1] = FieldVector<Double>(0.0);
-				btmp_[m2] = FieldVector<Double>(0.0);
-			}
-		}
+		Double a = 0.0;
 
-		for (int i = 0; i < N0_; ++i)
-		{
-			for (int j = 0; j < N1_; ++j)
-			{
-				long m1 = N1_ * i + j;
-				long m2 = N1N0_ * (np_ - 1) + N1_ * i + j;
+		const Double denom = kappa * (sigma + kappa * alpha);
 
-				btmp_[m1] = FieldVector<Double>(0.0);
-				btmp_[m2] = FieldVector<Double>(0.0);
-			}
+		if (fabs(denom) > 1.0e-300)
+			a = sigma / denom * (b - 1.0);
+
+		spml_.kz_[k] = kappa;
+		spml_.az_[k] = a;
+		spml_.bz_[k] = b;
 		}
 	}
 
-	void Solver::exchangeBtmpForCPML()
+	/*
+	* 系数诊断
+	*/
+	Double localMinB = 1.0;
+	Double localMaxAbsA = 0.0;
+	Double localMaxK = 1.0;
+
+	for (int i = 0; i < N0_; ++i)
 	{
-		MPI_Status status;
-
-		int msgtagB1 = 101;
-		int msgtagB3 = 103;
-
-		/*
-		* btmp_ 的每个元素是 FieldVector<Double>，三分量连续存储。
-		* 每个 z-plane 有 N1N0_ 个 FieldVector，也就是 3*N1N0_ 个 Double。
-		*/
-
-		if (rank_ != size_ - 1)
+		if (spml_.xSlot_[i] >= 0)
 		{
-			MPI_Send(
-				&btmp_[(np_ - 2) * N1N0_][0],
-				3 * N1N0_,
-				MPI_DOUBLE,
-				rank_ + 1,
-				msgtagB1,
-				MPI_COMM_WORLD
-			);
-		}
-
-		if (rank_ != 0)
-		{
-			MPI_Recv(
-				&btmp_[0][0],
-				3 * N1N0_,
-				MPI_DOUBLE,
-				rank_ - 1,
-				msgtagB1,
-				MPI_COMM_WORLD,
-				&status
-			);
-		}
-
-		if (rank_ != 0)
-		{
-			MPI_Send(
-				&btmp_[N1N0_][0],
-				3 * N1N0_,
-				MPI_DOUBLE,
-				rank_ - 1,
-				msgtagB3,
-				MPI_COMM_WORLD
-			);
-		}
-
-		if (rank_ != size_ - 1)
-		{
-			MPI_Recv(
-				&btmp_[(np_ - 1) * N1N0_][0],
-				3 * N1N0_,
-				MPI_DOUBLE,
-				rank_ + 1,
-				msgtagB3,
-				MPI_COMM_WORLD,
-				&status
-			);
+		if (spml_.bx_[i] < localMinB) localMinB = spml_.bx_[i];
+		if (fabs(spml_.ax_[i]) > localMaxAbsA) localMaxAbsA = fabs(spml_.ax_[i]);
+		if (spml_.kx_[i] > localMaxK) localMaxK = spml_.kx_[i];
 		}
 	}
 
-	void Solver::computeDivAForCPML()
+	for (int j = 0; j < N1_; ++j)
 	{
-		/*
-		* qtmp_ = div_phi_pml A
-		*
-		* q = D_x^phi A_x + D_y^phi A_y + D_z^phi A_z
-		*
-		* 注意：
-		* 这里会更新 psi_phi_x_Ax_, psi_phi_y_Ay_, psi_phi_z_Az_
-		*/
-
-		for (int k = 1; k < np_ - 1; ++k)
-			{
-			for (int i = 1; i < N0_ - 1; ++i)
-				{
-				for (int j = 1; j < N1_ - 1; ++j)
-					{
-					long m = N1N0_ * k + N1_ * i + j;
-
-					Double dx_Ax =
-						ccpml_.invDx_ * ((*an_)[m][0] - (*an_)[m - N1_][0]);
-
-					Double dy_Ay =
-						ccpml_.invDy_ * ((*an_)[m][1] - (*an_)[m - 1][1]);
-
-					Double dz_Az =
-						ccpml_.invDz_ * ((*an_)[m][2] - (*an_)[m - N1N0_][2]);
-
-					Double Dx_Ax = ccpml_.sx_ * cpmlDivDxAx(i, j, k, dx_Ax);
-					Double Dy_Ay = ccpml_.sy_ * cpmlDivDyAy(i, j, k, dy_Ay);
-					Double Dz_Az = ccpml_.sz_ * cpmlDivDzAz(i, j, k, dz_Az);
-
-					qtmp_[m] = Dx_Ax + Dy_Ay + Dz_Az;
-					}
-				}
-			}
-
-		/* 最外层先置零，避免未定义值参与后续中心差分 */
-		for (int k = 0; k < np_; ++k)
-			{
-			for (int i = 0; i < N0_; ++i)
-				{
-				qtmp_[N1N0_ * k + N1_ * i] = 0.0;
-				qtmp_[N1N0_ * k + N1_ * i + (N1_ - 1)] = 0.0;
-				}
-			}
-
-		for (int k = 0; k < np_; ++k)
-			{
-			for (int j = 0; j < N1_; ++j)
-				{
-				qtmp_[N1N0_ * k + j] = 0.0;
-				qtmp_[N1N0_ * k + N1_ * (N0_ - 1) + j] = 0.0;
-				}
-			}
-
-		for (int i = 0; i < N0_; ++i)
-			{
-			for (int j = 0; j < N1_; ++j)
-				{
-				qtmp_[N1_ * i + j] = 0.0;
-				qtmp_[N1N0_ * (np_ - 1) + N1_ * i + j] = 0.0;
-				}
-			}
-	}
-
-	void Solver::exchangeQtmpForCPML()
-	{
-		MPI_Status status;
-
-		int msgtagQ1 = 201;
-		int msgtagQ3 = 203;
-
-		if (rank_ != size_ - 1)
-			{
-			MPI_Send(
-				&qtmp_[(np_ - 2) * N1N0_],
-				N1N0_,
-				MPI_DOUBLE,
-				rank_ + 1,
-				msgtagQ1,
-				MPI_COMM_WORLD
-			);
-			}
-
-		if (rank_ != 0)
-			{
-			MPI_Recv(
-				&qtmp_[0],
-				N1N0_,
-				MPI_DOUBLE,
-				rank_ - 1,
-				msgtagQ1,
-				MPI_COMM_WORLD,
-				&status
-			);
-			}
-
-		if (rank_ != 0)
-			{
-			MPI_Send(
-				&qtmp_[N1N0_],
-				N1N0_,
-				MPI_DOUBLE,
-				rank_ - 1,
-				msgtagQ3,
-				MPI_COMM_WORLD
-			);
-			}
-
-		if (rank_ != size_ - 1)
-			{
-			MPI_Recv(
-				&qtmp_[(np_ - 1) * N1N0_],
-				N1N0_,
-				MPI_DOUBLE,
-				rank_ + 1,
-				msgtagQ3,
-				MPI_COMM_WORLD,
-				&status
-			);
-			}
-	}
-
-	void Solver::setCurlCurlCPMLCoefficients()
-	{
-		/*
-		* CPML recursive convolution:
-		*
-		*   D f = df / kappa + psi
-		*
-		*   psi_new = b * psi_old + a * df
-		*
-		* 关键：
-		*   sigma 必须带 1/time 量纲。
-		*   这里用 MITHRA 原始 FD 系数反推内部光速 cAbs，
-		*   使 sigmaMax ~ cAbs / dPML。
-		*/
-
-		const Double mOrder = 3.0;
-
-		/*
-		* 第一轮建议用弱一些的参数。
-		* 稳定后再逐步增强：
-		*   sigmaScale: 0.1 -> 0.2 -> 0.5 -> 1.0
-		*   targetR:    1e-2 -> 1e-4 -> 1e-6
-		*   kappaMax:   1.0 -> 2.0 -> 3.0
-		*/
-		const Double targetR    = 1.0e-4;
-		const Double kappaMax   = 1.0;
-		const Double alphaMax   = 0.0;
-		const Double sigmaScale = 0.2;
-
-		const Double dt = uf_.dt;
-
-		/*
-		* 使用 uf_ 里的网格尺寸，保证和场推进使用的 dx/dy/dz 一致。
-		*/
-		const Double dx = uf_.dx;
-		const Double dy = uf_.dy;
-		const Double dz = uf_.dz;
-
-		/*
-		* 从原 FD 系数反推 (c0 dt)^2。
-		* 一般 c2dt2_x 和 c2dt2_y 应该一致。
-		*/
-		const Double c2dt2_x = uf_.a[1] * dx * dx;
-		const Double c2dt2_y = uf_.a[2] * dy * dy;
-		const Double c2dt2   = 0.5 * (c2dt2_x + c2dt2_y);
-
-		const Double cAbs = sqrt(c2dt2) / dt;
-
-		/*
-		* 先重置为无 PML。
-		*/
-		ccpml_.kx_.assign(N0_, 1.0);
-		ccpml_.ax_.assign(N0_, 0.0);
-		ccpml_.bx_.assign(N0_, 0.0);
-
-		ccpml_.ky_.assign(N1_, 1.0);
-		ccpml_.ay_.assign(N1_, 0.0);
-		ccpml_.by_.assign(N1_, 0.0);
-
-		ccpml_.kz_.assign(np_, 1.0);
-		ccpml_.az_.assign(np_, 0.0);
-		ccpml_.bz_.assign(np_, 0.0);
-
-		ccpml_.Cx_ = uf_.a[1] * uf_.dx * uf_.dx;
-		ccpml_.Cy_ = uf_.a[2] * uf_.dy * uf_.dy;
-		ccpml_.Cz_ = uf_.a[3] * uf_.dz * uf_.dz;
-
-		ccpml_.sx_ = sqrt(ccpml_.Cx_);
-		ccpml_.sy_ = sqrt(ccpml_.Cy_);
-		ccpml_.sz_ = sqrt(ccpml_.Cz_);
-
-		ccpml_.invDx_ = 1.0 / uf_.dx;
-		ccpml_.invDy_ = 1.0 / uf_.dy;
-		ccpml_.invDz_ = 1.0 / uf_.dz;
-
-		ccpml_.sxInvDx_ = ccpml_.sx_ * ccpml_.invDx_;
-		ccpml_.syInvDy_ = ccpml_.sy_ * ccpml_.invDy_;
-		ccpml_.szInvDz_ = ccpml_.sz_ * ccpml_.invDz_;
-
-		if (rank_ == 0)
+		if (spml_.ySlot_[j] >= 0)
 		{
+		if (spml_.by_[j] < localMinB) localMinB = spml_.by_[j];
+		if (fabs(spml_.ay_[j]) > localMaxAbsA) localMaxAbsA = fabs(spml_.ay_[j]);
+		if (spml_.ky_[j] > localMaxK) localMaxK = spml_.ky_[j];
+		}
+	}
+
+	for (int k = 0; k < np_; ++k)
+	{
+		if (spml_.zSlot_[k] >= 0)
+		{
+		if (spml_.bz_[k] < localMinB) localMinB = spml_.bz_[k];
+		if (fabs(spml_.az_[k]) > localMaxAbsA) localMaxAbsA = fabs(spml_.az_[k]);
+		if (spml_.kz_[k] > localMaxK) localMaxK = spml_.kz_[k];
+		}
+	}
+
+	Double globalMinB = 1.0;
+	Double globalMaxAbsA = 0.0;
+	Double globalMaxK = 1.0;
+
+	MPI_Allreduce(&localMinB, &globalMinB,
+					1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+
+	MPI_Allreduce(&localMaxAbsA, &globalMaxAbsA,
+					1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+	MPI_Allreduce(&localMaxK, &globalMaxK,
+					1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+	if (rank_ == 0)
+	{
 		std::cout
-			<< "CurlCurl weighted derivative coeff:"
-			<< " Cx=" << ccpml_.Cx_
-			<< " Cy=" << ccpml_.Cy_
-			<< " Cz=" << ccpml_.Cz_
-			<< " sx=" << ccpml_.sx_
-			<< " sy=" << ccpml_.sy_
-			<< " sz=" << ccpml_.sz_
-			<< std::endl;
-		}
+		<< "ScalarCPML weighted derivative coeff:"
+		<< " Cx=" << spml_.Cx_
+		<< " Cy=" << spml_.Cy_
+		<< " Cz=" << spml_.Cz_
+		<< " sx=" << spml_.sx_
+		<< " sy=" << spml_.sy_
+		<< " sz=" << spml_.sz_
+		<< std::endl;
 
-		/*
-		* x direction profile
-		*/
-		if (ccpml_.px_ > 0)
-			{
-			const Double dPml = ccpml_.px_ * dx;
+		std::cout
+		<< "ScalarCPML coefficients set:"
+		<< " m=" << mOrder
+		<< " targetR=" << targetR
+		<< " kappaMax=" << kappaMax
+		<< " alphaMax=" << alphaMax
+		<< " sigmaScale=" << sigmaScale
+		<< " cAbs=" << cAbs
+		<< " dt=" << dt
+		<< std::endl;
 
-			const Double sigmaMax =
-				cAbs * ( - (mOrder + 1.0) * log(targetR) / (2.0 * dPml) );
-
-			for (int i = 1; i < N0_ - 1; ++i)
-				{
-				if (ccpml_.xSlot_[i] < 0) continue;
-
-				Double depth = 0.0;
-
-				if (i <= ccpml_.px_)
-					depth = (Double)(ccpml_.px_ - i + 1) / (Double)ccpml_.px_;
-				else
-					depth = (Double)(i - (N0_ - 1 - ccpml_.px_) + 1) / (Double)ccpml_.px_;
-
-				if (depth < 0.0) depth = 0.0;
-				if (depth > 1.0) depth = 1.0;
-
-				const Double depthM = pow(depth, mOrder);
-
-				const Double sigma = sigmaScale * sigmaMax * depthM;
-				const Double kappa = 1.0 + (kappaMax - 1.0) * depthM;
-				const Double alpha = alphaMax * (1.0 - depth);
-
-				const Double b = exp(-(sigma / kappa + alpha) * dt);
-
-				Double a = 0.0;
-				const Double denom = kappa * (sigma + kappa * alpha);
-
-				if (fabs(denom) > 1.0e-300)
-					a = sigma / denom * (b - 1.0);
-
-				ccpml_.kx_[i] = kappa;
-				ccpml_.ax_[i] = a;
-				ccpml_.bx_[i] = b;
-				}
-			}
-
-		/*
-		* y direction profile
-		*/
-		if (ccpml_.py_ > 0)
-			{
-			const Double dPml = ccpml_.py_ * dy;
-
-			const Double sigmaMax =
-				cAbs * ( - (mOrder + 1.0) * log(targetR) / (2.0 * dPml) );
-
-			for (int j = 1; j < N1_ - 1; ++j)
-				{
-				if (ccpml_.ySlot_[j] < 0) continue;
-
-				Double depth = 0.0;
-
-				if (j <= ccpml_.py_)
-					depth = (Double)(ccpml_.py_ - j + 1) / (Double)ccpml_.py_;
-				else
-					depth = (Double)(j - (N1_ - 1 - ccpml_.py_) + 1) / (Double)ccpml_.py_;
-
-				if (depth < 0.0) depth = 0.0;
-				if (depth > 1.0) depth = 1.0;
-
-				const Double depthM = pow(depth, mOrder);
-
-				const Double sigma = sigmaScale * sigmaMax * depthM;
-				const Double kappa = 1.0 + (kappaMax - 1.0) * depthM;
-				const Double alpha = alphaMax * (1.0 - depth);
-
-				const Double b = exp(-(sigma / kappa + alpha) * dt);
-
-				Double a = 0.0;
-				const Double denom = kappa * (sigma + kappa * alpha);
-
-				if (fabs(denom) > 1.0e-300)
-					a = sigma / denom * (b - 1.0);
-
-				ccpml_.ky_[j] = kappa;
-				ccpml_.ay_[j] = a;
-				ccpml_.by_[j] = b;
-				}
-			}
-
-		/*
-		* z direction profile
-		*
-		* 注意：
-		*   z 方向必须使用全局 z index。
-		*   rank 中间的 MPI 子域边界不是物理 PML。
-		*/
-		if (ccpml_.pz_ > 0)
-			{
-			const Double dPml = ccpml_.pz_ * dz;
-
-			const Double sigmaMax =
-				cAbs * ( - (mOrder + 1.0) * log(targetR) / (2.0 * dPml) );
-
-			for (int k = 1; k < np_ - 1; ++k)
-				{
-				if (ccpml_.zSlot_[k] < 0) continue;
-
-				const int kg = k0_ + k;
-
-				Double depth = 0.0;
-
-				if (rank_ == 0 && kg <= ccpml_.pz_)
-					depth = (Double)(ccpml_.pz_ - kg + 1) / (Double)ccpml_.pz_;
-				else if (rank_ == size_ - 1 && kg >= N2_ - 1 - ccpml_.pz_)
-					depth = (Double)(kg - (N2_ - 1 - ccpml_.pz_) + 1) / (Double)ccpml_.pz_;
-				else
-					continue;
-
-				if (depth < 0.0) depth = 0.0;
-				if (depth > 1.0) depth = 1.0;
-
-				const Double depthM = pow(depth, mOrder);
-
-				const Double sigma = sigmaScale * sigmaMax * depthM;
-				const Double kappa = 1.0 + (kappaMax - 1.0) * depthM;
-				const Double alpha = alphaMax * (1.0 - depth);
-
-				const Double b = exp(-(sigma / kappa + alpha) * dt);
-
-				Double a = 0.0;
-				const Double denom = kappa * (sigma + kappa * alpha);
-
-				if (fabs(denom) > 1.0e-300)
-					a = sigma / denom * (b - 1.0);
-
-				ccpml_.kz_[k] = kappa;
-				ccpml_.az_[k] = a;
-				ccpml_.bz_[k] = b;
-				}
-			}
-
-		/*
-		* 全局诊断。
-		*/
-		Double localMinB = 1.0;
-		Double localMaxA = 0.0;
-		Double localMaxK = 1.0;
-
-		for (int i = 0; i < N0_; ++i)
-			{
-			if (ccpml_.xSlot_[i] >= 0)
-				{
-				if (ccpml_.bx_[i] < localMinB) localMinB = ccpml_.bx_[i];
-				if (fabs(ccpml_.ax_[i]) > localMaxA) localMaxA = fabs(ccpml_.ax_[i]);
-				if (ccpml_.kx_[i] > localMaxK) localMaxK = ccpml_.kx_[i];
-				}
-			}
-
-		for (int j = 0; j < N1_; ++j)
-			{
-			if (ccpml_.ySlot_[j] >= 0)
-				{
-				if (ccpml_.by_[j] < localMinB) localMinB = ccpml_.by_[j];
-				if (fabs(ccpml_.ay_[j]) > localMaxA) localMaxA = fabs(ccpml_.ay_[j]);
-				if (ccpml_.ky_[j] > localMaxK) localMaxK = ccpml_.ky_[j];
-				}
-			}
-
-		for (int k = 0; k < np_; ++k)
-			{
-			if (ccpml_.zSlot_[k] >= 0)
-				{
-				if (ccpml_.bz_[k] < localMinB) localMinB = ccpml_.bz_[k];
-				if (fabs(ccpml_.az_[k]) > localMaxA) localMaxA = fabs(ccpml_.az_[k]);
-				if (ccpml_.kz_[k] > localMaxK) localMaxK = ccpml_.kz_[k];
-				}
-			}
-
-		Double globalMinB = 1.0;
-		Double globalMaxA = 0.0;
-		Double globalMaxK = 1.0;
-
-		MPI_Allreduce(&localMinB, &globalMinB, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
-		MPI_Allreduce(&localMaxA, &globalMaxA, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-		MPI_Allreduce(&localMaxK, &globalMaxK, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-
-		if (rank_ == 0)
-			{
-			std::cout
-				<< "CurlCurlCPML coefficients set:"
-				<< " m=" << mOrder
-				<< " targetR=" << targetR
-				<< " kappaMax=" << kappaMax
-				<< " alphaMax=" << alphaMax
-				<< " sigmaScale=" << sigmaScale
-				<< " cAbs=" << cAbs
-				<< " dt=" << dt
-				<< " c2dt2_x=" << c2dt2_x
-				<< " c2dt2_y=" << c2dt2_y
-				<< std::endl;
-
-			std::cout
-				<< "CPML coeff diag:"
-				<< " globalMinB=" << globalMinB
-				<< " globalMax|a|=" << globalMaxA
-				<< " globalMaxK=" << globalMaxK
-				<< std::endl;
-			}
-
-		
+		std::cout
+		<< "ScalarCPML coeff diag:"
+		<< " globalMinB=" << globalMinB
+		<< " globalMax|a|=" << globalMaxAbsA
+		<< " globalMaxK=" << globalMaxK
+		<< std::endl;
 	}
+  }
+
+  Double Solver::cpmlDxPlusA(int i, int j, int k, int c, Double dxp_A)
+  {
+	int sx = spml_.xSlot_[i];
+
+	if (sx < 0)
+		return dxp_A;
+
+	long q = spml_.idxX(sx, j, k);
+
+	spml_.psi_xp_A_[q][c] =
+		spml_.bx_[i] * spml_.psi_xp_A_[q][c]
+		+ spml_.ax_[i] * dxp_A;
+
+	return dxp_A / spml_.kx_[i] + spml_.psi_xp_A_[q][c];
+  }  
+
+
+  Double Solver::cpmlDyPlusA(int i, int j, int k, int c, Double dyp_A)
+  {
+	int sy = spml_.ySlot_[j];
+
+	if (sy < 0)
+		return dyp_A;
+
+	long q = spml_.idxY(i, sy, k);
+
+	spml_.psi_yp_A_[q][c] =
+		spml_.by_[j] * spml_.psi_yp_A_[q][c]
+		+ spml_.ay_[j] * dyp_A;
+
+	return dyp_A / spml_.ky_[j] + spml_.psi_yp_A_[q][c];
+  }
+
+
+  Double Solver::cpmlDzPlusA(int i, int j, int k, int c, Double dzp_A)
+  {
+	int sz = spml_.zSlot_[k];
+
+	if (sz < 0)
+		return dzp_A;
+
+	long q = spml_.idxZ(i, j, sz);
+
+	spml_.psi_zp_A_[q][c] =
+		spml_.bz_[k] * spml_.psi_zp_A_[q][c]
+		+ spml_.az_[k] * dzp_A;
+
+	return dzp_A / spml_.kz_[k] + spml_.psi_zp_A_[q][c];
+  }
+
+  Double Solver::cpmlDxMinusG(int i, int j, int k, int c, Double dxm_G)
+  {
+	int sx = spml_.xSlot_[i];
+
+	if (sx < 0)
+		return dxm_G;
+
+	long q = spml_.idxX(sx, j, k);
+
+	spml_.psi_xm_G_[q][c] =
+		spml_.bx_[i] * spml_.psi_xm_G_[q][c]
+		+ spml_.ax_[i] * dxm_G;
+
+	return dxm_G / spml_.kx_[i] + spml_.psi_xm_G_[q][c];
+  }
+
+
+  Double Solver::cpmlDyMinusG(int i, int j, int k, int c, Double dym_G)
+  {
+	int sy = spml_.ySlot_[j];
+
+	if (sy < 0)
+		return dym_G;
+
+	long q = spml_.idxY(i, sy, k);
+
+	spml_.psi_ym_G_[q][c] =
+		spml_.by_[j] * spml_.psi_ym_G_[q][c]
+		+ spml_.ay_[j] * dym_G;
+
+	return dym_G / spml_.ky_[j] + spml_.psi_ym_G_[q][c];
+  }
+
+
+  Double Solver::cpmlDzMinusG(int i, int j, int k, int c, Double dzm_G)
+  {
+	int sz = spml_.zSlot_[k];
+
+	if (sz < 0)
+		return dzm_G;
+
+	long q = spml_.idxZ(i, j, sz);
+
+	spml_.psi_zm_G_[q][c] =
+		spml_.bz_[k] * spml_.psi_zm_G_[q][c]
+		+ spml_.az_[k] * dzm_G;
+
+	return dzm_G / spml_.kz_[k] + spml_.psi_zm_G_[q][c];
+  }
+
+  void Solver::computeScalarCPMLFirstDerivatives()
+  {
+	/*
+	* gx_ = sx * D_x^+_pml A
+	* gy_ = sy * D_y^+_pml A
+	* gz_ = sz * D_z^+_pml A
+	*
+	* 每个 FieldVector 的三个分量分别对应 Ax, Ay, Az。
+	*/
+
+	for (int k = 1; k < np_ - 1; ++k)
+	{
+		for (int i = 1; i < N0_ - 1; ++i)
+		{
+		for (int j = 1; j < N1_ - 1; ++j)
+		{
+			long m = N1N0_ * k + N1_ * i + j;
+
+			for (int c = 0; c < 3; ++c)
+			{
+			Double dxp_A =
+				spml_.invDx_
+				* ((*an_)[m + N1_][c] - (*an_)[m][c]);
+
+			Double dyp_A =
+				spml_.invDy_
+				* ((*an_)[m + 1][c] - (*an_)[m][c]);
+
+			Double dzp_A =
+				spml_.invDz_
+				* ((*an_)[m + N1N0_][c] - (*an_)[m][c]);
+
+			spml_.gx_[m][c] =
+				spml_.sx_ * cpmlDxPlusA(i, j, k, c, dxp_A);
+
+			spml_.gy_[m][c] =
+				spml_.sy_ * cpmlDyPlusA(i, j, k, c, dyp_A);
+
+			spml_.gz_[m][c] =
+				spml_.sz_ * cpmlDzPlusA(i, j, k, c, dzp_A);
+			}
+		}
+		}
+	}
+
+	zeroScalarCPMLGtmpBoundary();
+  }
+
+  void Solver::zeroScalarCPMLGtmpBoundary()
+  {
+	/*
+	* j = 0, j = N1_-1
+	*/
+	for (int k = 0; k < np_; ++k)
+	{
+		for (int i = 0; i < N0_; ++i)
+		{
+		long m1 = N1N0_ * k + N1_ * i;
+		long m2 = N1N0_ * k + N1_ * i + (N1_ - 1);
+
+		spml_.gx_[m1] = FieldVector<Double>(0.0);
+		spml_.gy_[m1] = FieldVector<Double>(0.0);
+		spml_.gz_[m1] = FieldVector<Double>(0.0);
+
+		spml_.gx_[m2] = FieldVector<Double>(0.0);
+		spml_.gy_[m2] = FieldVector<Double>(0.0);
+		spml_.gz_[m2] = FieldVector<Double>(0.0);
+		}
+	}
+
+	/*
+	* i = 0, i = N0_-1
+	*/
+	for (int k = 0; k < np_; ++k)
+	{
+		for (int j = 0; j < N1_; ++j)
+		{
+		long m1 = N1N0_ * k + j;
+		long m2 = N1N0_ * k + N1_ * (N0_ - 1) + j;
+
+		spml_.gx_[m1] = FieldVector<Double>(0.0);
+		spml_.gy_[m1] = FieldVector<Double>(0.0);
+		spml_.gz_[m1] = FieldVector<Double>(0.0);
+
+		spml_.gx_[m2] = FieldVector<Double>(0.0);
+		spml_.gy_[m2] = FieldVector<Double>(0.0);
+		spml_.gz_[m2] = FieldVector<Double>(0.0);
+		}
+	}
+
+	/*
+	* k = 0, k = np_-1
+	*
+	* 注意：中间 MPI rank 的 k=0/np_-1 后续会被 exchange 覆盖。
+	* 这里先置零只是为了避免未初始化。
+	*/
+	for (int i = 0; i < N0_; ++i)
+	{
+		for (int j = 0; j < N1_; ++j)
+		{
+		long m1 = N1_ * i + j;
+		long m2 = N1N0_ * (np_ - 1) + N1_ * i + j;
+
+		spml_.gx_[m1] = FieldVector<Double>(0.0);
+		spml_.gy_[m1] = FieldVector<Double>(0.0);
+		spml_.gz_[m1] = FieldVector<Double>(0.0);
+
+		spml_.gx_[m2] = FieldVector<Double>(0.0);
+		spml_.gy_[m2] = FieldVector<Double>(0.0);
+		spml_.gz_[m2] = FieldVector<Double>(0.0);
+		}
+	}
+  }
 
 }

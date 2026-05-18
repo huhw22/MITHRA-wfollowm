@@ -350,8 +350,8 @@ void Solver::detectorSample ()
   int  ownerLocal, ownerGlobal;
   bool activeNow;
 
-  const bool useCurlCurlCPMLFD =
-      (mesh_.solver_ == FD && ccpml_.enabled_);
+  const bool useScalarCPMLFD =
+    (mesh_.solver_ == FD && spml_.enabled_);
 
   /*
    * pmlGuard:
@@ -421,10 +421,10 @@ void Solver::detectorSample ()
      * 新 CPML 路径下，detector 面不能落在 z-PML 区。
      * 因为 detector 插值需要 k 和 k+1 两层，所以二者都必须在非 PML 区。
      */
-    if (activeNow && useCurlCurlCPMLFD)
+    if (activeNow && useScalarCPMLFD)
     {
-      const long int kFirstPhysical = ccpml_.pz_ + 1 + pmlGuard;
-      const long int kLastPhysical  = N2_ - 2 - ccpml_.pz_ - pmlGuard;
+      const long int kFirstPhysical = spml_.pz_ + 1 + pmlGuard;
+      const long int kLastPhysical  = N2_ - 2 - spml_.pz_ - pmlGuard;
 
       if (rd_[jf].k < kFirstPhysical ||
           rd_[jf].k + 1 > kLastPhysical)
@@ -529,27 +529,27 @@ void Solver::detectorSample ()
     int jStart = 2;
     int jEnd   = n1 - 2;
 
-    if (useCurlCurlCPMLFD)
+    if (useScalarCPMLFD)
     {
-      iStart = std::max(iStart, ccpml_.px_ + 1 + pmlGuard);
-      iEnd   = std::min(iEnd,   n0 - 1 - ccpml_.px_ - pmlGuard);
+      iStart = std::max(iStart, spml_.px_ + 1 + pmlGuard);
+      iEnd   = std::min(iEnd,   n0 - 1 - spml_.px_ - pmlGuard);
 
-      jStart = std::max(jStart, ccpml_.py_ + 1 + pmlGuard);
-      jEnd   = std::min(jEnd,   n1 - 1 - ccpml_.py_ - pmlGuard);
+      jStart = std::max(jStart, spml_.py_ + 1 + pmlGuard);
+      jEnd   = std::min(jEnd,   n1 - 1 - spml_.py_ - pmlGuard);
     }
 
     static bool printedDetectorPMLRange = false;
 
-    if (!printedDetectorPMLRange && rank_ == 0 && useCurlCurlCPMLFD)
+    if (!printedDetectorPMLRange && rank_ == 0 && useScalarCPMLFD)
     {
       std::cout
         << "Detector non-PML sampling range:"
         << " i=[" << iStart << "," << iEnd << ")"
         << " j=[" << jStart << "," << jEnd << ")"
         << " pmlGuard=" << pmlGuard
-        << " px=" << ccpml_.px_
-        << " py=" << ccpml_.py_
-        << " pz=" << ccpml_.pz_
+        << " px=" << spml_.px_
+        << " py=" << spml_.py_
+        << " pz=" << spml_.pz_
         << std::endl;
 
       printedDetectorPMLRange = true;
