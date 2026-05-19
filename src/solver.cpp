@@ -2748,9 +2748,9 @@ namespace MITHRA
 		if (fabs(denom) > 1.0e-300)
 			a = sigma / denom * (b - 1.0);
 
-		spml_.kx_[i] = kappa;
-		spml_.ax_[i] = a;
-		spml_.bx_[i] = b;
+		// spml_.kx_[i] = kappa;
+		// spml_.ax_[i] = a;
+		// spml_.bx_[i] = b;
 		}
 	}
 
@@ -2805,9 +2805,9 @@ namespace MITHRA
 		if (fabs(denom) > 1.0e-300)
 			a = sigma / denom * (b - 1.0);
 
-		spml_.ky_[j] = kappa;
-		spml_.ay_[j] = a;
-		spml_.by_[j] = b;
+		// spml_.ky_[j] = kappa;
+		// spml_.ay_[j] = a;
+		// spml_.by_[j] = b;
 		}
 	}
 
@@ -2869,9 +2869,9 @@ namespace MITHRA
 		if (fabs(denom) > 1.0e-300)
 			a = sigma / denom * (b - 1.0);
 
-		spml_.kz_[k] = kappa;
-		spml_.az_[k] = a;
-		spml_.bz_[k] = b;
+		// spml_.kz_[k] = kappa;
+		// spml_.az_[k] = a;
+		// spml_.bz_[k] = b;
 		}
 	}
 
