@@ -9,9 +9,28 @@
 
 #include "solver.h"
 #include "beam.cc"
+#include "stop_signal.h"
 
 namespace MITHRA
 {
+
+  namespace
+  {
+    bool stopAllRanksRequested()
+    {
+      int localStop  = MITHRA::stopRequested() ? 1 : 0;
+      int globalStop = 0;
+
+      MPI_Allreduce(&localStop,
+                    &globalStop,
+                    1,
+                    MPI_INT,
+                    MPI_MAX,
+                    MPI_COMM_WORLD);
+
+      return globalStop != 0;
+    }
+  }
   Solver::Solver (Mesh& 				mesh,
 		  Bunch& 				bunch,
 		  Seed& 				seed,
@@ -1251,6 +1270,14 @@ namespace MITHRA
     /* 首先运行求解器，计算粒子运动直至初始时刻。 */
     while (time_ < 0.0)
       {
+	  if (stopAllRanksRequested())
+		{
+			if (rank_ == 0)
+			printmessage(std::string(__FILE__),
+						__LINE__,
+						std::string("Stop signal received during initial particle simulation. Exiting safely."));
+			break;
+		}
 	/* 更新位置和速度参数。 */
 	for (auto iter = chargeVectorn_.begin(); iter != chargeVectorn_.end(); iter++)
 	  iter->rnm  = iter->rnp;
@@ -1317,6 +1344,14 @@ namespace MITHRA
     /* 现在，执行完整的辐射计算，直至最终时刻。 */
     while (time_ < mesh_.totalTime_)
       {
+	  if (stopAllRanksRequested())
+		{
+			if (rank_ == 0)
+			printmessage(std::string(__FILE__),
+						__LINE__,
+						std::string("Stop signal received during field simulation. Exiting safely."));
+			break;
+		}
 	/* 利用 FDTD 算法更新一个时间步长的场量。 */
 	fieldUpdate();
 
@@ -1396,6 +1431,15 @@ namespace MITHRA
 	/* 若 FEL 针对探测面的监测已启用，且到达探测面范围
 	 * 针对探测面进行取出，然后把数据保存在文件里 */
 	detectorSample();
+
+	if (stopAllRanksRequested())
+	{
+		if (rank_ == 0)
+		printmessage(std::string(__FILE__),
+					__LINE__,
+					std::string("Stop signal received after detectorSample(). Exiting safely."));
+		break;
+	}
 
 	/* 若 FEL 输出的辐射能量监测已启用，且已达到采样节拍，
 	 * 则在指定位置对辐射能量进行采样，并将其保存至文件中。		*/

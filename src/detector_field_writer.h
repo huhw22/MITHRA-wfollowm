@@ -49,6 +49,7 @@ namespace MITHRA
                 const double* bz);
 
     void close();
+    void flush();
 
     bool isOpen() const { return isOpen_; }
     std::size_t nFrames() const { return nFrames_; }

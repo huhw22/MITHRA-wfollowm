@@ -135,6 +135,15 @@ namespace MITHRA
     }
   }
 
+  void DetectorFieldWriter::flush()
+  {
+    if (file_ >= 0)
+    {
+      throwIfNeg(H5Fflush(file_, H5F_SCOPE_GLOBAL),
+                 "Failed to flush HDF5 file.");
+    }
+  }
+
   hid_t DetectorFieldWriter::createFixed1DDataset_(const char* name,
                                                    hid_t dtype,
                                                    hsize_t n,
@@ -144,14 +153,16 @@ namespace MITHRA
     hid_t space = H5Screate_simple(1, dims, NULL);
     throwIfInvalid(space, std::string("Failed to create dataspace for ") + name);
 
-    hid_t dset = H5Dcreate2(file_, name, dtype, space, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    hid_t dset = H5Dcreate2(file_, name, dtype, space,
+                            H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     if (dset < 0)
     {
       H5Sclose(space);
       throw std::runtime_error(std::string("Failed to create dataset ") + name);
     }
 
-    throwIfNeg(H5Dwrite(dset, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data),
+    throwIfNeg(H5Dwrite(dset, dtype, H5S_ALL, H5S_ALL,
+                        H5P_DEFAULT, data),
                std::string("Failed to write dataset ") + name);
 
     H5Sclose(space);
@@ -162,9 +173,9 @@ namespace MITHRA
                                                         hid_t dtype,
                                                         hsize_t chunk0)
   {
-    hsize_t dims[1]     = { 0 };
-    hsize_t maxdims[1]  = { H5S_UNLIMITED };
-    hsize_t chunks[1]   = { chunk0 };
+    hsize_t dims[1]    = { 0 };
+    hsize_t maxdims[1] = { H5S_UNLIMITED };
+    hsize_t chunks[1]  = { chunk0 };
 
     hid_t space = H5Screate_simple(1, dims, maxdims);
     throwIfInvalid(space, std::string("Failed to create dataspace for ") + name);
@@ -179,10 +190,11 @@ namespace MITHRA
     throwIfNeg(H5Pset_chunk(dcpl, 1, chunks),
                std::string("Failed to set chunk for ") + name);
 
-    // 开启轻量压缩；如果你那边 HDF5 没有 zlib，可先删掉这行
+    // 如果 HDF5 没有 zlib 支持，可删掉这一行。
     H5Pset_deflate(dcpl, 4);
 
-    hid_t dset = H5Dcreate2(file_, name, dtype, space, H5P_DEFAULT, dcpl, H5P_DEFAULT);
+    hid_t dset = H5Dcreate2(file_, name, dtype, space,
+                            H5P_DEFAULT, dcpl, H5P_DEFAULT);
     if (dset < 0)
     {
       H5Pclose(dcpl);
@@ -201,9 +213,23 @@ namespace MITHRA
                                                         hsize_t chunk1,
                                                         hsize_t chunk2)
   {
-    hsize_t dims[3]     = { 0, static_cast<hsize_t>(ny_), static_cast<hsize_t>(nx_) };
-    hsize_t maxdims[3]  = { H5S_UNLIMITED, static_cast<hsize_t>(ny_), static_cast<hsize_t>(nx_) };
-    hsize_t chunks[3]   = { chunk0, chunk1, chunk2 };
+    hsize_t dims[3] = {
+      0,
+      static_cast<hsize_t>(ny_),
+      static_cast<hsize_t>(nx_)
+    };
+
+    hsize_t maxdims[3] = {
+      H5S_UNLIMITED,
+      static_cast<hsize_t>(ny_),
+      static_cast<hsize_t>(nx_)
+    };
+
+    hsize_t chunks[3] = {
+      chunk0,
+      chunk1,
+      chunk2
+    };
 
     hid_t space = H5Screate_simple(3, dims, maxdims);
     throwIfInvalid(space, std::string("Failed to create dataspace for ") + name);
@@ -218,9 +244,11 @@ namespace MITHRA
     throwIfNeg(H5Pset_chunk(dcpl, 3, chunks),
                std::string("Failed to set chunk for ") + name);
 
+    // 如果 HDF5 没有 zlib 支持，可删掉这一行。
     H5Pset_deflate(dcpl, 4);
 
-    hid_t dset = H5Dcreate2(file_, name, dtype, space, H5P_DEFAULT, dcpl, H5P_DEFAULT);
+    hid_t dset = H5Dcreate2(file_, name, dtype, space,
+                            H5P_DEFAULT, dcpl, H5P_DEFAULT);
     if (dset < 0)
     {
       H5Pclose(dcpl);
@@ -241,7 +269,8 @@ namespace MITHRA
     hid_t space = H5Screate_simple(1, dims, NULL);
     throwIfInvalid(space, std::string("Failed to create attr space for ") + name);
 
-    hid_t attr = H5Acreate2(obj, name, H5T_NATIVE_DOUBLE, space, H5P_DEFAULT, H5P_DEFAULT);
+    hid_t attr = H5Acreate2(obj, name, H5T_NATIVE_DOUBLE, space,
+                            H5P_DEFAULT, H5P_DEFAULT);
     if (attr < 0)
     {
       H5Sclose(space);
@@ -263,7 +292,8 @@ namespace MITHRA
     hid_t space = H5Screate_simple(1, dims, NULL);
     throwIfInvalid(space, std::string("Failed to create attr space for ") + name);
 
-    hid_t attr = H5Acreate2(obj, name, H5T_NATIVE_INT, space, H5P_DEFAULT, H5P_DEFAULT);
+    hid_t attr = H5Acreate2(obj, name, H5T_NATIVE_INT, space,
+                            H5P_DEFAULT, H5P_DEFAULT);
     if (attr < 0)
     {
       H5Sclose(space);
@@ -294,7 +324,8 @@ namespace MITHRA
       throw std::runtime_error(std::string("Failed to create attr space for ") + name);
     }
 
-    hid_t attr = H5Acreate2(obj, name, type, space, H5P_DEFAULT, H5P_DEFAULT);
+    hid_t attr = H5Acreate2(obj, name, type, space,
+                            H5P_DEFAULT, H5P_DEFAULT);
     if (attr < 0)
     {
       H5Sclose(space);
@@ -335,27 +366,73 @@ namespace MITHRA
     ny_         = ny;
     nFrames_    = 0;
 
-    file_ = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+    file_ = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC,
+                      H5P_DEFAULT, H5P_DEFAULT);
     throwIfInvalid(file_, "Failed to create HDF5 file: " + filename);
 
     try
     {
-      dsetX_    = createFixed1DDataset_("x", H5T_NATIVE_DOUBLE, static_cast<hsize_t>(nx), x.data());
-      dsetY_    = createFixed1DDataset_("y", H5T_NATIVE_DOUBLE, static_cast<hsize_t>(ny), y.data());
-      dsetTime_ = createExtendable1DDataset_("time", H5T_NATIVE_DOUBLE, 256);
-      dsetZBox_ = createExtendable1DDataset_("z_box", H5T_NATIVE_DOUBLE, 256);
+      dsetX_ = createFixed1DDataset_("x",
+                                     H5T_NATIVE_DOUBLE,
+                                     static_cast<hsize_t>(nx),
+                                     x.data());
 
-      const hid_t fieldType = useFloat32_ ? H5T_NATIVE_FLOAT : H5T_NATIVE_DOUBLE;
+      dsetY_ = createFixed1DDataset_("y",
+                                     H5T_NATIVE_DOUBLE,
+                                     static_cast<hsize_t>(ny),
+                                     y.data());
 
-      dsetEx_ = createExtendable3DDataset_("Ex", fieldType, 1, static_cast<hsize_t>(ny), static_cast<hsize_t>(nx));
-      dsetEy_ = createExtendable3DDataset_("Ey", fieldType, 1, static_cast<hsize_t>(ny), static_cast<hsize_t>(nx));
-      dsetEz_ = createExtendable3DDataset_("Ez", fieldType, 1, static_cast<hsize_t>(ny), static_cast<hsize_t>(nx));
-      dsetBx_ = createExtendable3DDataset_("Bx", fieldType, 1, static_cast<hsize_t>(ny), static_cast<hsize_t>(nx));
-      dsetBy_ = createExtendable3DDataset_("By", fieldType, 1, static_cast<hsize_t>(ny), static_cast<hsize_t>(nx));
-      dsetBz_ = createExtendable3DDataset_("Bz", fieldType, 1, static_cast<hsize_t>(ny), static_cast<hsize_t>(nx));
+      dsetTime_ = createExtendable1DDataset_("time",
+                                             H5T_NATIVE_DOUBLE,
+                                             256);
+
+      dsetZBox_ = createExtendable1DDataset_("z_box",
+                                             H5T_NATIVE_DOUBLE,
+                                             256);
+
+      const hid_t fieldType = useFloat32_
+                              ? H5T_NATIVE_FLOAT
+                              : H5T_NATIVE_DOUBLE;
+
+      dsetEx_ = createExtendable3DDataset_("Ex",
+                                           fieldType,
+                                           1,
+                                           static_cast<hsize_t>(ny),
+                                           static_cast<hsize_t>(nx));
+
+      dsetEy_ = createExtendable3DDataset_("Ey",
+                                           fieldType,
+                                           1,
+                                           static_cast<hsize_t>(ny),
+                                           static_cast<hsize_t>(nx));
+
+      dsetEz_ = createExtendable3DDataset_("Ez",
+                                           fieldType,
+                                           1,
+                                           static_cast<hsize_t>(ny),
+                                           static_cast<hsize_t>(nx));
+
+      dsetBx_ = createExtendable3DDataset_("Bx",
+                                           fieldType,
+                                           1,
+                                           static_cast<hsize_t>(ny),
+                                           static_cast<hsize_t>(nx));
+
+      dsetBy_ = createExtendable3DDataset_("By",
+                                           fieldType,
+                                           1,
+                                           static_cast<hsize_t>(ny),
+                                           static_cast<hsize_t>(nx));
+
+      dsetBz_ = createExtendable3DDataset_("Bz",
+                                           fieldType,
+                                           1,
+                                           static_cast<hsize_t>(ny),
+                                           static_cast<hsize_t>(nx));
 
       writeStringAttribute_(file_, "detector_type", "plane");
-      writeStringAttribute_(file_, "storage_dtype", useFloat32_ ? "float32" : "float64");
+      writeStringAttribute_(file_, "storage_dtype",
+                            useFloat32_ ? "float32" : "float64");
       writeScalarAttributeInt_(file_, "nx", nx_);
       writeScalarAttributeInt_(file_, "ny", ny_);
       writeScalarAttributeDouble_(file_, "z_lab_fixed", zLabFixed);
@@ -367,6 +444,11 @@ namespace MITHRA
     }
 
     isOpen_ = true;
+
+    // 关键修改 1：
+    // 文件结构创建完成后立即 flush。
+    // 这样即使刚开始就 scancel，文件也尽量是一个可打开的空 HDF5。
+    flush();
   }
 
   template<typename T>
@@ -392,21 +474,36 @@ namespace MITHRA
     // -------- time --------
     {
       hsize_t newDims[1] = { newNt };
-      throwIfNeg(H5Dset_extent(dsetTime_, newDims), "Failed to extend dataset time.");
+      throwIfNeg(H5Dset_extent(dsetTime_, newDims),
+                 "Failed to extend dataset time.");
 
       hid_t fileSpace = H5Dget_space(dsetTime_);
-      throwIfInvalid(fileSpace, "Failed to get file space for time.");
+      throwIfInvalid(fileSpace,
+                     "Failed to get file space for time.");
 
       hsize_t start[1] = { oldNt };
       hsize_t count[1] = { 1 };
-      throwIfNeg(H5Sselect_hyperslab(fileSpace, H5S_SELECT_SET, start, NULL, count, NULL),
+
+      throwIfNeg(H5Sselect_hyperslab(fileSpace,
+                                     H5S_SELECT_SET,
+                                     start,
+                                     NULL,
+                                     count,
+                                     NULL),
                  "Failed to select hyperslab for time.");
 
       hid_t memSpace = H5Screate_simple(1, count, NULL);
-      throwIfInvalid(memSpace, "Failed to create mem space for time.");
+      throwIfInvalid(memSpace,
+                     "Failed to create mem space for time.");
 
       double value = time;
-      throwIfNeg(H5Dwrite(dsetTime_, H5T_NATIVE_DOUBLE, memSpace, fileSpace, H5P_DEFAULT, &value),
+
+      throwIfNeg(H5Dwrite(dsetTime_,
+                          H5T_NATIVE_DOUBLE,
+                          memSpace,
+                          fileSpace,
+                          H5P_DEFAULT,
+                          &value),
                  "Failed to write time.");
 
       H5Sclose(memSpace);
@@ -416,21 +513,36 @@ namespace MITHRA
     // -------- z_box --------
     {
       hsize_t newDims[1] = { newNt };
-      throwIfNeg(H5Dset_extent(dsetZBox_, newDims), "Failed to extend dataset z_box.");
+      throwIfNeg(H5Dset_extent(dsetZBox_, newDims),
+                 "Failed to extend dataset z_box.");
 
       hid_t fileSpace = H5Dget_space(dsetZBox_);
-      throwIfInvalid(fileSpace, "Failed to get file space for z_box.");
+      throwIfInvalid(fileSpace,
+                     "Failed to get file space for z_box.");
 
       hsize_t start[1] = { oldNt };
       hsize_t count[1] = { 1 };
-      throwIfNeg(H5Sselect_hyperslab(fileSpace, H5S_SELECT_SET, start, NULL, count, NULL),
+
+      throwIfNeg(H5Sselect_hyperslab(fileSpace,
+                                     H5S_SELECT_SET,
+                                     start,
+                                     NULL,
+                                     count,
+                                     NULL),
                  "Failed to select hyperslab for z_box.");
 
       hid_t memSpace = H5Screate_simple(1, count, NULL);
-      throwIfInvalid(memSpace, "Failed to create mem space for z_box.");
+      throwIfInvalid(memSpace,
+                     "Failed to create mem space for z_box.");
 
       double value = zBox;
-      throwIfNeg(H5Dwrite(dsetZBox_, H5T_NATIVE_DOUBLE, memSpace, fileSpace, H5P_DEFAULT, &value),
+
+      throwIfNeg(H5Dwrite(dsetZBox_,
+                          H5T_NATIVE_DOUBLE,
+                          memSpace,
+                          fileSpace,
+                          H5P_DEFAULT,
+                          &value),
                  "Failed to write z_box.");
 
       H5Sclose(memSpace);
@@ -440,27 +552,49 @@ namespace MITHRA
     // -------- field helper lambda --------
     auto writeFrame3D = [&](hid_t dset, const T* buf, const char* name)
     {
-      hsize_t newDims[3] = { newNt,
-                             static_cast<hsize_t>(ny_),
-                             static_cast<hsize_t>(nx_) };
+      hsize_t newDims[3] = {
+        newNt,
+        static_cast<hsize_t>(ny_),
+        static_cast<hsize_t>(nx_)
+      };
+
       throwIfNeg(H5Dset_extent(dset, newDims),
                  std::string("Failed to extend dataset ") + name);
 
       hid_t fileSpace = H5Dget_space(dset);
-      throwIfInvalid(fileSpace, std::string("Failed to get file space for ") + name);
+      throwIfInvalid(fileSpace,
+                     std::string("Failed to get file space for ") + name);
 
-      hsize_t start[3] = { oldNt, 0, 0 };
-      hsize_t count[3] = { 1,
-                           static_cast<hsize_t>(ny_),
-                           static_cast<hsize_t>(nx_) };
+      hsize_t start[3] = {
+        oldNt,
+        0,
+        0
+      };
 
-      throwIfNeg(H5Sselect_hyperslab(fileSpace, H5S_SELECT_SET, start, NULL, count, NULL),
+      hsize_t count[3] = {
+        1,
+        static_cast<hsize_t>(ny_),
+        static_cast<hsize_t>(nx_)
+      };
+
+      throwIfNeg(H5Sselect_hyperslab(fileSpace,
+                                     H5S_SELECT_SET,
+                                     start,
+                                     NULL,
+                                     count,
+                                     NULL),
                  std::string("Failed to select hyperslab for ") + name);
 
       hid_t memSpace = H5Screate_simple(3, count, NULL);
-      throwIfInvalid(memSpace, std::string("Failed to create mem space for ") + name);
+      throwIfInvalid(memSpace,
+                     std::string("Failed to create mem space for ") + name);
 
-      throwIfNeg(H5Dwrite(dset, memType, memSpace, fileSpace, H5P_DEFAULT, buf),
+      throwIfNeg(H5Dwrite(dset,
+                          memType,
+                          memSpace,
+                          fileSpace,
+                          H5P_DEFAULT,
+                          buf),
                  std::string("Failed to write field dataset ") + name);
 
       H5Sclose(memSpace);
@@ -473,6 +607,12 @@ namespace MITHRA
     writeFrame3D(dsetBx_, bx, "Bx");
     writeFrame3D(dsetBy_, by, "By");
     writeFrame3D(dsetBz_, bz, "Bz");
+
+    // 关键修改 2：
+    // 一整帧全部 dataset 写完后立刻 flush。
+    // 对 scancel 来说，只要 signal 不是正好打断 HDF5 内部写入，
+    // 已经完成的中间帧大概率可以正常打开和读取。
+    flush();
 
     ++nFrames_;
   }
@@ -489,7 +629,10 @@ namespace MITHRA
     if (!useFloat32_)
       throw std::runtime_error("DetectorFieldWriter::append(float*) called but file storage is float64.");
 
-    appendFrameImpl_(time, zBox, ex, ey, ez, bx, by, bz, H5T_NATIVE_FLOAT);
+    appendFrameImpl_(time, zBox,
+                     ex, ey, ez,
+                     bx, by, bz,
+                     H5T_NATIVE_FLOAT);
   }
 
   void DetectorFieldWriter::append(double time,
@@ -504,11 +647,22 @@ namespace MITHRA
     if (useFloat32_)
       throw std::runtime_error("DetectorFieldWriter::append(double*) called but file storage is float32.");
 
-    appendFrameImpl_(time, zBox, ex, ey, ez, bx, by, bz, H5T_NATIVE_DOUBLE);
+    appendFrameImpl_(time, zBox,
+                     ex, ey, ez,
+                     bx, by, bz,
+                     H5T_NATIVE_DOUBLE);
   }
 
   void DetectorFieldWriter::close()
   {
+    // 关键修改 3：
+    // close 前先尽量 flush。
+    // 注意：这里不要 throw，因为 close() 会被析构函数调用。
+    if (file_ >= 0)
+    {
+      H5Fflush(file_, H5F_SCOPE_GLOBAL);
+    }
+
     closeDataset_(dsetBz_);
     closeDataset_(dsetBy_);
     closeDataset_(dsetBx_);
@@ -521,10 +675,10 @@ namespace MITHRA
     closeDataset_(dsetX_);
     closeFile_(file_);
 
-    isOpen_  = false;
-    nx_      = 0;
-    ny_      = 0;
-    nFrames_ = 0;
+    isOpen_    = false;
+    nx_        = 0;
+    ny_        = 0;
+    nFrames_   = 0;
     useFloat32_ = true;
   }
 }

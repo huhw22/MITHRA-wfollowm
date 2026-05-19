@@ -30,6 +30,8 @@ namespace MITHRA
 	    std::vector<ExtField>& 		extField,
 	    std::vector<FreeElectronLaser>& 	FEL);
 
+    virtual ~Solver() {};
+
     /*使用解析后的数据，设置仿真所需的参数。*/
     void 		setSimulationParameters 	();
 

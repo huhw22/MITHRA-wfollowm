@@ -19,6 +19,7 @@
 #include <sys/time.h>
 #include <vector>
 #include <iostream>
+#include <csignal>
 
 #include "stdinclude.h"
 #include "classes.h"
@@ -29,6 +30,7 @@
 #include "fieldvector.h"
 #include "readdata.h"
 #include "solver.h"
+#include "stop_signal.h"
 
 int main (int argc, char * (argv) [])
 {
@@ -38,6 +40,8 @@ int main (int argc, char * (argv) [])
 
   /*激活名称空间*/
   using namespace MITHRA;
+
+  installStopSignalHandlers();
 
   /*当我们开始模拟时检索时间。*/
   timeval simulationStart, simulationEnd;
@@ -92,6 +96,9 @@ int main (int argc, char * (argv) [])
 
   /*求解指定时间内的场和束分布。*/
   solver->solve();
+
+  delete solver;
+  solver = NULL;
 
   /*计算总模拟时间。*/
   gettimeofday(&simulationEnd, NULL);
