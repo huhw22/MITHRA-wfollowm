@@ -330,7 +330,7 @@ namespace MITHRA
 		{
 			computeScalarCPMLFirstDerivatives();
 
-			diagnoseScalarCPMLRegions();
+			// diagnoseScalarCPMLRegions();
 
 			advanceInteriorScalarCPMLFD();
 		}
