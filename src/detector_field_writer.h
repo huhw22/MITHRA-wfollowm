@@ -27,8 +27,10 @@ namespace MITHRA
               int nx, int ny,
               const std::vector<double>& x,
               const std::vector<double>& y,
-              double zLabFixed,
-              bool useFloat32 = true);
+              double zFixed,
+              bool useFloat32 = true,
+              const std::string& detectorType = "plane",
+              const std::string& zAttributeName = "z_lab_fixed");
 
     void append(double time,
                 double zBox,

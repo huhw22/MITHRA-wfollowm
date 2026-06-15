@@ -1301,6 +1301,8 @@ namespace MITHRA
   {
     z_.clear();
     sampling_		= false;
+    writeField_ = false;
+    fieldUseFloat32_ = false;
     directory_		= "";
     basename_		= "";
     lineBegin_		= 0.0;

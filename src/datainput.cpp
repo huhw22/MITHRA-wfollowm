@@ -681,6 +681,8 @@ namespace MITHRA
 	    do
 	      {
 		if      (parameterName(*iter) == "sample")         		        FEL.radiationPower_.sampling_	= boolValue(*iter);
+		else if (parameterName(*iter) == "write-field")					FEL.radiationPower_.writeField_ = boolValue(*iter);
+		else if (parameterName(*iter) == "write-field-float32")			FEL.radiationPower_.fieldUseFloat32_ = boolValue(*iter);
 		else if (parameterName(*iter) == "plane-position")	        	FEL.radiationPower_.z_.push_back( doubleValue(*iter) );
 		else if (parameterName(*iter) == "directory")         	        FEL.radiationPower_.directory_ 	= stringValue(*iter);
 		else if (parameterName(*iter) == "base-name")         	        FEL.radiationPower_.basename_	= stringValue(*iter);

@@ -3,6 +3,7 @@
 ********************************************************************************************************/
 
 #include <string>
+#include <stdexcept>
 
 #include "fieldvector.h"
 #include "solver.h"
@@ -54,6 +55,67 @@ namespace MITHRA
 	for (unsigned int i = 0; i < rp_[jf].N; i++)
 	  if ( FEL_[jf].radiationPower_.z_[i] < zp_[1] && FEL_[jf].radiationPower_.z_[i] >= zp_[0] )
 	    ++rp_[jf].Nz;
+
+  /* =========================================================
+  * radiation-power 平面场 HDF5 输出初始化
+  *
+  * 这里只初始化每个采样平面的坐标、帧缓存和 HDF5 文件。
+  * 真正逐帧写入在 powerSample() 中完成。
+  * ========================================================= */
+  rp_[jf].fieldPlanes.clear();
+
+  if (FEL_[jf].radiationPower_.writeField_)
+  {
+    const int fieldNx = N0_ - 4;
+    const int fieldNy = N1_ - 4;
+
+    if (fieldNx <= 0 || fieldNy <= 0)
+      throw std::runtime_error("radiation-power write-field got non-positive field plane size.");
+
+    rp_[jf].fieldPlanes.resize(rp_[jf].N);
+
+    std::string baseFilename = "";
+    if (!(isabsolute(FEL_[jf].radiationPower_.basename_)))
+      baseFilename = FEL_[jf].radiationPower_.directory_;
+
+    baseFilename += FEL_[jf].radiationPower_.basename_;
+
+    for (unsigned int k = 0; k < rp_[jf].N; ++k)
+    {
+      SamplePlaneFieldH5& pf = rp_[jf].fieldPlanes[k];
+
+      pf.resize(fieldNx, fieldNy);
+
+      pf.useFloat32 = FEL_[jf].radiationPower_.fieldUseFloat32_;
+
+      for (int i = 2; i < N0_ - 2; i += 1)
+        pf.xCoord[i - 2] = xmin_ + i * mesh_.meshResolution_[0];
+
+      for (int j = 2; j < N1_ - 2; j += 1)
+        pf.yCoord[j - 2] = ymin_ + j * mesh_.meshResolution_[1];
+
+      pf.fileName =
+        baseFilename +
+        "-field-z" +
+        stringify(k) +
+        ".h5";
+
+      createDirectory(pf.fileName, rank_);
+
+      if (rank_ == 0)
+      {
+        pf.writer.open(pf.fileName,
+                      pf.nx,
+                      pf.ny,
+                      pf.xCoord,
+                      pf.yCoord,
+                      FEL_[jf].radiationPower_.z_[k],
+                      pf.useFloat32,
+                      "radiation-power-plane",
+                      "z_box_fixed");
+      }
+    }
+  }
 
 	/*将归一化波长扫描添加到波长矢量中。*/
 	dl = ( FEL_[jf].radiationPower_.lambdaMax_ - FEL_[jf].radiationPower_.lambdaMin_ ) / FEL_[jf].radiationPower_.lambdaRes_;
@@ -133,11 +195,25 @@ namespace MITHRA
     Complex                   	ew1, bw1, ew2, bw2;
 
     /*在不同的FEL输出参数上进行循环，计算出辐射能量
-	*计算被激活。*/
+     *计算被激活。*/
     for ( unsigned int jf = 0; jf < FEL_.size(); jf++)
       {
 	/*当且仅当电源采样启用时初始化。*/
 	if (!FEL_[jf].radiationPower_.sampling_) continue;
+
+	/*是否同时输出 radiation-power 采样平面处的场随时间变化。*/
+	const bool writeField =
+	  FEL_[jf].radiationPower_.writeField_ &&
+	  !rp_[jf].fieldPlanes.empty();
+
+	/*每个时间步开始时，清空本时间步的二维场缓存。
+	 *每个rank只会填自己负责的z平面，其余位置保持0，
+	 *后面通过MPI_Allreduce求和得到完整平面。*/
+	if (writeField)
+	  {
+	    for (unsigned int k = 0; k < rp_[jf].fieldPlanes.size(); ++k)
+	      rp_[jf].fieldPlanes[k].clearFrame();
+	  }
 
 	/*首先重置之前计算的所有能量。*/
 	for (unsigned k = 0; k < rp_[jf].N; ++k)
@@ -148,54 +224,102 @@ namespace MITHRA
 	kz = 0;
 
 	/*循环遍历采样位置，横向定向，和频率来计算
-	*在特定点和频率处的辐射功率。*/
+	 *在特定点和频率处的辐射功率。*/
 
 	/*K个索引在采样位置上循环。*/
 	for (unsigned k = 0; k < rp_[jf].N; ++k)
 	  {
 	    /*如果处理器不支持此索引，请不要继续。*/
-	    if ( !( FEL_[jf].radiationPower_.z_[k] < zp_[1] && FEL_[jf].radiationPower_.z_[k] >= zp_[0] ) ) continue;
+	    if ( !( FEL_[jf].radiationPower_.z_[k] < zp_[1] &&
+		    FEL_[jf].radiationPower_.z_[k] >= zp_[0] ) )
+	      continue;
 
 	    /*获得包含该点的单元格的z索引。*/
-	    rp_[jf].dzr = modf( ( FEL_[jf].radiationPower_.z_[k] - zmin_ ) / mesh_.meshResolution_[2] , &rp_[jf].c);
+	    rp_[jf].dzr = modf( ( FEL_[jf].radiationPower_.z_[k] - zmin_ )
+				/ mesh_.meshResolution_[2] , &rp_[jf].c);
 	    rp_[jf].k   = (int) rp_[jf].c;
 
 	    /*获取用于功率计算的时间序列中的索引。*/
-	    rp_[jf].m	= nTime_ % rp_[jf].Nf;
+	    rp_[jf].m = nTime_ % rp_[jf].Nf;
 
 	    /*在横向指标上绕圈。*/
 	    for (int i = 2; i < N0_ - 2; i += 1)
 	      for (int j = 2; j < N1_ - 2; j += 1)
 		{
 		  /*获取计算网格和字段存储网格中的索引。*/
-		  mi = ( rp_[jf].k - k0_) * N1_* N0_ + i * N1_ + j;
-		  ni = kz * N1_* N0_ + i * N1_ + j;
+		  mi = ( rp_[jf].k - k0_) * N1_ * N0_ + i * N1_ + j;
+		  ni = kz * N1_ * N0_ + i * N1_ + j;
 
 		  /*计算相应像素的字段。*/
 		  if (!pic_[mi      ]) fieldEvaluate(mi      );
 		  if (!pic_[mi+N1N0_]) fieldEvaluate(mi+N1N0_);
 
 		  /*计算并插值电场，求出束点处的值。*/
-		  et[0] = ( 1.0 - rp_[jf].dzr ) * en_[mi][0] + rp_[jf].dzr * en_[mi+N1N0_][0];
-		  et[1] = ( 1.0 - rp_[jf].dzr ) * en_[mi][1] + rp_[jf].dzr * en_[mi+N1N0_][1];
+		  et[0] = ( 1.0 - rp_[jf].dzr ) * en_[mi][0]
+		        + rp_[jf].dzr * en_[mi+N1N0_][0];
+
+		  et[1] = ( 1.0 - rp_[jf].dzr ) * en_[mi][1]
+		        + rp_[jf].dzr * en_[mi+N1N0_][1];
+
+		  et[2] = ( 1.0 - rp_[jf].dzr ) * en_[mi][2]
+		        + rp_[jf].dzr * en_[mi+N1N0_][2];
 
 		  /*计算并插值磁场以求其在束点处的值。*/
-		  bt[0] = ( 1.0 - rp_[jf].dzr ) * bn_[mi][0] + rp_[jf].dzr * bn_[mi+N1N0_][0];
-		  bt[1] = ( 1.0 - rp_[jf].dzr ) * bn_[mi][1] + rp_[jf].dzr * bn_[mi+N1N0_][1];
+		  bt[0] = ( 1.0 - rp_[jf].dzr ) * bn_[mi][0]
+		        + rp_[jf].dzr * bn_[mi+N1N0_][0];
 
-		  /*把力场转换成实验室框架。*/
-		  rp_[jf].fdt[rp_[jf].m][ni][0] = gamma_ * ( et[0] + c0_ * beta_ * bt[1] );
-		  rp_[jf].fdt[rp_[jf].m][ni][1] = gamma_ * ( et[1] - c0_ * beta_ * bt[0] );
+		  bt[1] = ( 1.0 - rp_[jf].dzr ) * bn_[mi][1]
+		        + rp_[jf].dzr * bn_[mi+N1N0_][1];
 
-		  rp_[jf].fdt[rp_[jf].m][ni][2] = gamma_ * ( bt[0] - beta_ / c0_ * et[1] );
-		  rp_[jf].fdt[rp_[jf].m][ni][3] = gamma_ * ( bt[1] + beta_ / c0_ * et[0] );
+		  bt[2] = ( 1.0 - rp_[jf].dzr ) * bn_[mi][2]
+		        + rp_[jf].dzr * bn_[mi+N1N0_][2];
+
+		  /*把场转换成实验室框架。*/
+		  const Double exLab = gamma_ * ( et[0] + c0_ * beta_ * bt[1] );
+		  const Double eyLab = gamma_ * ( et[1] - c0_ * beta_ * bt[0] );
+		  const Double ezLab = et[2];
+
+		  const Double bxLab = gamma_ * ( bt[0] - beta_ / c0_ * et[1] );
+		  const Double byLab = gamma_ * ( bt[1] + beta_ / c0_ * et[0] );
+		  const Double bzLab = bt[2];
+
+		  /*原有功率计算只需要 Ex, Ey, Bx, By 四个分量。*/
+		  rp_[jf].fdt[rp_[jf].m][ni][0] = exLab;
+		  rp_[jf].fdt[rp_[jf].m][ni][1] = eyLab;
+		  rp_[jf].fdt[rp_[jf].m][ni][2] = bxLab;
+		  rp_[jf].fdt[rp_[jf].m][ni][3] = byLab;
+
+		  /*如果启用HDF5场输出，则同时保存六个场分量。*/
+		  if (writeField)
+		    {
+		      SamplePlaneFieldH5& pf = rp_[jf].fieldPlanes[k];
+
+		      const int ix = i - 2;
+		      const int iy = j - 2;
+
+		      const std::size_t idx =
+			static_cast<std::size_t>(ix) *
+			static_cast<std::size_t>(pf.ny) +
+			static_cast<std::size_t>(iy);
+
+		      pf.exFrame[idx] = exLab;
+		      pf.eyFrame[idx] = eyLab;
+		      pf.ezFrame[idx] = ezLab;
+
+		      pf.bxFrame[idx] = bxLab;
+		      pf.byFrame[idx] = byLab;
+		      pf.bzFrame[idx] = bzLab;
+		    }
 
 		  /*把这个场的贡献加到辐射功率上。*/
 
 		  /*L指数环在给定波长的功率采样。*/
 		  for ( unsigned l = 0; l < rp_[jf].Nl; l++)
 		    {
-		      ew1 = Complex (0.0, 0.0); bw1 = ew1; ew2 = ew1; bw2 = ew1;
+		      ew1 = Complex (0.0, 0.0);
+		      bw1 = ew1;
+		      ew2 = ew1;
+		      bw2 = ew1;
 
 		      for ( unsigned m = 0; m < rp_[jf].Nf; m++)
 			{
@@ -206,7 +330,9 @@ namespace MITHRA
 			}
 
 		      /*把贡献加到幂级数上。*/
-		      rp_[jf].pL[k * rp_[jf].Nl + l] += rp_[jf].pc * ( std::real( ew1 * bw1 ) - std::real( ew2 * bw2 ) );
+		      rp_[jf].pL[k * rp_[jf].Nl + l] +=
+			rp_[jf].pc *
+			( std::real( ew1 * bw1 ) - std::real( ew2 * bw2 ) );
 		    }
 		}
 
@@ -215,16 +341,132 @@ namespace MITHRA
 	  }
 
 	/*将来自每个处理器的数据一起添加到根处理器。*/
-	MPI_Allreduce(&rp_[jf].pL[0],&rp_[jf].pG[0],rp_[jf].N*rp_[jf].Nl,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+	MPI_Allreduce(&rp_[jf].pL[0],
+		      &rp_[jf].pG[0],
+		      rp_[jf].N * rp_[jf].Nl,
+		      MPI_DOUBLE,
+		      MPI_SUM,
+		      MPI_COMM_WORLD);
+
+	/*如果启用HDF5场输出，则汇总每个采样平面的二维场并写入HDF5。*/
+	if (writeField)
+	  {
+	    for (unsigned int k = 0; k < rp_[jf].fieldPlanes.size(); ++k)
+	      {
+		SamplePlaneFieldH5& pf = rp_[jf].fieldPlanes[k];
+
+		const int nPixel = pf.nx * pf.ny;
+
+		MPI_Allreduce(MPI_IN_PLACE,
+			      pf.exFrame.data(),
+			      nPixel,
+			      MPI_DOUBLE,
+			      MPI_SUM,
+			      MPI_COMM_WORLD);
+
+		MPI_Allreduce(MPI_IN_PLACE,
+			      pf.eyFrame.data(),
+			      nPixel,
+			      MPI_DOUBLE,
+			      MPI_SUM,
+			      MPI_COMM_WORLD);
+
+		MPI_Allreduce(MPI_IN_PLACE,
+			      pf.ezFrame.data(),
+			      nPixel,
+			      MPI_DOUBLE,
+			      MPI_SUM,
+			      MPI_COMM_WORLD);
+
+		MPI_Allreduce(MPI_IN_PLACE,
+			      pf.bxFrame.data(),
+			      nPixel,
+			      MPI_DOUBLE,
+			      MPI_SUM,
+			      MPI_COMM_WORLD);
+
+		MPI_Allreduce(MPI_IN_PLACE,
+			      pf.byFrame.data(),
+			      nPixel,
+			      MPI_DOUBLE,
+			      MPI_SUM,
+			      MPI_COMM_WORLD);
+
+		MPI_Allreduce(MPI_IN_PLACE,
+			      pf.bzFrame.data(),
+			      nPixel,
+			      MPI_DOUBLE,
+			      MPI_SUM,
+			      MPI_COMM_WORLD);
+
+		if (rank_ == 0)
+		  {
+		    const Double zBox = FEL_[jf].radiationPower_.z_[k];
+
+		    const Double tBox = timeBunch_ + dt_;
+
+		    const Double tLabAtPlane =
+		      gamma_ * ( tBox + beta_ * zBox / c0_ );
+
+		    if (pf.useFloat32)
+		      {
+			std::vector<float> exFloat(nPixel);
+			std::vector<float> eyFloat(nPixel);
+			std::vector<float> ezFloat(nPixel);
+			std::vector<float> bxFloat(nPixel);
+			std::vector<float> byFloat(nPixel);
+			std::vector<float> bzFloat(nPixel);
+
+			for (int q = 0; q < nPixel; ++q)
+			  {
+			    exFloat[q] = static_cast<float>(pf.exFrame[q]);
+			    eyFloat[q] = static_cast<float>(pf.eyFrame[q]);
+			    ezFloat[q] = static_cast<float>(pf.ezFrame[q]);
+
+			    bxFloat[q] = static_cast<float>(pf.bxFrame[q]);
+			    byFloat[q] = static_cast<float>(pf.byFrame[q]);
+			    bzFloat[q] = static_cast<float>(pf.bzFrame[q]);
+			  }
+
+			pf.writer.append(tLabAtPlane,
+					 zBox,
+					 exFloat.data(),
+					 eyFloat.data(),
+					 ezFloat.data(),
+					 bxFloat.data(),
+					 byFloat.data(),
+					 bzFloat.data());
+		      }
+		    else
+		      {
+			pf.writer.append(tLabAtPlane,
+					 zBox,
+					 pf.exFrame.data(),
+					 pf.eyFrame.data(),
+					 pf.ezFrame.data(),
+					 pf.bxFrame.data(),
+					 pf.byFrame.data(),
+					 pf.bzFrame.data());
+		      }
+		  }
+	      }
+	  }
 
 	/*如果处理器的秩等于零，即根处理器将字段保存到
-	*给定文件。*/
+	 *给定文件。*/
 	for ( unsigned l = 0; l < rp_[jf].Nl; l++)
 	  {
 	    if ( rank_ == int( l % size_ ) )
 	      {
 		for (unsigned k = 0; k < rp_[jf].N; ++k)
-		  *(rp_[jf].file[l]) << gamma_ * ( FEL_[jf].radiationPower_.z_[k] + beta_ * c0_ * ( timeBunch_ + dt_ ) ) << "\t" << rp_[jf].pG[k * rp_[jf].Nl + l] << "\t";
+		  *(rp_[jf].file[l])
+		    << gamma_ *
+		       ( FEL_[jf].radiationPower_.z_[k]
+			 + beta_ * c0_ * ( timeBunch_ + dt_ ) )
+		    << "\t"
+		    << rp_[jf].pG[k * rp_[jf].Nl + l]
+		    << "\t";
+
 		*(rp_[jf].file[l]) << std::endl;
 	      }
 	  }

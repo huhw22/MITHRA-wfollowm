@@ -343,11 +343,13 @@ namespace MITHRA
   }
 
   void DetectorFieldWriter::open(const std::string& filename,
-                                 int nx, int ny,
-                                 const std::vector<double>& x,
-                                 const std::vector<double>& y,
-                                 double zLabFixed,
-                                 bool useFloat32)
+                                  int nx, int ny,
+                                  const std::vector<double>& x,
+                                  const std::vector<double>& y,
+                                  double zFixed,
+                                  bool useFloat32,
+                                  const std::string& detectorType,
+                                  const std::string& zAttributeName)
   {
     if (isOpen_)
       throw std::runtime_error("DetectorFieldWriter::open called while file is already open.");
@@ -373,69 +375,69 @@ namespace MITHRA
     try
     {
       dsetX_ = createFixed1DDataset_("x",
-                                     H5T_NATIVE_DOUBLE,
-                                     static_cast<hsize_t>(nx),
-                                     x.data());
+                                    H5T_NATIVE_DOUBLE,
+                                    static_cast<hsize_t>(nx),
+                                    x.data());
 
       dsetY_ = createFixed1DDataset_("y",
-                                     H5T_NATIVE_DOUBLE,
-                                     static_cast<hsize_t>(ny),
-                                     y.data());
+                                    H5T_NATIVE_DOUBLE,
+                                    static_cast<hsize_t>(ny),
+                                    y.data());
 
       dsetTime_ = createExtendable1DDataset_("time",
-                                             H5T_NATIVE_DOUBLE,
-                                             256);
+                                            H5T_NATIVE_DOUBLE,
+                                            256);
 
       dsetZBox_ = createExtendable1DDataset_("z_box",
-                                             H5T_NATIVE_DOUBLE,
-                                             256);
+                                            H5T_NATIVE_DOUBLE,
+                                            256);
 
       const hid_t fieldType = useFloat32_
                               ? H5T_NATIVE_FLOAT
                               : H5T_NATIVE_DOUBLE;
 
       dsetEx_ = createExtendable3DDataset_("Ex",
-                                           fieldType,
-                                           1,
-                                           static_cast<hsize_t>(ny),
-                                           static_cast<hsize_t>(nx));
+                                          fieldType,
+                                          1,
+                                          static_cast<hsize_t>(ny),
+                                          static_cast<hsize_t>(nx));
 
       dsetEy_ = createExtendable3DDataset_("Ey",
-                                           fieldType,
-                                           1,
-                                           static_cast<hsize_t>(ny),
-                                           static_cast<hsize_t>(nx));
+                                          fieldType,
+                                          1,
+                                          static_cast<hsize_t>(ny),
+                                          static_cast<hsize_t>(nx));
 
       dsetEz_ = createExtendable3DDataset_("Ez",
-                                           fieldType,
-                                           1,
-                                           static_cast<hsize_t>(ny),
-                                           static_cast<hsize_t>(nx));
+                                          fieldType,
+                                          1,
+                                          static_cast<hsize_t>(ny),
+                                          static_cast<hsize_t>(nx));
 
       dsetBx_ = createExtendable3DDataset_("Bx",
-                                           fieldType,
-                                           1,
-                                           static_cast<hsize_t>(ny),
-                                           static_cast<hsize_t>(nx));
+                                          fieldType,
+                                          1,
+                                          static_cast<hsize_t>(ny),
+                                          static_cast<hsize_t>(nx));
 
       dsetBy_ = createExtendable3DDataset_("By",
-                                           fieldType,
-                                           1,
-                                           static_cast<hsize_t>(ny),
-                                           static_cast<hsize_t>(nx));
+                                          fieldType,
+                                          1,
+                                          static_cast<hsize_t>(ny),
+                                          static_cast<hsize_t>(nx));
 
       dsetBz_ = createExtendable3DDataset_("Bz",
-                                           fieldType,
-                                           1,
-                                           static_cast<hsize_t>(ny),
-                                           static_cast<hsize_t>(nx));
+                                          fieldType,
+                                          1,
+                                          static_cast<hsize_t>(ny),
+                                          static_cast<hsize_t>(nx));
 
-      writeStringAttribute_(file_, "detector_type", "plane");
+      writeStringAttribute_(file_, "detector_type", detectorType);
       writeStringAttribute_(file_, "storage_dtype",
                             useFloat32_ ? "float32" : "float64");
       writeScalarAttributeInt_(file_, "nx", nx_);
       writeScalarAttributeInt_(file_, "ny", ny_);
-      writeScalarAttributeDouble_(file_, "z_lab_fixed", zLabFixed);
+      writeScalarAttributeDouble_(file_, zAttributeName.c_str(), zFixed);
     }
     catch (...)
     {
@@ -444,10 +446,6 @@ namespace MITHRA
     }
 
     isOpen_ = true;
-
-    // 关键修改 1：
-    // 文件结构创建完成后立即 flush。
-    // 这样即使刚开始就 scancel，文件也尽量是一个可打开的空 HDF5。
     flush();
   }
 

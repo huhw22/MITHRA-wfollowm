@@ -595,6 +595,7 @@ namespace MITHRA
     initializeMesh();
 
 	initializeScalarCPML(true, 10, 10, 10);
+	// initializeScalarCPML(false, 10, 10, 10);
 
     /* 将束团转换至实验室参考系，并针对 FEL 模拟对束团进行适配——即：添加散粒噪声、分布镜像宏粒子，并添加束团尾部。*/
     lorentzBoostBunch();
@@ -2449,11 +2450,59 @@ namespace MITHRA
 
   void Solver::finalize ()
   {
-    /* 如果采样处于活动状态，则关闭文件，因为仿真现已结束。 */
-    if (seed_.sampling_ && sf_.N > 0) 	(*sf_.file).close();
+	/* seed field sampling */
+	if (seed_.sampling_ && sf_.N > 0)
+		{
+		if (sf_.file != NULL)
+			{
+			sf_.file->flush();
+			sf_.file->close();
+			}
+		}
 
-    /* 如果启用了成组采样，则关闭文件，因为仿真现已结束。 */
-    if (bunch_.sampling_) 	(*sb_.file).close();
+	/* bunch sampling */
+	if (bunch_.sampling_)
+		{
+		if (sb_.file != NULL)
+			{
+			sb_.file->flush();
+			sb_.file->close();
+			}
+		}
+
+	/* radiation-power text and HDF5 field output */
+	for (unsigned int jf = 0; jf < rp_.size(); ++jf)
+		{
+		for (unsigned int i = 0; i < rp_[jf].file.size(); ++i)
+			{
+			if (rp_[jf].file[i] != NULL)
+				{
+				rp_[jf].file[i]->flush();
+				rp_[jf].file[i]->close();
+				delete rp_[jf].file[i];
+				rp_[jf].file[i] = NULL;
+				}
+			}
+
+		for (unsigned int k = 0; k < rp_[jf].fieldPlanes.size(); ++k)
+			{
+			rp_[jf].fieldPlanes[k].close();
+			}
+		}
+
+	/* radiation-detector text and HDF5 field output */
+	for (unsigned int jf = 0; jf < rd_.size(); ++jf)
+		{
+		if (rd_[jf].file != NULL)
+			{
+			rd_[jf].file->flush();
+			rd_[jf].file->close();
+			delete rd_[jf].file;
+			rd_[jf].file = NULL;
+			}
+
+		rd_[jf].fieldWriter.close();
+		}
   }
 
   /******************************************************************************************************

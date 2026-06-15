@@ -8,6 +8,8 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <algorithm>
+#include <cstddef>
 
 #include "fieldvector.h"
 #include "stdinclude.h"
@@ -345,6 +347,62 @@ namespace MITHRA
     std::vector<Double>			rt;
   };
 
+    struct SamplePlaneFieldH5
+  {
+    DetectorFieldWriter writer;
+
+    std::vector<double> xCoord;
+    std::vector<double> yCoord;
+
+    std::vector<double> exFrame;
+    std::vector<double> eyFrame;
+    std::vector<double> ezFrame;
+    std::vector<double> bxFrame;
+    std::vector<double> byFrame;
+    std::vector<double> bzFrame;
+
+    int nx = 0;
+    int ny = 0;
+
+    std::string fileName;
+    bool useFloat32 = true;
+
+    void resize(int nxIn, int nyIn)
+    {
+      nx = nxIn;
+      ny = nyIn;
+
+      const std::size_t n = static_cast<std::size_t>(nx) *
+                            static_cast<std::size_t>(ny);
+
+      xCoord.resize(nx);
+      yCoord.resize(ny);
+
+      exFrame.assign(n, 0.0);
+      eyFrame.assign(n, 0.0);
+      ezFrame.assign(n, 0.0);
+      bxFrame.assign(n, 0.0);
+      byFrame.assign(n, 0.0);
+      bzFrame.assign(n, 0.0);
+    }
+
+    void clearFrame()
+    {
+      std::fill(exFrame.begin(), exFrame.end(), 0.0);
+      std::fill(eyFrame.begin(), eyFrame.end(), 0.0);
+      std::fill(ezFrame.begin(), ezFrame.end(), 0.0);
+      std::fill(bxFrame.begin(), bxFrame.end(), 0.0);
+      std::fill(byFrame.begin(), byFrame.end(), 0.0);
+      std::fill(bzFrame.begin(), bzFrame.end(), 0.0);
+    }
+
+    void close()
+    {
+      writer.close();
+    }
+  };
+
+
   /*采样字段所需的数据结构。*/
   struct SampleRadiationPower
   {
@@ -361,6 +419,7 @@ namespace MITHRA
     std::vector<std::vector<std::vector<Double> > >	fdt;
     unsigned int					m;
     std::vector<std::vector<Complex> >			ep, em;
+    std::vector<SamplePlaneFieldH5> fieldPlanes;
   };
 
   /*采样字段所需的数据结构。*/
@@ -440,6 +499,7 @@ namespace MITHRA
     std::vector<std::ofstream*> 	files;
     std::vector<std::string>		fileNames;
   };
+
 
   struct ScalarCPML
   {

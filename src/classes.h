@@ -493,6 +493,10 @@ namespace MITHRA
       /*存储辐射功率采样所需的数据。*/
       bool					sampling_;
 
+      /*开启场原始值写入的操作*/
+      bool writeField_;
+      bool fieldUseFloat32_;
+
       /*存储保存辐射数据的目录。*/
       std::string				directory_;
 

@@ -426,7 +426,7 @@ namespace MITHRA
 
 	const bool useScalarCPMLFD =
 		(mesh_.solver_ == FD && spml_.enabled_);
-	if (!useScalarCPMLFD)
+	if (useScalarCPMLFD)
 	{
 		setOuterAForScalarCPML();
 	}
