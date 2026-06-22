@@ -194,6 +194,47 @@ namespace MITHRA
     FieldVector<Double>       	et, bt;
     Complex                   	ew1, bw1, ew2, bw2;
 
+    const bool useScalarCPMLNSFD =
+      (mesh_.solver_ == NSFD && spml_.enabled_);
+
+    /*
+     * Power diagnostics represent the physical calculation region only.
+     * Besides the strict PML cells, leave one interface cell out so that
+     * the real-time trace is not dominated by the absorber transition.
+     */
+    const int pmlGuard = 1;
+    const int n0 = static_cast<int>(N0_);
+    const int n1 = static_cast<int>(N1_);
+
+    int iStart = 2;
+    int iEnd   = n0 - 2;
+    int jStart = 2;
+    int jEnd   = n1 - 2;
+
+    if (useScalarCPMLNSFD)
+      {
+	iStart = std::max(iStart, spml_.px_ + 1 + pmlGuard);
+	iEnd   = std::min(iEnd,   n0 - 1 - spml_.px_ - pmlGuard);
+
+	jStart = std::max(jStart, spml_.py_ + 1 + pmlGuard);
+	jEnd   = std::min(jEnd,   n1 - 1 - spml_.py_ - pmlGuard);
+
+	static bool printedPowerPMLRange = false;
+	if (!printedPowerPMLRange && rank_ == 0)
+	  {
+	    std::cout
+	      << "Radiation-power non-PML sampling range:"
+	      << " i=[" << iStart << "," << iEnd << ")"
+	      << " j=[" << jStart << "," << jEnd << ")"
+	      << " pmlGuard=" << pmlGuard
+	      << " px=" << spml_.px_
+	      << " py=" << spml_.py_
+	      << " pz=" << spml_.pz_
+	      << std::endl;
+	    printedPowerPMLRange = true;
+	  }
+      }
+
     /*在不同的FEL输出参数上进行循环，计算出辐射能量
      *计算被激活。*/
     for ( unsigned int jf = 0; jf < FEL_.size(); jf++)
@@ -239,12 +280,30 @@ namespace MITHRA
 				/ mesh_.meshResolution_[2] , &rp_[jf].c);
 	    rp_[jf].k   = (int) rp_[jf].c;
 
+	    /*
+	     * z interpolation uses planes k and k+1.  If either plane belongs
+	     * to the z absorber (or its interface guard), this sample does not
+	     * represent the physical region and contributes zero power.
+	     */
+	    if (useScalarCPMLNSFD)
+	      {
+		const int kFirstPhysical = spml_.pz_ + 1 + pmlGuard;
+		const int kLastPhysical  = N2_ - 2 - spml_.pz_ - pmlGuard;
+
+		if (rp_[jf].k < kFirstPhysical ||
+		    rp_[jf].k + 1 > kLastPhysical)
+		  {
+		    kz += 1;
+		    continue;
+		  }
+	      }
+
 	    /*获取用于功率计算的时间序列中的索引。*/
 	    rp_[jf].m = nTime_ % rp_[jf].Nf;
 
 	    /*在横向指标上绕圈。*/
-	    for (int i = 2; i < N0_ - 2; i += 1)
-	      for (int j = 2; j < N1_ - 2; j += 1)
+	    for (int i = iStart; i < iEnd; i += 1)
+	      for (int j = jStart; j < jEnd; j += 1)
 		{
 		  /*获取计算网格和字段存储网格中的索引。*/
 		  mi = ( rp_[jf].k - k0_) * N1_ * N0_ + i * N1_ + j;
