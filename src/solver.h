@@ -239,6 +239,8 @@ namespace MITHRA
     Double cpmlDzMinusG(int i, int j, int k, int c, Double dzm_G);
 
     void computeScalarCPMLFirstDerivatives();
+    void computeScalarCPMLFirstDerivativesNSFD();
+    void validateScalarCPMLNSFDZeroDamping();
 
     void setOuterAForScalarCPML();
 

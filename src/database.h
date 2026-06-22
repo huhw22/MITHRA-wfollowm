@@ -559,20 +559,16 @@ namespace MITHRA
     std::vector<Double> bz_;
 
     /*
-    * Directional FD coefficients
+    * Directional NSFD-CPML scaling
     *
-    * Original FD:
-    *   a1 * (A_{i+1} - 2A_i + A_{i-1})
-    * + a2 * (A_{j+1} - 2A_j + A_{j-1})
-    * + a3 * (A_{k+1} - 2A_k + A_{k-1})
+    * Cx = Cy = Cz = (c dt)^2.  The grid spacing is applied by the
+    * first-difference operators, so for example
     *
-    * Scalar CPML uses:
-    *   sx * D_x^- ( sx * D_x^+ A )
+    *   (sx / dx)^2 D_x^- D_x^+ W_z A
     *
-    * Therefore:
-    *   (sx / dx)^2 = a1
-    *   (sy / dy)^2 = a2
-    *   (sz / dz)^2 = a3
+    * is the x contribution to the dimensionless time update.  Do not
+    * derive Cz from the expanded NSFD coefficient a3; a3 already includes
+    * the transverse W_z correction carried by z-neighbour points.
     */
     Double Cx_ = 0.0;
     Double Cy_ = 0.0;
@@ -593,8 +589,8 @@ namespace MITHRA
     /*
     * First-layer derivative buffers:
     *
-    * gx_ = sx * D_x^+_pml A
-    * gy_ = sy * D_y^+_pml A
+    * gx_ = sx * D_x^+_pml W_z A
+    * gy_ = sy * D_y^+_pml W_z A
     * gz_ = sz * D_z^+_pml A
     *
     * Each one is a 3-component vector field.
@@ -606,10 +602,10 @@ namespace MITHRA
     /*
     * CPML memories for scalar second-order operator.
     *
-    * xp_A : x plus  derivative acting on A
+    * xp_A : x plus  derivative acting on W_z A
     * xm_G : x minus derivative acting on gx
     *
-    * yp_A : y plus  derivative acting on A
+    * yp_A : y plus  derivative acting on W_z A
     * ym_G : y minus derivative acting on gy
     *
     * zp_A : z plus  derivative acting on A

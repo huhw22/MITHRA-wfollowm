@@ -2662,8 +2662,8 @@ namespace MITHRA
 
 	/*
 	* 分配第一层导数临时量：
-	* gx = sx * D_x^+ A
-	* gy = sy * D_y^+ A
+	* gx = sx * D_x^+ W_z A
+	* gy = sy * D_y^+ W_z A
 	* gz = sz * D_z^+ A
 	*/
 	const long gridSize = spml_.gridSize();
@@ -2729,20 +2729,25 @@ namespace MITHRA
   void Solver::setScalarCPMLCoefficients()
   {
 	/*
-	* 方向权重。
+	* NSFD-compatible scalar CPML direction scaling.
 	*
-	* 原始 FD:
-	*   uf_.a[1] * (A_{i+1} - 2A_i + A_{i-1})
+	* The transverse NSFD terms apply D_x^2 and D_y^2 to W_z A,
+	* while the longitudinal term applies D_z^2 directly to A.
+	* Once W_z is explicit, all three physical second derivatives carry
+	* the same dimensional factor (c dt)^2.  In particular, uf_.a[3]
+	* must not be used here: it already contains the z-neighbour correction
+	* introduced when the NSFD stencil is expanded.
 	*
-	* scalar CPML:
-	*   sx * D_x^- ( sx * D_x^+ A )
-	*
-	* 因此：
-	*   (sx / dx)^2 = uf_.a[1]
+	* Zero damping therefore gives
+	*   (sx/dx)^2 D_x^-D_x^+ W_z A
+	* + (sy/dy)^2 D_y^-D_y^+ W_z A
+	* + (sz/dz)^2 D_z^-D_z^+ A,
+	* exactly matching the interior NSFD operator.
 	*/
-	spml_.Cx_ = uf_.a[1] * uf_.dx * uf_.dx;
-	spml_.Cy_ = uf_.a[2] * uf_.dy * uf_.dy;
-	spml_.Cz_ = uf_.a[3] * uf_.dz * uf_.dz;
+	const Double cDt = c0_ * uf_.dt;
+	spml_.Cx_ = cDt * cDt;
+	spml_.Cy_ = cDt * cDt;
+	spml_.Cz_ = cDt * cDt;
 
 	spml_.sx_ = sqrt(spml_.Cx_);
 	spml_.sy_ = sqrt(spml_.Cy_);
@@ -2764,6 +2769,7 @@ namespace MITHRA
 	const Double targetR    = 1.0e-4;
 	const Double kappaMax   = 1.0;
 	const Double alphaMax   = 0.0;
+	/* Set sigmaScale to 0.0 for an end-to-end zero-damping regression. */
 	const Double sigmaScale = 0.2;
 
 	/*
@@ -2841,9 +2847,9 @@ namespace MITHRA
 		if (fabs(denom) > 1.0e-300)
 			a = sigma / denom * (b - 1.0);
 
-		// spml_.kx_[i] = kappa;
-		// spml_.ax_[i] = a;
-		// spml_.bx_[i] = b;
+		spml_.kx_[i] = kappa;
+		spml_.ax_[i] = a;
+		spml_.bx_[i] = b;
 		}
 	}
 
@@ -2898,9 +2904,9 @@ namespace MITHRA
 		if (fabs(denom) > 1.0e-300)
 			a = sigma / denom * (b - 1.0);
 
-		// spml_.ky_[j] = kappa;
-		// spml_.ay_[j] = a;
-		// spml_.by_[j] = b;
+		spml_.ky_[j] = kappa;
+		spml_.ay_[j] = a;
+		spml_.by_[j] = b;
 		}
 	}
 
@@ -2962,9 +2968,9 @@ namespace MITHRA
 		if (fabs(denom) > 1.0e-300)
 			a = sigma / denom * (b - 1.0);
 
-		// spml_.kz_[k] = kappa;
-		// spml_.az_[k] = a;
-		// spml_.bz_[k] = b;
+		spml_.kz_[k] = kappa;
+		spml_.az_[k] = a;
+		spml_.bz_[k] = b;
 		}
 	}
 
@@ -3047,6 +3053,91 @@ namespace MITHRA
 		<< " globalMax|a|=" << globalMaxAbsA
 		<< " globalMaxK=" << globalMaxK
 		<< std::endl;
+	}
+
+	if (mesh_.solver_ == NSFD)
+		validateScalarCPMLNSFDZeroDamping();
+  }
+
+  void Solver::validateScalarCPMLNSFDZeroDamping()
+  {
+	/*
+	* Algebraic zero-damping check on deterministic synthetic stencils.
+	* This compares the existing expanded NSFD update with the divergence
+	* form used by NSFD-CPML when kappa=1 and both memory terms are zero.
+	*/
+	const Double wzCenter = uf_.af.alpha_;
+	const Double wzSide   = uf_.af.alpha_ * uf_.af.beta_;
+
+	const Double cx = spml_.sxInvDx_ * spml_.sxInvDx_;
+	const Double cy = spml_.syInvDy_ * spml_.syInvDy_;
+	const Double cz = spml_.szInvDz_ * spml_.szInvDz_;
+
+	Double maxAbsDiff = 0.0;
+	Double maxAbsRef  = 0.0;
+
+	for (int trial = 0; trial < 8; ++trial)
+	{
+		auto sample = [trial](int di, int dj, int dk) -> Double
+		{
+			const Double t = 0.17 * (trial + 1);
+			return 0.31 + t
+				+ 0.13 * di - 0.19 * dj + 0.23 * dk
+				+ (0.07 + 0.01 * trial) * di * di
+				- (0.05 + 0.02 * trial) * dj * dj
+				+ (0.11 - 0.005 * trial) * dk * dk
+				+ 0.037 * di * dk - 0.043 * dj * dk;
+		};
+
+		auto wz = [&](int di, int dj) -> Double
+		{
+			return wzSide * sample(di, dj, -1)
+				+ wzCenter * sample(di, dj, 0)
+				+ wzSide * sample(di, dj, 1);
+		};
+
+		const Double center = sample(0, 0, 0);
+
+		const Double expanded =
+			(uf_.a[0] - 2.0) * center
+			+ wzCenter * uf_.a[1] *
+			  (sample(1, 0, 0) + sample(-1, 0, 0)
+			   + uf_.af.beta_ *
+			     (sample(1, 0, 1) + sample(1, 0, -1)
+			      + sample(-1, 0, 1) + sample(-1, 0, -1)))
+			+ wzCenter * uf_.a[2] *
+			  (sample(0, 1, 0) + sample(0, -1, 0)
+			   + uf_.af.beta_ *
+			     (sample(0, 1, 1) + sample(0, 1, -1)
+			      + sample(0, -1, 1) + sample(0, -1, -1)))
+			+ uf_.a[3] * (sample(0, 0, 1) + sample(0, 0, -1));
+
+		const Double divergence =
+			cx * (wz(1, 0) - 2.0 * wz(0, 0) + wz(-1, 0))
+			+ cy * (wz(0, 1) - 2.0 * wz(0, 0) + wz(0, -1))
+			+ cz * (sample(0, 0, 1) - 2.0 * center + sample(0, 0, -1));
+
+		const Double diff = fabs(expanded - divergence);
+		if (diff > maxAbsDiff) maxAbsDiff = diff;
+		if (fabs(expanded) > maxAbsRef) maxAbsRef = fabs(expanded);
+	}
+
+	Double globalMaxAbsDiff = 0.0;
+	Double globalMaxAbsRef  = 0.0;
+	MPI_Allreduce(&maxAbsDiff, &globalMaxAbsDiff,
+				1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+	MPI_Allreduce(&maxAbsRef, &globalMaxAbsRef,
+				1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+	if (rank_ == 0)
+	{
+		const Double relative =
+			globalMaxAbsDiff / (globalMaxAbsRef + 1.0e-300);
+		std::cout
+			<< "ScalarCPML NSFD zero-damping check:"
+			<< " maxAbsDiff=" << globalMaxAbsDiff
+			<< " relative=" << relative
+			<< std::endl;
 	}
   }
 
@@ -3229,6 +3320,90 @@ namespace MITHRA
 
 			spml_.gz_[m][c] =
 				spml_.sz_ * cpmlDzPlusA(i, j, k, c, dzp_A);
+			}
+		}
+		}
+	}
+  }
+
+  void Solver::computeScalarCPMLFirstDerivativesNSFD()
+  {
+	std::fill(spml_.gx_.begin(), spml_.gx_.end(), FieldVector<Double>(0.0));
+	std::fill(spml_.gy_.begin(), spml_.gy_.end(), FieldVector<Double>(0.0));
+	std::fill(spml_.gz_.begin(), spml_.gz_.end(), FieldVector<Double>(0.0));
+
+	/*
+	* The existing NSFD update uses
+	*   W_z A_k = beta A_{k-1} + alpha A_k + beta A_{k+1},
+	* where AdvanceField stores beta/alpha in beta_.  Apply exactly that
+	* weighting before the x/y stretched derivative pairs.  The z pair
+	* acts on the unweighted field.
+	*/
+	const Double wzCenter = uf_.af.alpha_;
+	const Double wzSide   = uf_.af.alpha_ * uf_.af.beta_;
+
+	auto weightedZ = [&](long m, int c) -> Double
+	{
+		return wzSide * (*an_)[m - N1N0_][c]
+			+ wzCenter * (*an_)[m][c]
+			+ wzSide * (*an_)[m + N1N0_][c];
+	};
+
+	/* gx = sx Dtilde_x^+ (W_z A). */
+	for (int k = 1; k < np_ - 1; ++k)
+	{
+		for (int i = 0; i < N0_ - 1; ++i)
+		{
+		for (int j = 1; j < N1_ - 1; ++j)
+		{
+			long m = N1N0_ * k + N1_ * i + j;
+
+			for (int c = 0; c < 3; ++c)
+			{
+				const Double dxp_WA = spml_.invDx_
+					* (weightedZ(m + N1_, c) - weightedZ(m, c));
+				spml_.gx_[m][c] = spml_.sx_
+					* cpmlDxPlusA(i, j, k, c, dxp_WA);
+			}
+		}
+		}
+	}
+
+	/* gy = sy Dtilde_y^+ (W_z A). */
+	for (int k = 1; k < np_ - 1; ++k)
+	{
+		for (int i = 1; i < N0_ - 1; ++i)
+		{
+		for (int j = 0; j < N1_ - 1; ++j)
+		{
+			long m = N1N0_ * k + N1_ * i + j;
+
+			for (int c = 0; c < 3; ++c)
+			{
+				const Double dyp_WA = spml_.invDy_
+					* (weightedZ(m + 1, c) - weightedZ(m, c));
+				spml_.gy_[m][c] = spml_.sy_
+					* cpmlDyPlusA(i, j, k, c, dyp_WA);
+			}
+		}
+		}
+	}
+
+	/* gz = sz Dtilde_z^+ A: no W_z on the longitudinal term. */
+	for (int k = 0; k < np_ - 1; ++k)
+	{
+		for (int i = 1; i < N0_ - 1; ++i)
+		{
+		for (int j = 1; j < N1_ - 1; ++j)
+		{
+			long m = N1N0_ * k + N1_ * i + j;
+
+			for (int c = 0; c < 3; ++c)
+			{
+				const Double dzp_A = spml_.invDz_
+					* ((*an_)[m + N1N0_][c] - (*an_)[m][c]);
+				spml_.gz_[m][c] = spml_.sz_
+					* cpmlDzPlusA(i, j, k, c, dzp_A);
 			}
 		}
 		}

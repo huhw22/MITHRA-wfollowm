@@ -65,6 +65,7 @@ namespace MITHRA
     void fieldProfile ();
 
     void advanceInteriorScalarCPMLFD();
+    void advanceInteriorScalarCPMLNSFD();
 
 
   };

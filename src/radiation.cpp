@@ -592,8 +592,8 @@ void Solver::detectorSample ()
   int  ownerLocal, ownerGlobal;
   bool activeNow;
 
-  const bool useScalarCPMLFD =
-    (mesh_.solver_ == FD && spml_.enabled_);
+  const bool useScalarCPMLNSFD =
+    (mesh_.solver_ == NSFD && spml_.enabled_);
 
   /*
    * pmlGuard:
@@ -663,7 +663,7 @@ void Solver::detectorSample ()
      * 新 CPML 路径下，detector 面不能落在 z-PML 区。
      * 因为 detector 插值需要 k 和 k+1 两层，所以二者都必须在非 PML 区。
      */
-    if (activeNow && useScalarCPMLFD)
+    if (activeNow && useScalarCPMLNSFD)
     {
       const long int kFirstPhysical = spml_.pz_ + 1 + pmlGuard;
       const long int kLastPhysical  = N2_ - 2 - spml_.pz_ - pmlGuard;
@@ -771,7 +771,7 @@ void Solver::detectorSample ()
     int jStart = 2;
     int jEnd   = n1 - 2;
 
-    if (useScalarCPMLFD)
+    if (useScalarCPMLNSFD)
     {
       iStart = std::max(iStart, spml_.px_ + 1 + pmlGuard);
       iEnd   = std::min(iEnd,   n0 - 1 - spml_.px_ - pmlGuard);
@@ -782,7 +782,7 @@ void Solver::detectorSample ()
 
     static bool printedDetectorPMLRange = false;
 
-    if (!printedDetectorPMLRange && rank_ == 0 && useScalarCPMLFD)
+    if (!printedDetectorPMLRange && rank_ == 0 && useScalarCPMLNSFD)
     {
       std::cout
         << "Detector non-PML sampling range:"

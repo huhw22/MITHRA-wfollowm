@@ -302,16 +302,41 @@ namespace MITHRA
 	*将相应更新。*/
     if ( mesh_.solver_ == NSFD )
       {
-	for (unsigned i = 1; i < uf_.N0m1; i++)
-	  for (unsigned j = 1; j < uf_.N1m1; j++)
-	    for (unsigned k = 1; k < uf_.npm1; k++)
-	    {
-			m = N1N0_ * k + N1_ * i + j;
-			l = 3 * m;
+	if (spml_.enabled_)
+	  {
+	    computeScalarCPMLFirstDerivativesNSFD();
+	    advanceInteriorScalarCPMLNSFD();
+	  }
+	else
+	  {
+	    for (unsigned i = 1; i < uf_.N0m1; i++)
+	      for (unsigned j = 1; j < uf_.N1m1; j++)
+	        for (unsigned k = 1; k < uf_.npm1; k++)
+	          {
+		    m = N1N0_ * k + N1_ * i + j;
+		    l = 3 * m;
 
-			if (1)
+		    uf_.af.advanceMagneticPotentialNSFD(
+		      uf_.anp1+l,    uf_.anm1+l,    uf_.an+l,
+		      uf_.an  +l+L0, uf_.an  +l+L2, uf_.an+l+L3,
+		      uf_.an  +l-L0, uf_.an  +l-L3, uf_.an+l-L2,
+		      uf_.an  +l+3 , uf_.an  +l+L4, uf_.an+l+L5,
+		      uf_.an  +l-3 , uf_.an  +l-L5, uf_.an+l-L4,
+		      uf_.an  +l+L1, uf_.an  +l-L1, uf_.jn+l);
+	          }
+	  }
+      }
+    else if ( mesh_.solver_ == FD )
+	{
+		/* FD-CPML is intentionally not used in this branch. */
+		for (unsigned i = 1; i < uf_.N0m1; i++)
+		for (unsigned j = 1; j < uf_.N1m1; j++)
+			for (unsigned k = 1; k < uf_.npm1; k++)
 			{
-				uf_.af.advanceMagneticPotentialNSFD(
+				m = N1N0_ * k + N1_ * i + j;
+				l = 3 * m;
+
+				uf_.af.advanceMagneticPotentialFD(
 					uf_.anp1+l,    uf_.anm1+l,    uf_.an+l,
 					uf_.an  +l+L0, uf_.an  +l+L2, uf_.an+l+L3,
 					uf_.an  +l-L0, uf_.an  +l-L3, uf_.an+l-L2,
@@ -319,39 +344,6 @@ namespace MITHRA
 					uf_.an  +l-3 , uf_.an  +l-L5, uf_.an+l-L4,
 					uf_.an  +l+L1, uf_.an  +l-L1, uf_.jn+l);
 			}
-			else
-			{
-			}
-	    }
-      }
-    else if ( mesh_.solver_ == FD )
-	{
-		if (spml_.enabled_)
-		{
-			computeScalarCPMLFirstDerivatives();
-
-			// diagnoseScalarCPMLRegions();
-
-			advanceInteriorScalarCPMLFD();
-		}
-		else
-		{
-			for (unsigned i = 1; i < uf_.N0m1; i++)
-			for (unsigned j = 1; j < uf_.N1m1; j++)
-				for (unsigned k = 1; k < uf_.npm1; k++)
-				{
-					m = N1N0_ * k + N1_ * i + j;
-					l = 3 * m;
-
-					uf_.af.advanceMagneticPotentialFD(
-						uf_.anp1+l,    uf_.anm1+l,    uf_.an+l,
-						uf_.an  +l+L0, uf_.an  +l+L2, uf_.an+l+L3,
-						uf_.an  +l-L0, uf_.an  +l-L3, uf_.an+l-L2,
-						uf_.an  +l+3 , uf_.an  +l+L4, uf_.an+l+L5,
-						uf_.an  +l-3 , uf_.an  +l-L5, uf_.an+l-L4,
-						uf_.an  +l+L1, uf_.an  +l-L1, uf_.jn+l);
-				}
-		}
 	}
 
     /*如果种子的振幅超过一定的极限，则将种子注入计算域
@@ -424,9 +416,9 @@ namespace MITHRA
 	  }
       }
 
-	const bool useScalarCPMLFD =
-		(mesh_.solver_ == FD && spml_.enabled_);
-	if (useScalarCPMLFD)
+	const bool useScalarCPMLNSFD =
+		(mesh_.solver_ == NSFD && spml_.enabled_);
+	if (useScalarCPMLNSFD)
 	{
 		setOuterAForScalarCPML();
 	}
@@ -814,7 +806,7 @@ namespace MITHRA
 	  /*对于左边界（z=zmin），只需将场设置为下一个z平面。*/
 	  if ( rank_ == 0 )
 	    {
-	      	if (useScalarCPMLFD)
+		if (useScalarCPMLNSFD)
 			{
 				en_[m-N1N0_] = FieldVector<Double>(0.0);
 				bn_[m-N1N0_] = FieldVector<Double>(0.0);
@@ -837,7 +829,7 @@ namespace MITHRA
 	  /*对于右边界（z=zmax），只需将字段设置为与之前的z平面相等。*/
 	  if ( rank_ == size_ - 1 )
 	    {
-	          if (useScalarCPMLFD)
+	          if (useScalarCPMLNSFD)
 				{
 					en_[m+N1N0_] = FieldVector<Double>(0.0);
 					bn_[m+N1N0_] = FieldVector<Double>(0.0);
@@ -1669,6 +1661,92 @@ namespace MITHRA
 
     /*关闭文件。*/
     (*pf_.file).close();
+  }
+
+  void FdTd::advanceInteriorScalarCPMLNSFD()
+  {
+	/*
+	* NSFD-compatible second-order scalar CFS-CPML:
+	*
+	*   gx = sx Dtilde_x^+ (W_z A),  Lx = sx Dtilde_x^- gx
+	*   gy = sy Dtilde_y^+ (W_z A),  Ly = sy Dtilde_y^- gy
+	*   gz = sz Dtilde_z^+ A,        Lz = sz Dtilde_z^- gz
+	*
+	* With sigma=alpha_pml=0 and kappa=1, both CPML memories vanish
+	* and this reduces to the same NSFD operator used in the interior.
+	*/
+	const Double srcCoef = uf_.a[4];
+
+	static bool printed = false;
+	if (!printed && rank_ == 0)
+	{
+		std::cout
+			<< "ScalarCPML NSFD update:"
+			<< " dx=" << uf_.dx
+			<< " dy=" << uf_.dy
+			<< " dz=" << uf_.dz
+			<< " wzCenter=" << uf_.af.alpha_
+			<< " wzSide=" << uf_.af.alpha_ * uf_.af.beta_
+			<< " sxInvDx^2=" << spml_.sxInvDx_ * spml_.sxInvDx_
+			<< " syInvDy^2=" << spml_.syInvDy_ * spml_.syInvDy_
+			<< " szInvDz^2=" << spml_.szInvDz_ * spml_.szInvDz_
+			<< " srcCoef=" << srcCoef
+			<< std::endl;
+		printed = true;
+	}
+
+	for (unsigned i = 1; i < uf_.N0m1; ++i)
+	{
+		for (unsigned j = 1; j < uf_.N1m1; ++j)
+		{
+		for (unsigned k = 1; k < uf_.npm1; ++k)
+		{
+			const long m = N1N0_ * k + N1_ * i + j;
+			FieldVector<Double> J = (*anp1_)[m];
+
+			/* Do not drive A from inside the absorber or its source guard. */
+			const int sourceGuard = 1;
+			const bool inSourceMaskX =
+				(i <  (unsigned)(spml_.px_ + sourceGuard)) ||
+				(i >= N0_ - (unsigned)(spml_.px_ + sourceGuard));
+			const bool inSourceMaskY =
+				(j <  (unsigned)(spml_.py_ + sourceGuard)) ||
+				(j >= N1_ - (unsigned)(spml_.py_ + sourceGuard));
+
+			bool inSourceMaskZ = false;
+			if (rank_ == 0)
+				inSourceMaskZ =
+					(k < (unsigned)(spml_.pz_ + sourceGuard));
+			if (rank_ == size_ - 1)
+				inSourceMaskZ = inSourceMaskZ ||
+					(k >= np_ - (unsigned)(spml_.pz_ + sourceGuard));
+
+			if (inSourceMaskX || inSourceMaskY || inSourceMaskZ)
+				J = FieldVector<Double>(0.0);
+
+			for (int c = 0; c < 3; ++c)
+			{
+				const Double dxm_G = spml_.invDx_
+					* (spml_.gx_[m][c] - spml_.gx_[m - N1_][c]);
+				const Double dym_G = spml_.invDy_
+					* (spml_.gy_[m][c] - spml_.gy_[m - 1][c]);
+				const Double dzm_G = spml_.invDz_
+					* (spml_.gz_[m][c] - spml_.gz_[m - N1N0_][c]);
+
+				const Double Lx = spml_.sx_
+					* cpmlDxMinusG(i, j, k, c, dxm_G);
+				const Double Ly = spml_.sy_
+					* cpmlDyMinusG(i, j, k, c, dym_G);
+				const Double Lz = spml_.sz_
+					* cpmlDzMinusG(i, j, k, c, dzm_G);
+
+				(*anp1_)[m][c] =
+					2.0 * (*an_)[m][c] - (*anm1_)[m][c]
+					+ Lx + Ly + Lz + srcCoef * J[c];
+			}
+		}
+		}
+	}
   }
 
   void FdTd::advanceInteriorScalarCPMLFD()
