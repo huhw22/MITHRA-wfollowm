@@ -2767,8 +2767,8 @@ namespace MITHRA
 	*/
 	const Double mOrder     = 3.0;
 	const Double targetR    = 1.0e-4;
-	const Double kappaMax   = 1.0;
-	const Double alphaMax   = 0.0;
+	const Double kappaMax   = 3.0;
+	const Double alphaFrac   = 0.05;
 	/* Set sigmaScale to 0.0 for an end-to-end zero-damping regression. */
 	const Double sigmaScale = 0.2;
 
@@ -2836,7 +2836,7 @@ namespace MITHRA
 
 		const Double sigma = sigmaMax * depthM;
 		const Double kappa = 1.0 + (kappaMax - 1.0) * depthM;
-		const Double alpha = alphaMax * (1.0 - depth);
+		const Double alpha = alphaFrac * sigmaMax * (1.0 - depth);
 
 		const Double b = exp(-(sigma / kappa + alpha) * dt);
 
@@ -2893,7 +2893,7 @@ namespace MITHRA
 
 		const Double sigma = sigmaMax * depthM;
 		const Double kappa = 1.0 + (kappaMax - 1.0) * depthM;
-		const Double alpha = alphaMax * (1.0 - depth);
+		const Double alpha = alphaFrac * sigmaMax * (1.0 - depth);
 
 		const Double b = exp(-(sigma / kappa + alpha) * dt);
 
@@ -2957,7 +2957,7 @@ namespace MITHRA
 
 		const Double sigma = sigmaMax * depthM;
 		const Double kappa = 1.0 + (kappaMax - 1.0) * depthM;
-		const Double alpha = alphaMax * (1.0 - depth);
+		const Double alpha = alphaFrac * sigmaMax * (1.0 - depth);
 
 		const Double b = exp(-(sigma / kappa + alpha) * dt);
 
@@ -3041,7 +3041,7 @@ namespace MITHRA
 		<< " m=" << mOrder
 		<< " targetR=" << targetR
 		<< " kappaMax=" << kappaMax
-		<< " alphaMax=" << alphaMax
+		<< " alphaFrac=" << alphaFrac
 		<< " sigmaScale=" << sigmaScale
 		<< " cAbs=" << cAbs
 		<< " dt=" << dt
