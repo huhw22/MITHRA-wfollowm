@@ -2767,8 +2767,8 @@ namespace MITHRA
 	*/
 	const Double mOrder     = 3.0;
 	const Double targetR    = 1.0e-4;
-	const Double kappaMax   = 3.0;
-	const Double alphaFrac   = 0.05;
+	const Double kappaMax   = 1.0;
+	const Double alphaFrac   = 0.0;
 	/* Set sigmaScale to 0.0 for an end-to-end zero-damping regression. */
 	const Double sigmaScale = 0.2;
 
@@ -2777,7 +2777,7 @@ namespace MITHRA
 	* 之前你已经确认 cAbs = 299.792。
 	* 如果代码里已有常量，建议替换成原始变量。
 	*/
-	const Double cAbs = 299.792;
+	const Double cAbs = c0_;
 
 	const Double dt = uf_.dt;
 
