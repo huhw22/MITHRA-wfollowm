@@ -52,9 +52,34 @@ namespace MITHRA
     rankB_ = ( rank_ == 0 ) ? size_ - 1 : rank_ - 1;
     rankF_ = ( rank_ == size_ - 1 ) ? 0 : rank_ + 1;
 
-    /*初始化收费的MPI数据类型。*/
-    MPI_Type_contiguous(13, MPI_DOUBLE, &MPI_CHARGE);
+    /* 初始化粒子的MPI数据类型。显式包含id，使其在跨rank推进中保持不变。 */
+    Charge mpiCharge;
+    int blockLengths[8] = {1, 3, 3, 3, 1, 1, 1, 1};
+    MPI_Aint baseAddress;
+    MPI_Aint displacements[8];
+    MPI_Datatype types[8] = {
+      MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE,
+      MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE,
+      MPI_UNSIGNED_LONG_LONG
+    };
+
+    MPI_Get_address(&mpiCharge,     &baseAddress);
+    MPI_Get_address(&mpiCharge.q,      &displacements[0]);
+    MPI_Get_address(&mpiCharge.rnp[0], &displacements[1]);
+    MPI_Get_address(&mpiCharge.rnm[0], &displacements[2]);
+    MPI_Get_address(&mpiCharge.gb[0],  &displacements[3]);
+    MPI_Get_address(&mpiCharge.e,      &displacements[4]);
+    MPI_Get_address(&mpiCharge.w,      &displacements[5]);
+    MPI_Get_address(&mpiCharge.wm,     &displacements[6]);
+    MPI_Get_address(&mpiCharge.id,     &displacements[7]);
+    for (int i = 0; i < 8; ++i)
+      displacements[i] -= baseAddress;
+
+    MPI_Datatype mpiChargeFields;
+    MPI_Type_create_struct(8, blockLengths, displacements, types, &mpiChargeFields);
+    MPI_Type_create_resized(mpiChargeFields, 0, sizeof(Charge), &MPI_CHARGE);
     MPI_Type_commit(&MPI_CHARGE);
+    MPI_Type_free(&mpiChargeFields);
 
     /*根据给定的长度尺度和时间尺度初始化光速值。*/
     c0_ = C0 / mesh_.lengthScale_ * mesh_.timeScale_;
@@ -440,8 +465,8 @@ namespace MITHRA
 
   void Solver::distributeParticles (std::list<Charge>& chargeVector)
   {
-    /* 请注意，此函数仅重新分配 q、rnp 和 gbnp，但不包括 rnm 和 gbnm。*/
-    std::vector<Double> sendCV;
+    /* 传输完整粒子结构，保留输入编号以及所有推进状态。 */
+    std::vector<Charge> sendCV;
     std::list<Charge>::iterator it = chargeVector.begin();
     while(it != chargeVector.end())
       {
@@ -449,15 +474,7 @@ namespace MITHRA
 	  it++;
 	else
 	  {
-	    sendCV.push_back(it->q);
-		sendCV.push_back(it->rnp[0]);
-		sendCV.push_back(it->rnp[1]);
-		sendCV.push_back(it->rnp[2]);
-		sendCV.push_back(it->gb[0]);
-		sendCV.push_back(it->gb[1]);
-		sendCV.push_back(it->gb[2]);
-		sendCV.push_back(it->w);
-		sendCV.push_back(it->wm);
+	    sendCV.push_back(*it);
 	    it = chargeVector.erase(it);
 	  }
       }
@@ -472,33 +489,17 @@ namespace MITHRA
 	MPI_Bcast(&sizeSend, 1, MPI_INT, ip, MPI_COMM_WORLD);
 
 	/* 初始化接收缓冲区。 */
-	std::vector<Double> recvCV (sizeSend);
+	std::vector<Charge> recvCV (sizeSend);
 	if ( ip == rank_ ) recvCV = sendCV;
 
 	/* 现在，将数据从第 i 个处理器广播给所有其他处理器。 */
-	MPI_Bcast(&recvCV[0], sizeSend, MPI_DOUBLE, ip, MPI_COMM_WORLD);
+	if (sizeSend > 0)
+	  MPI_Bcast(recvCV.data(), sizeSend, MPI_CHARGE, ip, MPI_COMM_WORLD);
 
 	/* 现在，将所有电荷放入相应处理器的电荷向量中。 */
-	unsigned int i = 0;
-	Charge charge;
-	while (i < recvCV.size() )
-	  {
-	    if ( particleInProcessor(recvCV[i+3]) )
-	      {
-		charge.q      = recvCV[i++];
-		charge.rnp[0] = recvCV[i++];
-		charge.rnp[1] = recvCV[i++];
-		charge.rnp[2] = recvCV[i++];
-		charge.gb[0]  = recvCV[i++];
-		charge.gb[1]  = recvCV[i++];
-		charge.gb[2]  = recvCV[i++];
-		charge.w      = recvCV[i++];
-		charge.wm     = recvCV[i++];
-		chargeVector.push_back(charge);
-	      }
-	    else
-	      i += 9;
-	  }
+	for (const Charge& charge : recvCV)
+	  if ( particleInProcessor(charge.rnp[2]) )
+	    chargeVector.push_back(charge);
       }
   }
 
@@ -2371,7 +2372,8 @@ namespace MITHRA
 		    Double lzp = gamma_ * ( iter->rnp[2] + beta_ * c0_ * ( timeBunch_ + dt_) );
 		    if ( lzp <  lzScreen )	continue;
 
-		    /* 对量进行插值，并将其写入文件。 */
+		    /* 先写入稳定的输入粒子编号，再写入插值后的物理量。 */
+		    *scrp_[jf].files[i] << iter->id << "\t";
 		    // *scrp_[jf].files[i] << iter->q  	        << "\t";
 		    *scrp_[jf].files[i] << interp( lzm, lzp, iter->rnm[0], iter->rnp[0], lzScreen ) << "\t";
 		    *scrp_[jf].files[i] << interp( lzm, lzp, iter->rnm[1], iter->rnp[1], lzScreen ) << "\t";

@@ -37,6 +37,7 @@ namespace MITHRA
 
   Charge::Charge ()
   {
+    id = 0;
     q = 0.0; rnp = rnm = 0.0; gb = 0.0;
     e = 0.0;
     w  = 1.0;

@@ -367,6 +367,7 @@ namespace MITHRA
     Charge                    	charge;
     int 			saveRank = 0;
     bool 			flag = false;
+    unsigned long long          particleId = 0;
 
     /*清除电荷矢量以添加电荷。*/
     chargeVector.clear();
@@ -376,16 +377,15 @@ namespace MITHRA
 
     charge.q  = bunchInit.cloudCharge_ / bunchInit.numberOfParticles_;
 
-    while (myfile.good())
+    while (myfile >> charge.rnp[0]
+                  >> charge.rnp[1]
+                  >> charge.rnp[2]
+                  >> charge.gb[0]
+                  >> charge.gb[1]
+                  >> charge.gb[2])
       {
-
-	myfile >> charge.rnp[0];
-	myfile >> charge.rnp[1];
-	myfile >> charge.rnp[2];
-
-	myfile >> charge.gb[0];
-	myfile >> charge.gb[1];
-	myfile >> charge.gb[2];
+	/* 使用输入文件中的有效数据行顺序作为稳定的粒子编号。 */
+	charge.id = ++particleId;
 
 	charge.rnp += bunchInit.position_[ia];
 

@@ -142,6 +142,9 @@ namespace MITHRA
     Double w;   // 软删除权重，1->0
     Double wm;  // 上一步权重
 
+    /*输入文件中的粒子编号（从1开始）；非文件粒子为0。*/
+    unsigned long long id;
+
     Charge();
 
   };
